@@ -13,7 +13,9 @@ use Billify\Models\Invoice;
 use Billify\Models\Payment;
 use Billify\Models\PaymentAllocation;
 use Billify\Quoting\QuoteBuilder;
+use Billify\Subscriptions\SubscriptionBuilder;
 use Brick\Money\Money;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -104,6 +106,14 @@ final class Billify
     public function quote(): QuoteBuilder
     {
         return app(QuoteBuilder::class);
+    }
+
+    /** Begin a subscription. Pass the billable customer model. */
+    public function subscribe(?Model $customer = null): SubscriptionBuilder
+    {
+        $builder = app(SubscriptionBuilder::class);
+
+        return $customer ? $builder->for($customer) : $builder;
     }
 
     public function driver(): InvoiceDriver

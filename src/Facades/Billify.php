@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static ?Invoice invoicePending(BillingAccount $account, ?string $currency = null)
  * @method static Payment recordPayment(Invoice $invoice, Money $amount, ?string $reference = null)
  * @method static \Billify\Quoting\QuoteBuilder quote()
+ * @method static \Billify\Subscriptions\SubscriptionBuilder subscribe(?\Illuminate\Database\Eloquent\Model $customer = null)
  * @method static InvoiceDriver driver()
  *
  * @see \Billify\Billify

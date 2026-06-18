@@ -82,10 +82,10 @@ class SubscriptionItem extends BillifyModel
         return $this->hasMany(UsageRecord::class, 'item_id');
     }
 
-    /** Effective billing mode (item override falls back to the price). */
+    /** Effective billing mode (item override → price → in-advance default). */
     public function billingMode(): BillingMode
     {
-        return $this->billing_mode ?? $this->price->billing_mode;
+        return $this->billing_mode ?? $this->price?->billing_mode ?? BillingMode::InAdvance;
     }
 
     public function hasPendingChange(): bool

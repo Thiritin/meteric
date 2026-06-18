@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Billify;
 
 use Billify\Anchoring\PeriodPlanner;
+use Billify\Charges\ChargeAccruer;
 use Billify\Console\VatSyncCommand;
 use Billify\Contracts\Clock;
 use Billify\Contracts\InvoiceDriver;
@@ -12,6 +13,7 @@ use Billify\Contracts\TaxResolver;
 use Billify\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Billify\Proration\Prorator;
 use Billify\Quoting\QuoteBuilder;
+use Billify\Subscriptions\SubscriptionBuilder;
 use Billify\Support\SystemClock;
 use Billify\Tax\DatabaseTaxResolver;
 use Billify\Tax\EuVatResolver;
@@ -80,6 +82,7 @@ final class BillifyServiceProvider extends ServiceProvider
         $this->app->singleton(Billify::class, fn ($app) => new Billify($app->make(InvoiceDriver::class)));
 
         $this->app->singleton(PeriodPlanner::class);
+        $this->app->singleton(ChargeAccruer::class, fn ($app) => new ChargeAccruer($app->make(Prorator::class)));
 
         // Fresh builder per quote (stateful).
         $this->app->bind(QuoteBuilder::class, fn ($app) => new QuoteBuilder(
@@ -88,6 +91,14 @@ final class BillifyServiceProvider extends ServiceProvider
             tax: $app->make(TaxResolver::class),
             planner: $app->make(PeriodPlanner::class),
             currency: $app['config']['billify.currency'] ?? 'EUR',
+        ));
+
+        // Fresh builder per subscribe (stateful).
+        $this->app->bind(SubscriptionBuilder::class, fn ($app) => new SubscriptionBuilder(
+            clock: $app->make(Clock::class),
+            planner: $app->make(PeriodPlanner::class),
+            accruer: $app->make(ChargeAccruer::class),
+            defaultCurrency: $app['config']['billify.currency'] ?? 'EUR',
         ));
     }
 
