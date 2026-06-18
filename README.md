@@ -174,8 +174,10 @@ vendor/bin/pint      # format
 - [x] `quote()` builder — due-now + recurring breakdown as JSON for checkout
 - [x] `subscribe()` — persists subscription + items, accrues first cycle (trial defer, idempotent guard)
 - [x] `renew()` / `changePlan()` (prorated or deferred) / `cancel()` (now or period-end)
-- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (62 tests green)
-- [ ] `checkout()` (quote → immediate invoice) + usage rollup job + addons/options accrual
+- [x] `checkout()` (subscribe → immediate invoice)
+- [x] Usage rollup — metered/hourly `recordUsage()` + `rollupUsage()` (allowance, cap, in-arrears, idempotent)
+- [x] Addons / configurable options / quantity — prorated mid-cycle via `addAddon()` / `setOption()` / `setQuantity()`
+- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (71 tests green)
 - [ ] Commitments & consolidated billing
 - [ ] Full Pest suite per use case in `DESIGN.md`
 

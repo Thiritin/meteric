@@ -7,9 +7,11 @@ namespace Billify;
 use Billify\Contracts\InvoiceDriver;
 use Billify\Enums\InvoiceState;
 use Billify\Invoicing\InvoiceDraft;
+use Billify\Models\Addon;
 use Billify\Models\BillingAccount;
 use Billify\Models\Charge;
 use Billify\Models\Invoice;
+use Billify\Models\ItemOption;
 use Billify\Models\Payment;
 use Billify\Models\PaymentAllocation;
 use Billify\Models\Price;
@@ -17,6 +19,7 @@ use Billify\Models\Subscription;
 use Billify\Models\SubscriptionItem;
 use Billify\Models\UsageRecord;
 use Billify\Quoting\QuoteBuilder;
+use Billify\Subscriptions\ItemManager;
 use Billify\Subscriptions\SubscriptionBuilder;
 use Billify\Subscriptions\SubscriptionManager;
 use Billify\Support\Period;
@@ -146,6 +149,24 @@ final class Billify
     public function cancel(Subscription $sub, string $at = 'period_end', ?CarbonImmutable $when = null): Subscription
     {
         return app(SubscriptionManager::class)->cancel($sub, $at, $when);
+    }
+
+    /** Book an addon on an item (prorated). Group members are swapped. */
+    public function addAddon(SubscriptionItem $item, Price $price, ?string $group = null, float $qty = 1, ?CarbonImmutable $at = null): Addon
+    {
+        return app(ItemManager::class)->addAddon($item, $price, $group, $qty, $at);
+    }
+
+    /** Set a configurable option (e.g. slots) on an item, prorating the delta. */
+    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null): ItemOption
+    {
+        return app(ItemManager::class)->setOption($item, $key, $value, $type, $price, $qty, $at);
+    }
+
+    /** Change an item's base quantity, prorating the difference. */
+    public function setQuantity(SubscriptionItem $item, float $qty, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        return app(ItemManager::class)->setQuantity($item, $qty, $at);
     }
 
     /** Report metered usage for an item's dimension (idempotent on $key). */

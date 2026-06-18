@@ -217,6 +217,72 @@ parameters:
 			path: src/Quoting/QuoteBuilder.php
 
 		-
+			message: '#^Access to an undefined property Billify\\Models\\Addon\:\:\$quantity\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Access to an undefined property Billify\\Models\\Price\:\:\$product_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$account_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$currency\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:amountFor\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Parameter \#1 \$addon of method Billify\\Subscriptions\\ItemManager\:\:removeAddon\(\) expects Billify\\Models\\Addon, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Parameter \#1 \$item of method Billify\\Subscriptions\\ItemManager\:\:charge\(\) expects Billify\\Models\\SubscriptionItem, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Parameter \#1 \$item of method Billify\\Subscriptions\\ItemManager\:\:prorate\(\) expects Billify\\Models\\SubscriptionItem, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Subscriptions/ItemManager.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: src/Subscriptions/ItemManager.php
+
+		-
 			message: '#^Access to an undefined property Billify\\Models\\BillingAccount\:\:\$owner_id\.$#'
 			identifier: property.notFound
 			count: 1
