@@ -1,5 +1,7 @@
 # Billify
 
+[![tests](https://github.com/Thiritin/billify/actions/workflows/tests.yml/badge.svg)](https://github.com/Thiritin/billify/actions/workflows/tests.yml)
+
 Dynamic billing engine for hosting systems — subscriptions, proration, usage
 metering, addons, and the charge-vs-invoice safety model, behind a well-tested,
 PostgreSQL-backed package. Inspired by Stripe Billing + WHMCS, sized for hosts
@@ -171,8 +173,9 @@ vendor/bin/pint      # format
 - [x] Anchoring / first-period planner (signup, fixed-day, prorate / prorate+full / free-until-anchor)
 - [x] `quote()` builder — due-now + recurring breakdown as JSON for checkout
 - [x] `subscribe()` — persists subscription + items, accrues first cycle (trial defer, idempotent guard)
-- [ ] `changePlan()` / `cancel()` / `renew()` managers
-- [ ] `checkout()` (quote → immediate invoice) + usage rollup job
+- [x] `renew()` / `changePlan()` (prorated or deferred) / `cancel()` (now or period-end)
+- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (62 tests green)
+- [ ] `checkout()` (quote → immediate invoice) + usage rollup job + addons/options accrual
 - [ ] Commitments & consolidated billing
 - [ ] Full Pest suite per use case in `DESIGN.md`
 
