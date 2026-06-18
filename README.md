@@ -7,10 +7,11 @@ metering, addons, and the charge-vs-invoice safety model, behind a well-tested,
 PostgreSQL-backed package. Inspired by Stripe Billing + WHMCS, sized for hosts
 running VPS, domains, webhosting, cloud, gameservers and IP projects.
 
-> **Status:** scaffold. Schema, models, drivers, proration and the invoicing
-> guarantee are in place. The fluent `subscribe()/quote()/checkout()` builders
-> are the next milestone (see [Roadmap](#roadmap)). Design lives in
-> [`DESIGN.md`](DESIGN.md); schema in [`SCHEMA.md`](SCHEMA.md).
+> **Status:** functional. Schema, drivers, proration, the invoicing guarantee,
+> the full subscription lifecycle (`subscribe`/`renew`/`changePlan`/`cancel`),
+> `quote`/`checkout`, usage rollup, addons/options, commitments and consolidated
+> billing are all implemented and tested against real Postgres (85 tests).
+> Design lives in [`DESIGN.md`](DESIGN.md); schema in [`SCHEMA.md`](SCHEMA.md).
 
 ## Why
 
@@ -29,7 +30,7 @@ Most hosting billing tangles money math into the app. Billify isolates it:
 
 - PHP 8.5+
 - Laravel 12
-- PostgreSQL 13+ (uses `tstzrange`, `btree_gist`, `pgcrypto`, enum types)
+- PostgreSQL 13+ (uses `tstzrange`, `btree_gist`, `pgcrypto`, GiST exclusion constraints)
 
 ## Install
 
@@ -179,8 +180,9 @@ vendor/bin/pint      # format
 - [x] Addons / configurable options / quantity — prorated mid-cycle via `addAddon()` / `setOption()` / `setQuantity()`
 - [x] Commitments (`commit()` term + upfront + committed rate + early-termination)
 - [x] Consolidated billing (`invoiceConsolidated()` — payer + child accounts on one invoice)
-- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (76 tests green)
-- [ ] Polish: more `@property` annotations to shrink the PHPStan baseline; per-UC test coverage from `DESIGN.md`
+- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (85 tests green)
+- [x] Fully typed models (`@property` + relation generics); PHPStan level 5 clean (baseline ≈ 0)
+- [ ] Remaining `DESIGN.md` use cases as tests (discounts/coupons applied to invoices, more edge cases)
 
 ## License
 
