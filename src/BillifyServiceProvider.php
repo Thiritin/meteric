@@ -13,6 +13,7 @@ use Billify\Contracts\TaxResolver;
 use Billify\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Billify\Proration\Prorator;
 use Billify\Quoting\QuoteBuilder;
+use Billify\Subscriptions\CommitmentManager;
 use Billify\Subscriptions\ItemManager;
 use Billify\Subscriptions\SubscriptionBuilder;
 use Billify\Subscriptions\SubscriptionManager;
@@ -106,6 +107,10 @@ final class BillifyServiceProvider extends ServiceProvider
         $this->app->singleton(ItemManager::class, fn ($app) => new ItemManager(
             clock: $app->make(Clock::class),
             prorator: $app->make(Prorator::class),
+        ));
+
+        $this->app->singleton(CommitmentManager::class, fn ($app) => new CommitmentManager(
+            clock: $app->make(Clock::class),
         ));
 
         // Fresh builder per subscribe (stateful).

@@ -177,9 +177,10 @@ vendor/bin/pint      # format
 - [x] `checkout()` (subscribe → immediate invoice)
 - [x] Usage rollup — metered/hourly `recordUsage()` + `rollupUsage()` (allowance, cap, in-arrears, idempotent)
 - [x] Addons / configurable options / quantity — prorated mid-cycle via `addAddon()` / `setOption()` / `setQuantity()`
-- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (71 tests green)
-- [ ] Commitments & consolidated billing
-- [ ] Full Pest suite per use case in `DESIGN.md`
+- [x] Commitments (`commit()` term + upfront + committed rate + early-termination)
+- [x] Consolidated billing (`invoiceConsolidated()` — payer + child accounts on one invoice)
+- [x] CI: pg-backed Pest + Pint + PHPStan on every push/PR (76 tests green)
+- [ ] Polish: more `@property` annotations to shrink the PHPStan baseline; per-UC test coverage from `DESIGN.md`
 
 ## License
 

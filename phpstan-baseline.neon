@@ -55,12 +55,6 @@ parameters:
 			path: src/Charges/ChargeAccruer.php
 
 		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:amountFor\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/Charges/ChargeAccruer.php
-
-		-
 			message: '#^Parameter \#2 \$price of method Billify\\Charges\\ChargeAccruer\:\:prorate\(\) expects Billify\\Models\\Price, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -199,6 +193,24 @@ parameters:
 			path: src/Models/SubscriptionItem.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:amountFor\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Models/SubscriptionItem.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:committedRate\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Models/SubscriptionItem.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isActive\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Models/SubscriptionItem.php
+
+		-
 			message: '#^Using nullsafe property access "\?\-\>billing_mode" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
@@ -215,6 +227,36 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: src/Quoting/QuoteBuilder.php
+
+		-
+			message: '#^Access to an undefined property Billify\\Models\\Commitment\:\:\$currency\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/CommitmentManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$account_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/CommitmentManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$currency\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/CommitmentManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Subscriptions/CommitmentManager.php
+
+		-
+			message: '#^Parameter \#1 \$item of method Billify\\Subscriptions\\CommitmentManager\:\:charge\(\) expects Billify\\Models\\SubscriptionItem, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Subscriptions/CommitmentManager.php
 
 		-
 			message: '#^Access to an undefined property Billify\\Models\\Addon\:\:\$quantity\.$#'

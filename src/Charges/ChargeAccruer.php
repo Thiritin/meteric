@@ -30,7 +30,7 @@ final class ChargeAccruer
     {
         $price = $item->price;
         $sub = $item->subscription;
-        $full = $price->amountFor((float) $item->quantity);
+        $full = $item->periodAmount(); // committed rate if under an active commitment
 
         return DB::transaction(function () use ($item, $plan, $price, $sub, $full): array {
             $created = [];

@@ -8,6 +8,8 @@ use Billify\Casts\PeriodCast;
 use Billify\Enums\BillingMode;
 use Billify\Enums\ItemState;
 use Billify\Support\Period;
+use Brick\Math\RoundingMode;
+use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -86,6 +88,17 @@ class SubscriptionItem extends BillifyModel
     public function billingMode(): BillingMode
     {
         return $this->billing_mode ?? $this->price?->billing_mode ?? BillingMode::InAdvance;
+    }
+
+    /** Amount for one full period: committed rate while under an active commitment, else price. */
+    public function periodAmount(): Money
+    {
+        $commitment = $this->commitment;
+        if ($commitment && $commitment->isActive()) {
+            return $commitment->committedRate()->multipliedBy((string) $this->quantity, RoundingMode::HALF_UP);
+        }
+
+        return $this->price->amountFor((float) $this->quantity);
     }
 
     public function hasPendingChange(): bool

@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static ?Invoice invoicePending(BillingAccount $account, ?string $currency = null)
+ * @method static ?Invoice invoiceConsolidated(BillingAccount $payer, ?string $currency = null)
+ * @method static \Billify\Models\Commitment commit(\Billify\Models\SubscriptionItem $item, \Billify\Enums\Interval $termInterval, int $termCount, Money $upfront, Money $rate, array $earlyTerm = [], ?\Carbon\CarbonImmutable $at = null)
+ * @method static Money terminateCommitment(\Billify\Models\Commitment $commitment, ?\Carbon\CarbonImmutable $at = null)
  * @method static Payment recordPayment(Invoice $invoice, Money $amount, ?string $reference = null)
  * @method static \Billify\Quoting\QuoteBuilder quote()
  * @method static \Billify\Subscriptions\SubscriptionBuilder subscribe(?\Illuminate\Database\Eloquent\Model $customer = null)

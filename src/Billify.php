@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Billify;
 
 use Billify\Contracts\InvoiceDriver;
+use Billify\Enums\Interval;
 use Billify\Enums\InvoiceState;
 use Billify\Invoicing\InvoiceDraft;
 use Billify\Models\Addon;
 use Billify\Models\BillingAccount;
 use Billify\Models\Charge;
+use Billify\Models\Commitment;
 use Billify\Models\Invoice;
 use Billify\Models\ItemOption;
 use Billify\Models\Payment;
@@ -19,6 +21,7 @@ use Billify\Models\Subscription;
 use Billify\Models\SubscriptionItem;
 use Billify\Models\UsageRecord;
 use Billify\Quoting\QuoteBuilder;
+use Billify\Subscriptions\CommitmentManager;
 use Billify\Subscriptions\ItemManager;
 use Billify\Subscriptions\SubscriptionBuilder;
 use Billify\Subscriptions\SubscriptionManager;
@@ -51,15 +54,26 @@ final class Billify
     public function invoicePending(BillingAccount $account, ?string $currency = null): ?Invoice
     {
         $currency ??= $account->currency;
+        $charges = $this->pendingCharges([$account->id], $currency);
 
-        /** @var Collection<int,Charge> $charges */
-        $charges = Charge::query()
-            ->pending()
-            ->where('account_id', $account->id)
-            ->where('currency', $currency)
-            ->orderBy('created_at')
-            ->get();
+        return $this->issue($account, $currency, $charges);
+    }
 
+    /**
+     * Consolidated invoice: bill the payer's own + all child accounts' pending
+     * charges onto a single invoice (AWS org / reseller). Itemized per account.
+     */
+    public function invoiceConsolidated(BillingAccount $payer, ?string $currency = null): ?Invoice
+    {
+        $currency ??= $payer->currency;
+        $charges = $this->pendingCharges($payer->payerScopeIds(), $currency);
+
+        return $this->issue($payer, $currency, $charges);
+    }
+
+    /** @param  Collection<int,Charge>  $charges */
+    private function issue(BillingAccount $account, string $currency, Collection $charges): ?Invoice
+    {
         if ($charges->isEmpty()) {
             return null;
         }
@@ -83,6 +97,20 @@ final class Billify
         });
 
         return Invoice::find($issued->invoiceId);
+    }
+
+    /**
+     * @param  list<string>  $accountIds
+     * @return Collection<int,Charge>
+     */
+    private function pendingCharges(array $accountIds, string $currency): Collection
+    {
+        return Charge::query()
+            ->pending()
+            ->whereIn('account_id', $accountIds)
+            ->where('currency', $currency)
+            ->orderBy('created_at')
+            ->get();
     }
 
     /** Record an inbound payment against an invoice and advance its state. */
@@ -167,6 +195,18 @@ final class Billify
     public function setQuantity(SubscriptionItem $item, float $qty, ?CarbonImmutable $at = null): SubscriptionItem
     {
         return app(ItemManager::class)->setQuantity($item, $qty, $at);
+    }
+
+    /** Add a term commitment (upfront + reduced rate) to an item. */
+    public function commit(SubscriptionItem $item, Interval $termInterval, int $termCount, Money $upfront, Money $rate, array $earlyTerm = [], ?CarbonImmutable $at = null): Commitment
+    {
+        return app(CommitmentManager::class)->commit($item, $termInterval, $termCount, $upfront, $rate, $earlyTerm, $at);
+    }
+
+    /** Terminate a commitment early; returns the fee charged. */
+    public function terminateCommitment(Commitment $commitment, ?CarbonImmutable $at = null): Money
+    {
+        return app(CommitmentManager::class)->terminate($commitment, $at);
     }
 
     /** Report metered usage for an item's dimension (idempotent on $key). */
