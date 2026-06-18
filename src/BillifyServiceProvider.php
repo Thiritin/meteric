@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Billify;
 
+use Billify\Console\VatSyncCommand;
 use Billify\Contracts\Clock;
 use Billify\Contracts\InvoiceDriver;
 use Billify\Contracts\TaxResolver;
 use Billify\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Billify\Proration\Prorator;
 use Billify\Support\SystemClock;
+use Billify\Tax\DatabaseTaxResolver;
 use Billify\Tax\EuVatResolver;
 use Billify\Tax\FlatRateTaxResolver;
 use Billify\Tax\IbericodeVatResolver;
@@ -34,11 +36,25 @@ final class BillifyServiceProvider extends ServiceProvider
             $class = $cfg['drivers'][$key] ?? EuVatResolver::class;
 
             return match ($class) {
+                DatabaseTaxResolver::class => new DatabaseTaxResolver(
+                    countries: new Countries,
+                    validator: ($cfg['ibericode']['verify_vat_id'] ?? true) ? new Validator : null,
+                    merchantCountry: $cfg['merchant_country'] ?? 'DE',
+                ),
                 IbericodeVatResolver::class => $this->makeIbericodeResolver($cfg),
                 FlatRateTaxResolver::class => new FlatRateTaxResolver((float) ($cfg['flat_rate'] ?? 0.19)),
                 EuVatResolver::class => new EuVatResolver(merchantCountry: $cfg['merchant_country'] ?? 'DE'),
                 default => $app->make($class),
             };
+        });
+
+        // ibericode Rates singleton (used by the vat-sync command).
+        $this->app->singleton(Rates::class, function ($app) {
+            $ib = $app['config']['billify.tax.ibericode'] ?? [];
+            $path = $ib['storage_path'] ?? storage_path('framework/cache/billify-vat-rates.json');
+            @mkdir(dirname((string) $path), 0775, true);
+
+            return new Rates((string) $path, (int) ($ib['refresh_interval'] ?? 43200));
         });
 
         // Invoice driver — selected by config('billify.invoice.driver').
@@ -88,6 +104,8 @@ final class BillifyServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'billify-migrations');
+
+            $this->commands([VatSyncCommand::class]);
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');

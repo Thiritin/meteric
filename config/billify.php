@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Billify\Enums\BillingMode;
 use Billify\Enums\FirstPeriodPolicy;
 use Billify\Invoicing\Drivers\DatabaseInvoiceDriver;
+use Billify\Tax\DatabaseTaxResolver;
 use Billify\Tax\EuVatResolver;
 use Billify\Tax\FlatRateTaxResolver;
 use Billify\Tax\IbericodeVatResolver;
@@ -60,10 +61,14 @@ return [
     | integrate lexoffice, EU VAT, etc.
     */
     'tax' => [
-        // ibericode = live EU rates + VIES (recommended). eu_vat = static offline
-        // fallback (hardcoded rates). flat / null for testing.
-        'driver' => env('BILLIFY_TAX_DRIVER', 'ibericode'),
+        // database  = configurable multi-jurisdiction rate table + registrations
+        //             (default; EU rows fed by ibericode, CH/UK/… added manually)
+        // ibericode = live EU-only rates + VIES
+        // eu_vat    = static offline EU fallback
+        // flat / null = testing
+        'driver' => env('BILLIFY_TAX_DRIVER', 'database'),
         'drivers' => [
+            'database' => DatabaseTaxResolver::class,
             'ibericode' => IbericodeVatResolver::class,
             'eu_vat' => EuVatResolver::class,
             'flat' => FlatRateTaxResolver::class,

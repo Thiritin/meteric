@@ -16,6 +16,7 @@ final class TaxContext
         public readonly bool $taxInclusive = false,
         public readonly ?string $merchantCountry = null,
         public readonly ?DateTimeInterface $date = null,  // supply date → historical rate
+        public readonly string $category = 'standard',    // product tax class (reduced, lodging, …)
     ) {}
 
     /** @param array<string,mixed> $profile A BillingAccount tax_profile. */

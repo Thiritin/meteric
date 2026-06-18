@@ -578,13 +578,25 @@ interface TaxResolver {
     public function resolve(InvoiceLine $line, TaxContext $ctx): TaxResult; // rate, amount, label, exempt?
 }
 ```
-Ships **`IbericodeVatResolver`** (default) — live EU rates via `ibericode/vat`
-(auto-refreshed, date-aware, so they never go stale waiting on a release) and
-**VIES** VAT-id validation: reverse charge requires an id that actually validates,
-and if VIES can't confirm it (down/invalid) VAT is charged (fail-safe). Also ships
-`EuVatResolver` (static offline fallback, hardcoded rates), `FlatRateTaxResolver`,
-`NullTaxResolver`. App can bind a fully custom resolver. Keeping rates current is
-the resolver's job (live service), not a hand-edited config file.
+Default is **`DatabaseTaxResolver`** — a configurable, multi-jurisdiction engine
+backed by two editable tables:
+
+- **`billify_tax_registrations`** — where the merchant is VAT-registered. Presence
+  of a registration (direct, or an `eu_oss` row covering all EU destinations) is
+  what *authorises* charging tax. No registration ⇒ out of scope (0%).
+- **`billify_tax_rates`** — the rates themselves, date-versioned, per product
+  category (`standard`/`reduced`/`lodging`/…). EU rows kept fresh by
+  `php artisan billify:vat-sync` (pulls from ibericode, `source='ibericode'`);
+  non-EU jurisdictions (**Switzerland**, UK, Norway, …) added as `manual` rows.
+
+So registering for Swiss VAT = add a `CH` registration + CH rate rows (8.1% /
+2.6% / 3.8%); CH customers are then charged Swiss VAT while EU stays on OSS. EU
+cross-border B2B reverse charge is confirmed via **VIES**.
+
+Other shipped resolvers: **`IbericodeVatResolver`** (live EU-only + VIES),
+`EuVatResolver` (static offline EU fallback), `FlatRateTaxResolver`,
+`NullTaxResolver`. App can bind a fully custom resolver. ibericode is a *rate
+source* feeding the table, not the whole tax story.
 
 ---
 

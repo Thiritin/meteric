@@ -83,24 +83,40 @@ Billify::recordPayment($invoice, Money::of('49.98', 'EUR'), 'pi_123');
 A driver implements `Billify\Contracts\InvoiceDriver`. Throwing from `issue()`
 is the failure boundary that preserves pending charges.
 
-### VAT / staying current
+### VAT — configurable, multi-jurisdiction
 
-The default `ibericode` driver pulls **live EU VAT rates** from the
-[`ibericode/vat`](https://github.com/ibericode/vat) service (auto-refreshed,
-date-aware) so rates don't rot waiting on a package release, and validates VAT ids
-against **VIES** before applying reverse charge. If VIES can't confirm an id, VAT
-is charged (fail-safe) rather than wrongly zero-rating.
+The default `database` driver is a configurable engine over two editable tables:
+
+- **`billify_tax_registrations`** — where you're VAT-registered. No registration
+  in the customer's country ⇒ no tax charged (out of scope). An `eu_oss` row
+  covers all EU destinations.
+- **`billify_tax_rates`** — date-versioned rates per country + product category.
+  EU rows are refreshed from ibericode by `php artisan billify:vat-sync`; non-EU
+  jurisdictions are added manually.
+
+Registering for **Swiss VAT**:
 
 ```php
-// config/billify.php → tax.ibericode
-'storage_path'     => storage_path('framework/cache/billify-vat-rates.json'),
-'refresh_interval' => 12 * 3600,
-'verify_vat_id'    => true, // VIES check before reverse-charge
+use Billify\Models\{TaxRegistration, TaxRate};
+
+TaxRegistration::create(['country' => 'CH', 'scheme' => 'ch_vat', 'number' => 'CHE-123.456.789 MWST']);
+TaxRate::create(['country' => 'CH', 'category' => 'standard', 'rate' => '0.081000', 'effective_from' => '2024-01-01']);
+TaxRate::create(['country' => 'CH', 'category' => 'lodging',  'rate' => '0.038000', 'effective_from' => '2024-01-01']);
 ```
 
-Use `eu_vat` (static, offline) in tests/air-gapped environments. Keeping rates
-legally correct is ultimately the host's responsibility; the driver makes staying
-current automatic.
+Now CH customers are charged 8.1% (3.8% for lodging products); EU customers still
+go through OSS/ibericode; everyone else is untaxed unless you register there. EU
+cross-border B2B reverse charge is confirmed via **VIES**.
+
+Keep the EU rows current automatically:
+
+```bash
+php artisan billify:vat-sync   # ibericode → billify_tax_rates (manual rows untouched)
+```
+
+Other drivers: `ibericode` (live EU-only + VIES), `eu_vat` (static offline,
+good for tests), `flat`, `null`, or your own `TaxResolver`. Keeping rates legally
+correct is ultimately the host's responsibility; the engine makes it manageable.
 
 ## Proration & quoting
 
