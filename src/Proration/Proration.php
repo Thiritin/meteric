@@ -6,7 +6,7 @@ namespace Billify\Proration;
 
 use Billify\Support\Period;
 use Brick\Money\Money;
-use Brick\Money\RoundingMode;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 
 /**

@@ -11,7 +11,7 @@ use Billify\Proration\Prorator;
 use Billify\Support\SystemClock;
 use Billify\Tax\EuVatResolver;
 use Billify\Tax\FlatRateTaxResolver;
-use Brick\Money\RoundingMode;
+use Brick\Math\RoundingMode;
 use Illuminate\Support\ServiceProvider;
 
 final class BillifyServiceProvider extends ServiceProvider

@@ -6,7 +6,7 @@ namespace Billify\Tax;
 
 use Billify\Contracts\TaxResolver;
 use Brick\Money\Money;
-use Brick\Money\RoundingMode;
+use Brick\Math\RoundingMode;
 
 /**
  * EU VAT (default driver).

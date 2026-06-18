@@ -6,7 +6,7 @@ namespace Billify\Models;
 
 use Billify\Enums\DiscountType;
 use Brick\Money\Money;
-use Brick\Money\RoundingMode;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
