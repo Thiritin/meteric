@@ -6,7 +6,7 @@ decoupled so an outage in your accounting system never loses revenue.
 
 ## The charge-vs-invoice guarantee
 
-A `Charge` accrues as `pending` the moment money is owed — a renewal, an
+A `Charge` accrues as `pending` the moment money is owed, a renewal, an
 upgrade, a usage rollup, an addon. It has nothing to do with documents yet.
 
 `invoicePending()` collects an account's pending charges in one currency, builds
@@ -14,7 +14,7 @@ a draft, and hands it to the bound invoice driver. Then:
 
 - If the driver's `issue()` **succeeds**, the charges flip from `pending` to
   `invoiced` inside a transaction, attached to the new invoice.
-- If `issue()` **throws** — accounting API down, network timeout — nothing flips.
+- If `issue()` **throws**, accounting API down, network timeout, nothing flips.
   The charges stay `pending`. The exception is re-thrown so you see it, and the
   next run picks the same charges up.
 
@@ -72,13 +72,13 @@ state: `partially_paid` while the running total is below the invoice total,
 $invoice->total();        // Money
 $invoice->outstanding();  // Money still owed
 $invoice->isPaid();       // bool
-$invoice->isOverdue();    // bool — issued, past due, not paid
+$invoice->isOverdue();    // bool, issued, past due, not paid
 ```
 
 ## Consolidated billing
 
 A payer account can bill its own pending charges plus all its child accounts'
-charges onto a single invoice — a reseller or an organization with sub-accounts.
+charges onto a single invoice, a reseller or an organization with sub-accounts.
 
 ```php
 $invoice = Billify::invoiceConsolidated($payer);

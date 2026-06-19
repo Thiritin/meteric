@@ -1,7 +1,7 @@
 # Products and prices
 
 A `Product` is a catalog entry. A `Price` is a versioned way to charge for it.
-A product can have many prices — different currencies, different purposes
+A product can have many prices, different currencies, different purposes
 (recurring, setup, renewal), different points in time.
 
 ## Products
@@ -21,7 +21,7 @@ $product = Product::create([
 ```
 
 `pricing_model` is one of `fixed`, `per_unit`, `tiered`, `volume`, `metered`,
-`hourly`, `one_off`. `metered` and `hourly` are usage-based — `isMetered()`
+`hourly`, `one_off`. `metered` and `hourly` are usage-based, `isMetered()`
 returns true for those.
 
 The `config` array holds product-level settings. `config['downgrade']` sets the
@@ -52,7 +52,7 @@ money rather than touching the integer:
 ```php
 $price->amount;            // Money €10.00
 $price->setupFee();        // Money (0 if no setup fee)
-$price->isRecurring();     // bool — false for one-off prices
+$price->isRecurring();     // bool, false for one-off prices
 $price->hasSetupFee();     // bool
 ```
 
@@ -67,7 +67,7 @@ mode wins, falling back to `in_advance`.
 
 `purpose` lets one product carry separate prices for different events:
 `recurring`, `setup`, `register`, `renew`, `transfer`, `addon`, `option`. Domain
-billing uses this — a register price and a renew price on the same product.
+billing uses this, a register price and a renew price on the same product.
 
 ```php
 use Billify\Enums\PricePurpose;
@@ -98,7 +98,7 @@ $price = Price::create([
     'pricing_model' => \Billify\Enums\PricingModel::PerUnit,
 ]);
 
-$price->amountFor(100000);          // Money — round(qty × unit_rate)
+$price->amountFor(100000);          // Money, round(qty × unit_rate)
 ```
 
 `amountFor($qty)` multiplies by `unit_rate` when set, otherwise by the flat

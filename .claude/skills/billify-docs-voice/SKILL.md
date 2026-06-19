@@ -33,7 +33,8 @@ powerful, elegant, effortless / effortlessly, "simply" or "just" as filler,
 ## Banned patterns
 
 - Rule-of-three cadence ("fast, simple, and reliable").
-- Em-dash pile-ups.
+- Em-dashes. Never use them, anywhere. Use a comma, colon, period, or parentheses.
+  (In definition lists: `code`: description. In prose: a comma or a new sentence.)
 - Sentences starting with "Plus," or "And here's the thing".
 - Emoji in body copy.
 - Marketing hype in intros. Say what it does, plainly.

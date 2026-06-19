@@ -27,7 +27,7 @@ If your database role cannot create extensions, see [Requirements](/guide/requir
 ## Making a model billable
 
 Any model can own a billing account or be a subscription customer. Billify uses
-Laravel's morph relations, so there is no trait to add for the basics — you pass
+Laravel's morph relations, so there is no trait to add for the basics, you pass
 your model into the builders and it stores the morph type and key.
 
 ```php

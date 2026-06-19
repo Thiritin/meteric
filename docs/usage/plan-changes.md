@@ -46,7 +46,7 @@ Billify::changePlan($item, $smallerPrice, DowngradePolicy::Discard);
 | Policy | Effect |
 |--------|--------|
 | `Defer` (default) | The change is stored as a pending change. At the next renewal the item swaps to the lower price. The customer keeps the higher tier until the period they already paid for ends. |
-| `Discard` | The item swaps to the lower price immediately. The unused value of the higher plan is forfeited — no credit, no refund. |
+| `Discard` | The item swaps to the lower price immediately. The unused value of the higher plan is forfeited, no credit, no refund. |
 
 When you do not pass a policy, Billify uses the product's policy
 (`config['downgrade']`), which itself defaults to `defer`. The deferred change

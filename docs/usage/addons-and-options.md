@@ -6,7 +6,7 @@ or credit, so the invoice breakdown stays line by line.
 
 ## Addons
 
-An addon is a bookable extra on an item — +4 GB RAM, an extra IP, a backup plan.
+An addon is a bookable extra on an item, +4 GB RAM, an extra IP, a backup plan.
 
 ```php
 use Billify\Facades\Billify;
@@ -36,7 +36,7 @@ choice mid-cycle and the math stays clean.
 
 ## Options
 
-An option is a configurable dimension on an item — gameserver slots, an OS
+An option is a configurable dimension on an item, gameserver slots, an OS
 choice, a feature toggle. Options are keyed, so setting the same key again
 updates it.
 
@@ -62,7 +62,7 @@ $option = Billify::setOption(
 When you pass a `price`, Billify prorates the *delta* against the previous
 quantity. Raising slots from 16 to 32 charges the prorated 16-slot increase;
 lowering it credits the prorated difference. With no price, the option is stored
-without a charge — useful for `choice` and `toggle` settings that do not change
+without a charge, useful for `choice` and `toggle` settings that do not change
 the bill. Read a toggle back with `$option->boolValue()`.
 
 ## Quantity
@@ -81,5 +81,5 @@ The item's `quantity` is updated either way.
 
 All of these write `pending` charges and credits with the item's current period
 as their `covers` window. They appear on the next [invoice](/usage/invoicing)
-for the account. Nothing is charged to a card here — Billify accrues; your
+for the account. Nothing is charged to a card here, Billify accrues; your
 invoice driver and gateway settle.

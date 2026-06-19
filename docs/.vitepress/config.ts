@@ -18,7 +18,7 @@ export default defineConfig({
     },
 
     nav: [
-      { text: 'Guide', link: '/guide/introduction' },
+      { text: 'Guide', link: '/' },
       { text: 'Usage', link: '/usage/products-and-prices' },
       { text: 'Reference', link: '/reference/facade' },
       { text: 'GitHub', link: 'https://github.com/Thiritin/billify' },
@@ -28,7 +28,7 @@ export default defineConfig({
       {
         text: 'Guide',
         items: [
-          { text: 'Introduction', link: '/guide/introduction' },
+          { text: 'Introduction', link: '/' },
           { text: 'Requirements', link: '/guide/requirements' },
           { text: 'Installation', link: '/guide/installation' },
           { text: 'Configuration', link: '/guide/configuration' },

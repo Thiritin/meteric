@@ -17,10 +17,10 @@ order for a given amount and customer context:
 
 Two tables drive it:
 
-- `billify_tax_registrations` — the jurisdictions you are VAT-registered in. A
+- `billify_tax_registrations`, the jurisdictions you are VAT-registered in. A
   direct country row, or an `eu_oss` row that covers all EU destinations. No
   registration for the customer's country means no tax is charged.
-- `billify_tax_rates` — date-versioned rates per country and product category.
+- `billify_tax_rates`, date-versioned rates per country and product category.
   EU rows are refreshed from ibericode; non-EU jurisdictions are added by hand.
 
 ## Switzerland example
@@ -53,7 +53,7 @@ TaxRate::create([
 
 Now Swiss customers are charged 8.1% (3.8% for `lodging` products), EU customers
 still go through OSS, and customers elsewhere are untaxed until you register
-there. The `category` matches the product's tax class — set it on the
+there. The `category` matches the product's tax class, set it on the
 `TaxContext` to bill a reduced rate.
 
 `rate` is a `numeric(8,6)` fraction stored as a string. Rates are date-versioned:
@@ -71,7 +71,7 @@ presence of a VAT id.
 ## Keeping EU rates current
 
 `billify:vat-sync` refreshes the EU rows of `billify_tax_rates` from ibericode.
-It only touches rows with `source = 'ibericode'` — your manual jurisdictions
+It only touches rows with `source = 'ibericode'`, your manual jurisdictions
 (CH, UK, anything else) are never modified. When a rate changes, the old row is
 closed with `effective_to` and a new current row is inserted, so history is kept.
 

@@ -7,7 +7,7 @@ cheap and billing stays idempotent.
 
 ## Meter dimensions
 
-A usage-based product has one or more `MeterDimension` rows — cpu-hours,
+A usage-based product has one or more `MeterDimension` rows, cpu-hours,
 outbound traffic, requests. Each dimension carries its own rate, aggregation,
 free allowance, and optional cap.
 
@@ -41,7 +41,7 @@ stays exact.
 
 ### Allowance and cap
 
-`included_qty` is subtracted before charging — the billable quantity is
+`included_qty` is subtracted before charging, the billable quantity is
 `max(0, used - included_qty)`. `cap_minor`, if set, clamps the charge so a
 runaway window never bills more than the cap.
 
@@ -94,7 +94,7 @@ $charges = Billify::rollupUsage($item, $period);
    recorded before a plan change (different product) still rolls up.
 2. Aggregates each dimension's records per its `aggregation`.
 3. Reserves the window in `billify_billing_periods`, keyed by dimension. If the
-   window was already billed for that dimension, it skips — no double billing.
+   window was already billed for that dimension, it skips, no double billing.
 4. Creates one in-arrears `Charge` per dimension for the overage (allowance
    subtracted, cap applied) and stamps the records with the charge id.
 
@@ -105,7 +105,7 @@ and get billed by [invoicing](/usage/invoicing) like any other charge.
 
 ## Hourly pricing
 
-Hourly is a usage model where the rate is "forward" — you bill the hours that
+Hourly is a usage model where the rate is "forward", you bill the hours that
 have run, in arrears, at the per-unit rate. Report each hour (or batch of hours)
 with `recordUsage()` and roll up the billing window. There is no prepaid value
 to prorate, which is why an [hourly plan change](/usage/plan-changes#hourly-and-metered-plans)

@@ -41,7 +41,7 @@ $subscription = Billify::subscribe()
 
 ## Attaching the provisioned resource
 
-A subscription item can morph to the thing it pays for — the actual VPS, domain,
+A subscription item can morph to the thing it pays for, the actual VPS, domain,
 or gameserver record. Pass it as the third argument to `add()`:
 
 ```php
@@ -63,7 +63,7 @@ $subscription = Billify::subscribe($user)
 ```
 
 A trial sets the subscription state to `trialing` and `trial_end` to now plus
-the trial days. During a trial the first cycle is not billed — the builder
+the trial days. During a trial the first cycle is not billed. The builder
 reserves the period but defers the charge. The first renewal after the trial
 bills it. `isOnTrial()` on the subscription tells you where you stand.
 
@@ -88,7 +88,7 @@ $subscription = Billify::subscribe($user)
 | `AnchorMode` | Cycle aligns to |
 |--------------|-----------------|
 | `Signup` | The anniversary of signup (default). |
-| `FixedDay` | A calendar day of month — pass the day to `anchor()`. |
+| `FixedDay` | A calendar day of month, pass the day to `anchor()`. |
 | `FixedDow` | A day of week. |
 
 ### First-period policies
@@ -121,8 +121,8 @@ $subscription = Billify::subscribe($user)
 ## Renew
 
 `Billify::renew()` accrues the next cycle for every active item, rolling forward
-through any periods that elapsed since the last run. It is idempotent — the
-billing-period guard prevents billing a window twice — so it is safe to run on a
+through any periods that elapsed since the last run. It is idempotent: the
+billing-period guard prevents billing a window twice, so it is safe to run on a
 schedule and safe to re-run.
 
 ```php
