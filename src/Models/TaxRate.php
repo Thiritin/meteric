@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,9 +17,9 @@ use Illuminate\Database\Eloquent\Builder;
  * @property string $rate fraction as numeric string
  * @property string $source
  */
-class TaxRate extends BillifyModel
+class TaxRate extends MetericModel
 {
-    protected $table = 'billify_tax_rates';
+    protected $table = 'meteric_tax_rates';
 
     protected $guarded = [];
 

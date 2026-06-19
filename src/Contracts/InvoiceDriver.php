@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Billify\Contracts;
+namespace Meteric\Contracts;
 
-use Billify\Invoicing\CreditNoteDraft;
-use Billify\Invoicing\InvoiceDraft;
-use Billify\Invoicing\IssuedCreditNote;
-use Billify\Invoicing\IssuedInvoice;
+use Meteric\Invoicing\CreditNoteDraft;
+use Meteric\Invoicing\InvoiceDraft;
+use Meteric\Invoicing\IssuedCreditNote;
+use Meteric\Invoicing\IssuedInvoice;
 
 /**
  * Emits invoices to a persistence/accounting target. THE failure boundary:

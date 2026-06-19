@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\DowngradePolicy;
-use Billify\Enums\PricePurpose;
-use Billify\Enums\PricingModel;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Meteric\Enums\DowngradePolicy;
+use Meteric\Enums\PricePurpose;
+use Meteric\Enums\PricingModel;
 
 /**
  * @property string $id
@@ -19,9 +19,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property bool $is_proratable
  * @property array $config
  */
-class Product extends BillifyModel
+class Product extends MetericModel
 {
-    protected $table = 'billify_products';
+    protected $table = 'meteric_products';
 
     protected $guarded = [];
 

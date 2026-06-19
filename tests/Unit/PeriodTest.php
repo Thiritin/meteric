@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
+use Meteric\Support\Period;
 
 it('computes total and remaining seconds', function () {
     $p = new Period(

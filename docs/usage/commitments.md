@@ -8,11 +8,11 @@ year, pays some upfront, and gets a cheaper recurring rate for the term.
 ## Adding a commitment
 
 ```php
-use Billify\Facades\Billify;
-use Billify\Enums\Interval;
+use Meteric\Facades\Meteric;
+use Meteric\Enums\Interval;
 use Brick\Money\Money;
 
-$commitment = Billify::commit(
+$commitment = Meteric::commit(
     item: $item,
     termInterval: Interval::Month,
     termCount: 12,
@@ -30,7 +30,7 @@ commitment, then renewals charge that.
 
 ## The committed rate during renewals
 
-You do nothing special at renewal time. `Billify::renew()` reads the active
+You do nothing special at renewal time. `Meteric::renew()` reads the active
 commitment and accrues the committed rate. When the term ends and the commitment
 expires, renewals fall back to the price's amount.
 
@@ -43,7 +43,7 @@ $commitment->committedRate(); // Money
 ## Early termination
 
 ```php
-$fee = Billify::terminateCommitment($commitment);
+$fee = Meteric::terminateCommitment($commitment);
 ```
 
 Terminating early closes the commitment and bills the configured fee as a
@@ -55,7 +55,7 @@ shapes:
 | `['fee_minor' => 5000]` | A flat €50.00. |
 | `['remaining_pct' => 0.5]` | A percentage of the remaining committed value (whole periods left × committed rate). |
 
-With `remaining_pct`, Billify counts the whole periods left in the term and
+With `remaining_pct`, Meteric counts the whole periods left in the term and
 multiplies remaining-value by the percentage. `terminateCommitment()` returns the
 `Money` fee it charged (zero when no rule applies). Like every other charge, the
 fee accrues as `pending` and bills on the next [invoice](/usage/invoicing).

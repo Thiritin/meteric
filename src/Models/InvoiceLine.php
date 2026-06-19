@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\MoneyCast;
-use Billify\Casts\PeriodCast;
-use Billify\Enums\LineKind;
-use Billify\Support\Period;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\MoneyCast;
+use Meteric\Casts\PeriodCast;
+use Meteric\Enums\LineKind;
+use Meteric\Support\Period;
 
 /**
  * @property LineKind $kind
@@ -20,9 +20,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $currency
  * @property ?Period $covers
  */
-class InvoiceLine extends BillifyModel
+class InvoiceLine extends MetericModel
 {
-    protected $table = 'billify_invoice_lines';
+    protected $table = 'meteric_invoice_lines';
 
     public $timestamps = false;
 

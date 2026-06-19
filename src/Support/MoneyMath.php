@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Support;
+namespace Meteric\Support;
 
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;

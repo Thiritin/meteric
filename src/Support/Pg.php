@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Support;
+namespace Meteric\Support;
 
 use Illuminate\Support\Facades\DB;
 

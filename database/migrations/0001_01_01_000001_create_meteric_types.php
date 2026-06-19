@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Extensions only. Enum *values* are enforced with CHECK constraints on string
- * columns (see Billify\Support\Db::enumCheck) rather than native pg enum types —
+ * columns (see Meteric\Support\Db::enumCheck) rather than native pg enum types —
  * CHECKs are trivially alterable, native enum types are not (ALTER TYPE cannot
  * run in a transaction and values cannot be removed).
  */

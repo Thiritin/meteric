@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\InvoiceState;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Meteric\Enums\InvoiceState;
 
 /**
  * @property string $id
@@ -24,9 +24,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $due_at
  * @property ?CarbonImmutable $paid_at
  */
-class Invoice extends BillifyModel
+class Invoice extends MetericModel
 {
-    protected $table = 'billify_invoices';
+    protected $table = 'meteric_invoices';
 
     protected $guarded = [];
 

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Anchoring;
+namespace Meteric\Anchoring;
 
-use Billify\Enums\LineKind;
-use Billify\Support\Period;
+use Meteric\Enums\LineKind;
+use Meteric\Support\Period;
 
 /** One period the first invoice should bill, with how it's billed. */
 final class PlannedPeriod

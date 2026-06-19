@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-class Discount extends BillifyModel
+class Discount extends MetericModel
 {
-    protected $table = 'billify_discounts';
+    protected $table = 'meteric_discounts';
 
     public $timestamps = false;
 

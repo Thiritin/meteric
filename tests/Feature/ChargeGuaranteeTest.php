@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-use Billify\Billify;
-use Billify\Contracts\InvoiceDriver;
-use Billify\Enums\ChargeState;
-use Billify\Enums\LineKind;
-use Billify\Facades\Billify as BillifyFacade;
-use Billify\Invoicing\CreditNoteDraft;
-use Billify\Invoicing\InvoiceDraft;
-use Billify\Invoicing\IssuedCreditNote;
-use Billify\Invoicing\IssuedInvoice;
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
-use Billify\Models\Invoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Meteric\Contracts\InvoiceDriver;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\LineKind;
+use Meteric\Facades\Meteric as MetericFacade;
+use Meteric\Invoicing\CreditNoteDraft;
+use Meteric\Invoicing\InvoiceDraft;
+use Meteric\Invoicing\IssuedCreditNote;
+use Meteric\Invoicing\IssuedInvoice;
+use Meteric\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
+use Meteric\Models\Invoice;
 
 uses(RefreshDatabase::class);
 
@@ -60,9 +60,9 @@ it('keeps charges pending when the invoice driver fails (the core guarantee)', f
     guaranteeCharge($acc, 1000);
     guaranteeCharge($acc, 2000);
 
-    $billify = new Billify(throwingDriver());
+    $meteric = new Meteric(throwingDriver());
 
-    expect(fn () => $billify->invoicePending($acc))->toThrow(RuntimeException::class);
+    expect(fn () => $meteric->invoicePending($acc))->toThrow(RuntimeException::class);
 
     // No invoice written, charges untouched — revenue not lost, retried next run.
     expect(Invoice::count())->toBe(0)
@@ -74,7 +74,7 @@ it('only bills charges in the requested currency', function () {
     guaranteeCharge($acc, 1000, 'EUR');
     guaranteeCharge($acc, 5000, 'USD');
 
-    $invoice = BillifyFacade::invoicePending($acc); // defaults to account currency EUR
+    $invoice = MetericFacade::invoicePending($acc); // defaults to account currency EUR
 
     expect($invoice->currency)->toBe('EUR')
         ->and($invoice->subtotal_minor)->toBe(1000)

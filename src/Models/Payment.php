@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,9 +12,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $amount_minor
  * @property string $currency
  */
-class Payment extends BillifyModel
+class Payment extends MetericModel
 {
-    protected $table = 'billify_payments';
+    protected $table = 'meteric_payments';
 
     public $timestamps = false;
 

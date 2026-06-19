@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\BillingMode;
-use Billify\Enums\LineKind;
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
-use Billify\Models\MeterDimension;
-use Billify\Models\Price;
-use Billify\Models\Product;
-use Billify\Models\Subscription;
-use Billify\Models\SubscriptionItem;
-use Billify\Models\UsageRecord;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\LineKind;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
+use Meteric\Models\MeterDimension;
+use Meteric\Models\Price;
+use Meteric\Models\Product;
+use Meteric\Models\Subscription;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Models\UsageRecord;
+use Meteric\Support\Period;
 
 uses(RefreshDatabase::class);
 
@@ -46,10 +46,10 @@ function usageWindow(): Period
 it('rolls up reported usage into an in-arrears charge', function () {
     $item = meteredItem('0.500000');
 
-    Billify::recordUsage($item, 'traffic', 60, CarbonImmutable::parse('2026-06-10Z'));
-    Billify::recordUsage($item, 'traffic', 40, CarbonImmutable::parse('2026-06-20Z'));
+    Meteric::recordUsage($item, 'traffic', 60, CarbonImmutable::parse('2026-06-10Z'));
+    Meteric::recordUsage($item, 'traffic', 40, CarbonImmutable::parse('2026-06-20Z'));
 
-    $charges = Billify::rollupUsage($item, usageWindow());
+    $charges = Meteric::rollupUsage($item, usageWindow());
 
     expect($charges)->toHaveCount(1);
     $charge = $charges[0];
@@ -65,8 +65,8 @@ it('rolls up reported usage into an in-arrears charge', function () {
 it('subtracts the included allowance', function () {
     $item = meteredItem('0.100000', included: 20); // 20 GB free
 
-    Billify::recordUsage($item, 'traffic', 120, CarbonImmutable::parse('2026-06-10Z'));
-    $charges = Billify::rollupUsage($item, usageWindow());
+    Meteric::recordUsage($item, 'traffic', 120, CarbonImmutable::parse('2026-06-10Z'));
+    $charges = Meteric::rollupUsage($item, usageWindow());
 
     // (120 - 20) × €0.10 = €10.00
     expect($charges[0]->amount_minor)->toBe(1000);
@@ -74,10 +74,10 @@ it('subtracts the included allowance', function () {
 
 it('is idempotent — rolling up the same window again bills nothing', function () {
     $item = meteredItem('0.500000');
-    Billify::recordUsage($item, 'traffic', 100, CarbonImmutable::parse('2026-06-10Z'));
+    Meteric::recordUsage($item, 'traffic', 100, CarbonImmutable::parse('2026-06-10Z'));
 
-    Billify::rollupUsage($item, usageWindow());
-    $again = Billify::rollupUsage($item, usageWindow());
+    Meteric::rollupUsage($item, usageWindow());
+    $again = Meteric::rollupUsage($item, usageWindow());
 
     expect($again)->toHaveCount(0)
         ->and(Charge::where('subscription_id', $item->subscription_id)->count())->toBe(1);
@@ -86,8 +86,8 @@ it('is idempotent — rolling up the same window again bills nothing', function 
 it('record is idempotent on the supplied key', function () {
     $item = meteredItem();
 
-    Billify::recordUsage($item, 'traffic', 10, null, key: 'evt-1');
-    Billify::recordUsage($item, 'traffic', 10, null, key: 'evt-1');
+    Meteric::recordUsage($item, 'traffic', 10, null, key: 'evt-1');
+    Meteric::recordUsage($item, 'traffic', 10, null, key: 'evt-1');
 
     expect(UsageRecord::where('item_id', $item->id)->count())->toBe(1);
 });

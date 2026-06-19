@@ -17,10 +17,10 @@ order for a given amount and customer context:
 
 Two tables drive it:
 
-- `billify_tax_registrations`, the jurisdictions you are VAT-registered in. A
+- `meteric_tax_registrations`, the jurisdictions you are VAT-registered in. A
   direct country row, or an `eu_oss` row that covers all EU destinations. No
   registration for the customer's country means no tax is charged.
-- `billify_tax_rates`, date-versioned rates per country and product category.
+- `meteric_tax_rates`, date-versioned rates per country and product category.
   EU rows are refreshed from ibericode; non-EU jurisdictions are added by hand.
 
 ## Switzerland example
@@ -28,7 +28,7 @@ Two tables drive it:
 Register for Swiss VAT and add its rates:
 
 ```php
-use Billify\Models\{TaxRegistration, TaxRate};
+use Meteric\Models\{TaxRegistration, TaxRate};
 
 TaxRegistration::create([
     'country' => 'CH',
@@ -65,19 +65,19 @@ new one, which the rate table's `activeOn` scope reads back correctly.
 EU rates come from `ibericode/vat`. Cross-border B2B reverse charge is confirmed
 against VIES when a validator is available, so a business customer in another EU
 country with a valid VAT id is reverse-charged rather than taxed. Turn VIES
-verification off with `BILLIFY_VERIFY_VAT_ID=false`, which then trusts the mere
+verification off with `METERIC_VERIFY_VAT_ID=false`, which then trusts the mere
 presence of a VAT id.
 
 ## Keeping EU rates current
 
-`billify:vat-sync` refreshes the EU rows of `billify_tax_rates` from ibericode.
+`meteric:vat-sync` refreshes the EU rows of `meteric_tax_rates` from ibericode.
 It only touches rows with `source = 'ibericode'`, your manual jurisdictions
 (CH, UK, anything else) are never modified. When a rate changes, the old row is
 closed with `effective_to` and a new current row is inserted, so history is kept.
 
 ```bash
-php artisan billify:vat-sync                      # standard + reduced
-php artisan billify:vat-sync --category=standard  # one category
+php artisan meteric:vat-sync                      # standard + reduced
+php artisan meteric:vat-sync --category=standard  # one category
 ```
 
 Run it on a schedule so EU rates stay fresh:
@@ -85,20 +85,20 @@ Run it on a schedule so EU rates stay fresh:
 ```php
 use Illuminate\Support\Facades\Schedule;
 
-Schedule::command('billify:vat-sync')->weekly();
+Schedule::command('meteric:vat-sync')->weekly();
 ```
 
 ## Other drivers
 
-| `BILLIFY_TAX_DRIVER` | Behaviour |
+| `METERIC_TAX_DRIVER` | Behaviour |
 |----------------------|-----------|
 | `database` (default) | Multi-jurisdiction registrations + rate table, EU via ibericode + VIES. |
 | `ibericode` | Live EU-only rates plus VIES, no rate table. |
 | `eu_vat` | Static offline EU rates. Good for tests with no network. |
-| `flat` | One flat rate (`BILLIFY_TAX_FLAT_RATE`). |
+| `flat` | One flat rate (`METERIC_TAX_FLAT_RATE`). |
 | `null` | No tax. |
 
-Bind your own resolver by implementing `Billify\Contracts\TaxResolver` and
+Bind your own resolver by implementing `Meteric\Contracts\TaxResolver` and
 adding it to the `tax.drivers` map. Keeping rates legally correct is the host's
 responsibility; the engine makes it manageable.
 
@@ -110,7 +110,7 @@ The resolver needs to know where the customer is. A `BillingAccount` carries a
 ```php
 $context = $account->taxContext();
 // or build one directly for a quote:
-$context = new \Billify\Tax\TaxContext(
+$context = new \Meteric\Tax\TaxContext(
     countryCode: 'CH',
     isBusiness: true,
     vatId: 'CHE-123.456.789',
@@ -118,5 +118,5 @@ $context = new \Billify\Tax\TaxContext(
 );
 ```
 
-Pass it to [`Billify::quote()->tax(...)`](/usage/quotes-and-checkout) to render
+Pass it to [`Meteric::quote()->tax(...)`](/usage/quotes-and-checkout) to render
 tax-correct totals on a checkout page.

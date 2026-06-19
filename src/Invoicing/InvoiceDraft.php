@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Billify\Invoicing;
+namespace Meteric\Invoicing;
 
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
 use Illuminate\Support\Collection;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
 
 /**
  * What a driver needs to emit an invoice: the payer, the charges being billed,

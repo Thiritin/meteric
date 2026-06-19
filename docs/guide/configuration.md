@@ -1,12 +1,12 @@
 # Configuration
 
-`config/billify.php` is published with `vendor:publish --tag=billify-config`.
+`config/meteric.php` is published with `vendor:publish --tag=meteric-config`.
 Every key reads from an env var, so most setup is environment-driven.
 
 ## Currency
 
 ```php
-'currency' => env('BILLIFY_CURRENCY', 'EUR'),
+'currency' => env('METERIC_CURRENCY', 'EUR'),
 ```
 
 The default currency for new billing accounts and the quote builder. A billing
@@ -16,7 +16,7 @@ account stores its own currency, which overrides this once set.
 
 ```php
 'proration' => [
-    'unit' => env('BILLIFY_PRORATION_UNIT', 'second'), // second | day
+    'unit' => env('METERIC_PRORATION_UNIT', 'second'), // second | day
 ],
 ```
 
@@ -26,7 +26,7 @@ whole days.
 ## Rounding
 
 ```php
-'rounding' => env('BILLIFY_ROUNDING', 'HALF_UP'),
+'rounding' => env('METERIC_ROUNDING', 'HALF_UP'),
 ```
 
 Applied per line. The invoice total is the sum of line totals, so it always
@@ -36,9 +36,9 @@ reconciles. Use any `brick/math` `RoundingMode` name.
 
 ```php
 'anchor' => [
-    'mode' => env('BILLIFY_ANCHOR_MODE', 'signup'),   // signup | fixed_day | fixed_dow
-    'day' => env('BILLIFY_ANCHOR_DAY', 1),
-    'first_period' => env('BILLIFY_FIRST_PERIOD', 'prorate_only'),
+    'mode' => env('METERIC_ANCHOR_MODE', 'signup'),   // signup | fixed_day | fixed_dow
+    'day' => env('METERIC_ANCHOR_DAY', 1),
+    'first_period' => env('METERIC_FIRST_PERIOD', 'prorate_only'),
     'default_billing_mode' => 'in_advance',
 ],
 ```
@@ -51,7 +51,7 @@ subscription can override these on the builder. See
 
 ```php
 'tax' => [
-    'driver' => env('BILLIFY_TAX_DRIVER', 'database'),
+    'driver' => env('METERIC_TAX_DRIVER', 'database'),
     'drivers' => [
         'database'  => DatabaseTaxResolver::class,
         'ibericode' => IbericodeVatResolver::class,
@@ -59,12 +59,12 @@ subscription can override these on the builder. See
         'flat'      => FlatRateTaxResolver::class,
         'null'      => NullTaxResolver::class,
     ],
-    'flat_rate' => env('BILLIFY_TAX_FLAT_RATE', 0.19),
-    'merchant_country' => env('BILLIFY_MERCHANT_COUNTRY', 'DE'),
+    'flat_rate' => env('METERIC_TAX_FLAT_RATE', 0.19),
+    'merchant_country' => env('METERIC_MERCHANT_COUNTRY', 'DE'),
     'ibericode' => [
-        'storage_path' => env('BILLIFY_VAT_RATES_PATH', storage_path('framework/cache/billify-vat-rates.json')),
-        'refresh_interval' => (int) env('BILLIFY_VAT_REFRESH', 12 * 3600),
-        'verify_vat_id' => env('BILLIFY_VERIFY_VAT_ID', true),
+        'storage_path' => env('METERIC_VAT_RATES_PATH', storage_path('framework/cache/meteric-vat-rates.json')),
+        'refresh_interval' => (int) env('METERIC_VAT_REFRESH', 12 * 3600),
+        'verify_vat_id' => env('METERIC_VERIFY_VAT_ID', true),
     ],
 ],
 ```
@@ -81,17 +81,17 @@ See [Tax](/usage/tax) for the full setup.
 
 ```php
 'invoice' => [
-    'driver' => env('BILLIFY_INVOICE_DRIVER', 'database'),
+    'driver' => env('METERIC_INVOICE_DRIVER', 'database'),
     'drivers' => [
         'database' => DatabaseInvoiceDriver::class,
         // 'lexoffice' => \App\Billing\LexofficeInvoiceDriver::class,
     ],
-    'mirror_to_database' => env('BILLIFY_INVOICE_MIRROR', true),
+    'mirror_to_database' => env('METERIC_INVOICE_MIRROR', true),
 ],
 ```
 
-The `database` driver writes invoices to the `billify_*` tables. Bind your own
-class implementing `Billify\Contracts\InvoiceDriver` to send invoices to an
+The `database` driver writes invoices to the `meteric_*` tables. Bind your own
+class implementing `Meteric\Contracts\InvoiceDriver` to send invoices to an
 external accounting system. With `mirror_to_database` on, the canonical record
 is kept in the database even when a remote driver is primary. See
 [Invoicing](/usage/invoicing).
@@ -100,20 +100,20 @@ is kept in the database even when a remote driver is primary. See
 
 ```php
 'schema' => [
-    'prefix' => 'billify_',
-    'morph_key' => env('BILLIFY_MORPH_KEY', 'uuid'), // uuid | bigint
+    'prefix' => 'meteric_',
+    'morph_key' => env('METERIC_MORPH_KEY', 'uuid'), // uuid | bigint
 ],
 ```
 
 `morph_key` is the key type used for host references (the morph columns that
-point at your models) and Billify's own primary keys. Set it to match your
+point at your models) and Meteric's own primary keys. Set it to match your
 application's key type before the first migration.
 
 ## Ledger
 
 ```php
 'ledger' => [
-    'enabled' => env('BILLIFY_LEDGER', false),
+    'enabled' => env('METERIC_LEDGER', false),
 ],
 ```
 

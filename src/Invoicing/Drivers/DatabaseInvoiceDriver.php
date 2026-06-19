@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Billify\Invoicing\Drivers;
+namespace Meteric\Invoicing\Drivers;
 
-use Billify\Contracts\InvoiceDriver;
-use Billify\Contracts\TaxResolver;
-use Billify\Enums\CreditState;
-use Billify\Enums\InvoiceState;
-use Billify\Invoicing\CreditNoteDraft;
-use Billify\Invoicing\InvoiceDraft;
-use Billify\Invoicing\IssuedCreditNote;
-use Billify\Invoicing\IssuedInvoice;
-use Billify\Models\CreditNote;
-use Billify\Models\Invoice;
-use Billify\Models\InvoiceLine;
 use Brick\Money\Money;
 use Illuminate\Support\Facades\DB;
+use Meteric\Contracts\InvoiceDriver;
+use Meteric\Contracts\TaxResolver;
+use Meteric\Enums\CreditState;
+use Meteric\Enums\InvoiceState;
+use Meteric\Invoicing\CreditNoteDraft;
+use Meteric\Invoicing\InvoiceDraft;
+use Meteric\Invoicing\IssuedCreditNote;
+use Meteric\Invoicing\IssuedInvoice;
+use Meteric\Models\CreditNote;
+use Meteric\Models\Invoice;
+use Meteric\Models\InvoiceLine;
 
 /**
  * Canonical local invoice sink. Always available — the default driver. Builds
@@ -117,7 +117,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     private function nextNumber(string $prefix = 'INV'): string
     {
         $year = now()->year;
-        $seq = (int) DB::table('billify_invoices')->whereYear('created_at', $year)->count() + 1;
+        $seq = (int) DB::table('meteric_invoices')->whereYear('created_at', $year)->count() + 1;
 
         return sprintf('%s-%d-%06d', $prefix, $year, $seq);
     }

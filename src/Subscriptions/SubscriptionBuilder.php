@@ -2,28 +2,28 @@
 
 declare(strict_types=1);
 
-namespace Billify\Subscriptions;
+namespace Meteric\Subscriptions;
 
-use Billify\Anchoring\PeriodPlanner;
-use Billify\Billify;
-use Billify\Charges\ChargeAccruer;
-use Billify\Contracts\Clock;
-use Billify\Enums\AnchorMode;
-use Billify\Enums\ChargeState;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Enums\ItemState;
-use Billify\Enums\LineKind;
-use Billify\Enums\SubscriptionState;
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
-use Billify\Models\Price;
-use Billify\Models\Subscription;
-use Billify\Models\SubscriptionItem;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Charges\ChargeAccruer;
+use Meteric\Contracts\Clock;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\ItemState;
+use Meteric\Enums\LineKind;
+use Meteric\Enums\SubscriptionState;
+use Meteric\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
+use Meteric\Models\Price;
+use Meteric\Models\Subscription;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Period;
 
 /**
  * Fluent subscription creation: persists the subscription + items and accrues
@@ -154,7 +154,7 @@ final class SubscriptionBuilder
     {
         $sub = $this->create();
         $account = BillingAccount::findOrFail($sub->account_id);
-        $invoice = app(Billify::class)->invoicePending($account);
+        $invoice = app(Meteric::class)->invoicePending($account);
 
         return new Checkout($sub, $invoice);
     }

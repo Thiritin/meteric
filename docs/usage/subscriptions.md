@@ -1,15 +1,15 @@
 # Subscriptions
 
 A subscription is created with the fluent builder returned by
-`Billify::subscribe()`. The builder persists the subscription and its items and
+`Meteric::subscribe()`. The builder persists the subscription and its items and
 accrues the first cycle as pending charges.
 
 ## Subscribe
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price)
     ->create();
 ```
@@ -22,7 +22,7 @@ Manage the account yourself when you need a specific currency or a parent
 account:
 
 ```php
-use Billify\Models\BillingAccount;
+use Meteric\Models\BillingAccount;
 
 $account = BillingAccount::create([
     'owner_type' => $user->getMorphClass(),
@@ -30,7 +30,7 @@ $account = BillingAccount::create([
     'currency' => 'CHF',
 ]);
 
-$subscription = Billify::subscribe()
+$subscription = Meteric::subscribe()
     ->account($account)
     ->add($price, qty: 1)
     ->create();
@@ -45,7 +45,7 @@ A subscription item can morph to the thing it pays for, the actual VPS, domain,
 or gameserver record. Pass it as the third argument to `add()`:
 
 ```php
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price, qty: 1, resource: $vps)
     ->create();
 ```
@@ -56,7 +56,7 @@ billed line back to the provisioned resource and the other way.
 ## Trials
 
 ```php
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price)
     ->trialDays(14)
     ->create();
@@ -74,9 +74,9 @@ anchor the cycle to a calendar boundary and decide how to handle the stub
 between signup and that boundary.
 
 ```php
-use Billify\Enums\{AnchorMode, FirstPeriodPolicy};
+use Meteric\Enums\{AnchorMode, FirstPeriodPolicy};
 
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price)
     ->anchor(AnchorMode::FixedDay, 1)                 // bill on the 1st
     ->firstPeriod(FirstPeriodPolicy::ProratePlusFull) // stub now + first full month
@@ -112,7 +112,7 @@ Every builder method that touches the clock accepts an explicit instant through
 ```php
 use Carbon\CarbonImmutable;
 
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price)
     ->at(CarbonImmutable::parse('2026-01-25 10:00:00'))
     ->create();
@@ -120,7 +120,7 @@ $subscription = Billify::subscribe($user)
 
 ## Renew
 
-`Billify::renew()` accrues the next cycle for every active item, rolling forward
+`Meteric::renew()` accrues the next cycle for every active item, rolling forward
 through any periods that elapsed since the last run. It is idempotent: the
 billing-period guard prevents billing a window twice, so it is safe to run on a
 schedule and safe to re-run.
@@ -128,7 +128,7 @@ schedule and safe to re-run.
 ```php
 use Carbon\CarbonImmutable;
 
-$charges = Billify::renew($subscription, CarbonImmutable::now());
+$charges = Meteric::renew($subscription, CarbonImmutable::now());
 ```
 
 It returns the charges it created (empty when nothing was due). A
@@ -136,7 +136,7 @@ It returns the charges it created (empty when nothing was due). A
 period boundary during renewal. Use the `dueForRenewal` scope to find work:
 
 ```php
-use Billify\Models\Subscription;
+use Meteric\Models\Subscription;
 
 Subscription::dueForRenewal(CarbonImmutable::now())->get();
 ```
@@ -145,10 +145,10 @@ Subscription::dueForRenewal(CarbonImmutable::now())->get();
 
 ```php
 // At period end (default): set cancel_at, keep billing until then.
-Billify::cancel($subscription);
+Meteric::cancel($subscription);
 
 // Immediately: cancel items now, no refund.
-Billify::cancel($subscription, 'now');
+Meteric::cancel($subscription, 'now');
 ```
 
 Cancellation does not refund. `period_end` sets `cancel_at` to the current

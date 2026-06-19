@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PaymentAllocation extends BillifyModel
+class PaymentAllocation extends MetericModel
 {
-    protected $table = 'billify_payment_allocations';
+    protected $table = 'meteric_payment_allocations';
 
     public $timestamps = false;
 

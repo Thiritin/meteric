@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\PeriodCast;
-use Billify\Enums\BillingMode;
-use Billify\Enums\ItemState;
-use Billify\Support\Period;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Meteric\Casts\PeriodCast;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\ItemState;
+use Meteric\Support\Period;
 
 /**
  * @property string $id
@@ -26,9 +26,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property ?Period $current_period
  * @property ?array $pending_change
  */
-class SubscriptionItem extends BillifyModel
+class SubscriptionItem extends MetericModel
 {
-    protected $table = 'billify_subscription_items';
+    protected $table = 'meteric_subscription_items';
 
     protected $guarded = [];
 

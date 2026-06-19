@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-use Billify\Anchoring\PeriodPlanner;
-use Billify\Enums\AnchorMode;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Models\Price;
-use Billify\Proration\Prorator;
-use Billify\Quoting\QuoteBuilder;
-use Billify\Support\FrozenClock;
-use Billify\Tax\NullTaxResolver;
+use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Models\Price;
+use Meteric\Proration\Prorator;
+use Meteric\Quoting\QuoteBuilder;
+use Meteric\Support\FrozenClock;
+use Meteric\Tax\NullTaxResolver;
 
 function recurringPrice(int $minor = 1000): Price
 {

@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\ChargeState;
-use Billify\Enums\InvoiceState;
-use Billify\Enums\LineKind;
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
-use Billify\Models\Invoice;
 use Brick\Money\Money;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\InvoiceState;
+use Meteric\Enums\LineKind;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
+use Meteric\Models\Invoice;
 
 uses(RefreshDatabase::class);
 
@@ -41,7 +41,7 @@ it('invoices pending charges and flips them to invoiced', function () {
     pendingCharge($account, 1000, 'VPS XL');
     pendingCharge($account, 480, 'Gameserver slots');
 
-    $invoice = Billify::invoicePending($account);
+    $invoice = Meteric::invoicePending($account);
 
     expect($invoice)->not->toBeNull()
         ->and($invoice->state)->toBe(InvoiceState::Open)
@@ -56,15 +56,15 @@ it('invoices pending charges and flips them to invoiced', function () {
 });
 
 it('returns null when nothing is pending', function () {
-    expect(Billify::invoicePending(germanAccount()))->toBeNull();
+    expect(Meteric::invoicePending(germanAccount()))->toBeNull();
 });
 
 it('records a payment and marks the invoice paid', function () {
     $account = germanAccount();
     pendingCharge($account, 1000, 'VPS');
-    $invoice = Billify::invoicePending($account);
+    $invoice = Meteric::invoicePending($account);
 
-    Billify::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'EUR'), 'pi_test_1');
+    Meteric::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'EUR'), 'pi_test_1');
 
     $invoice->refresh();
     expect($invoice->state)->toBe(InvoiceState::Paid)
@@ -74,7 +74,7 @@ it('records a payment and marks the invoice paid', function () {
 it('freezes an issued invoice (immutability trigger)', function () {
     $account = germanAccount();
     pendingCharge($account, 1000, 'VPS');
-    $invoice = Billify::invoicePending($account);
+    $invoice = Meteric::invoicePending($account);
 
     // Tamper with financials of an issued invoice → trigger raises.
     Invoice::query()->whereKey($invoice->id)->update(['total_minor' => 1]);

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\ItemState;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Enums\ItemState;
 
 /**
  * @property string $id
@@ -14,9 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?string $group_key
  * @property array $metadata
  */
-class Addon extends BillifyModel
+class Addon extends MetericModel
 {
-    protected $table = 'billify_addons';
+    protected $table = 'meteric_addons';
 
     protected $guarded = [];
 

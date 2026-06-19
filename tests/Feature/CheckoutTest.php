@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\InvoiceState;
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\Price;
-use Billify\Models\Product;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Enums\InvoiceState;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Price;
+use Meteric\Models\Product;
 
 uses(RefreshDatabase::class);
 
@@ -25,7 +25,7 @@ function checkoutPrice(int $minor = 1000): Price
 it('creates a subscription and invoices it immediately', function () {
     $acc = BillingAccount::create(['owner_type' => 'user', 'owner_id' => '1', 'currency' => 'EUR']);
 
-    $checkout = Billify::checkout()
+    $checkout = Meteric::checkout()
         ->account($acc)
         ->at(CarbonImmutable::parse('2026-06-01T00:00:00Z'))
         ->add(checkoutPrice(1000), 1)

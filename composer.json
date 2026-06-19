@@ -1,5 +1,5 @@
 {
-    "name": "pawhost/billify",
+    "name": "thiritin/meteric",
     "description": "Dynamic billing engine for hosting systems — subscriptions, proration, usage, charges and pluggable invoice/tax drivers. PostgreSQL.",
     "keywords": ["laravel", "billing", "subscriptions", "invoicing", "hosting", "whmcs", "proration", "usage", "postgres"],
     "license": "MIT",
@@ -24,21 +24,21 @@
     },
     "autoload": {
         "psr-4": {
-            "Billify\\": "src/"
+            "Meteric\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Billify\\Tests\\": "tests/"
+            "Meteric\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Billify\\BillifyServiceProvider"
+                "Meteric\\MetericServiceProvider"
             ],
             "aliases": {
-                "Billify": "Billify\\Facades\\Billify"
+                "Meteric": "Meteric\\Facades\\Meteric"
             }
         }
     },

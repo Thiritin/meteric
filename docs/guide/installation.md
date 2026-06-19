@@ -3,38 +3,38 @@
 Require the package, publish the config, and migrate.
 
 ```bash
-composer require pawhost/billify
-php artisan vendor:publish --tag=billify-config
+composer require thiritin/meteric
+php artisan vendor:publish --tag=meteric-config
 php artisan migrate
 ```
 
-The service provider (`Billify\BillifyServiceProvider`) and the `Billify`
+The service provider (`Meteric\MetericServiceProvider`) and the `Meteric`
 facade alias are registered through package discovery, so there is nothing to
 add to `config/app.php`.
 
 ## What migrate creates
 
-The migrations create the `billify_*` tables: products, prices, billing
+The migrations create the `meteric_*` tables: products, prices, billing
 accounts, subscriptions and items, charges, invoices and lines, payments, tax
 rates and registrations, meter dimensions, usage records, billing periods,
-commitments, coupons, and discounts. Table names are prefixed `billify_` (see
+commitments, coupons, and discounts. Table names are prefixed `meteric_` (see
 [Configuration](/guide/configuration)).
 
 Run them against PostgreSQL. The migration step enables `btree_gist` and
-`pgcrypto` and installs the GiST exclusion constraint on `billify_billing_periods`.
+`pgcrypto` and installs the GiST exclusion constraint on `meteric_billing_periods`.
 If your database role cannot create extensions, see [Requirements](/guide/requirements).
 
 ## Making a model billable
 
-Any model can own a billing account or be a subscription customer. Billify uses
+Any model can own a billing account or be a subscription customer. Meteric uses
 Laravel's morph relations, so there is no trait to add for the basics, you pass
 your model into the builders and it stores the morph type and key.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
 // $user is any Eloquent model. firstOrCreate resolves its billing account.
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price)
     ->create();
 ```

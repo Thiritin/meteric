@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\MoneyCast;
-use Billify\Casts\PeriodCast;
-use Billify\Enums\BillingMode;
-use Billify\Enums\ChargeState;
-use Billify\Enums\LineKind;
-use Billify\Support\Period;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\MoneyCast;
+use Meteric\Casts\PeriodCast;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\LineKind;
+use Meteric\Support\Period;
 
 /**
  * Money owed — the source of truth. Accrues independently of invoicing.
@@ -26,9 +26,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $currency
  * @property ?Period $covers
  */
-class Charge extends BillifyModel
+class Charge extends MetericModel
 {
-    protected $table = 'billify_charges';
+    protected $table = 'meteric_charges';
 
     protected $guarded = [];
 

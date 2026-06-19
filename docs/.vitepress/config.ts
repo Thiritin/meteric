@@ -1,10 +1,10 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'Billify',
+  title: 'Meteric',
   description: 'A billing engine for Laravel hosting systems: subscriptions, proration, usage metering, and a charge-vs-invoice safety model.',
   lang: 'en-US',
-  base: '/billify/',
+  base: '/meteric/',
   cleanUrls: true,
   lastUpdated: true,
 
@@ -21,7 +21,7 @@ export default defineConfig({
       { text: 'Guide', link: '/' },
       { text: 'Usage', link: '/usage/products-and-prices' },
       { text: 'Reference', link: '/reference/facade' },
-      { text: 'GitHub', link: 'https://github.com/Thiritin/billify' },
+      { text: 'GitHub', link: 'https://github.com/Thiritin/meteric' },
     ],
 
     sidebar: [
@@ -52,18 +52,18 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
-          { text: 'Billify facade', link: '/reference/facade' },
+          { text: 'Meteric facade', link: '/reference/facade' },
           { text: 'Models', link: '/reference/models' },
         ],
       },
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/Thiritin/billify' },
+      { icon: 'github', link: 'https://github.com/Thiritin/meteric' },
     ],
 
     editLink: {
-      pattern: 'https://github.com/Thiritin/billify/edit/main/docs/:path',
+      pattern: 'https://github.com/Thiritin/meteric/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
 

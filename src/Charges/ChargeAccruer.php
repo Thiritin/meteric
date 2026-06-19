@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Billify\Charges;
+namespace Meteric\Charges;
 
-use Billify\Anchoring\BillingPlan;
-use Billify\Anchoring\PlannedPeriod;
-use Billify\Enums\ChargeState;
-use Billify\Models\BillingPeriod;
-use Billify\Models\Charge;
-use Billify\Models\Price;
-use Billify\Models\SubscriptionItem;
-use Billify\Proration\Prorator;
-use Billify\Support\Period;
 use Brick\Money\Money;
 use Illuminate\Support\Facades\DB;
+use Meteric\Anchoring\BillingPlan;
+use Meteric\Anchoring\PlannedPeriod;
+use Meteric\Enums\ChargeState;
+use Meteric\Models\BillingPeriod;
+use Meteric\Models\Charge;
+use Meteric\Models\Price;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Proration\Prorator;
+use Meteric\Support\Period;
 
 /**
  * Turns a BillingPlan into pending Charge rows for a subscription item, guarded
- * by billify_billing_periods so a window is never billed twice. Sets the item's
+ * by meteric_billing_periods so a window is never billed twice. Sets the item's
  * current_period to the plan's ongoing period (drives the next renewal).
  */
 final class ChargeAccruer

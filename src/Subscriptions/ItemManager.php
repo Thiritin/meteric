@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Billify\Subscriptions;
+namespace Meteric\Subscriptions;
 
-use Billify\Contracts\Clock;
-use Billify\Enums\ChargeState;
-use Billify\Enums\ItemState;
-use Billify\Enums\LineKind;
-use Billify\Models\Addon;
-use Billify\Models\Charge;
-use Billify\Models\ItemOption;
-use Billify\Models\Price;
-use Billify\Models\SubscriptionItem;
-use Billify\Proration\Prorator;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Meteric\Contracts\Clock;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\ItemState;
+use Meteric\Enums\LineKind;
+use Meteric\Models\Addon;
+use Meteric\Models\Charge;
+use Meteric\Models\ItemOption;
+use Meteric\Models\Price;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Proration\Prorator;
 
 /**
  * Mid-cycle item mutations — addons, configurable options, quantity. Each change

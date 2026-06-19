@@ -2,44 +2,44 @@
 
 declare(strict_types=1);
 
-namespace Billify;
+namespace Meteric;
 
-use Billify\Anchoring\PeriodPlanner;
-use Billify\Charges\ChargeAccruer;
-use Billify\Console\VatSyncCommand;
-use Billify\Contracts\Clock;
-use Billify\Contracts\InvoiceDriver;
-use Billify\Contracts\TaxResolver;
-use Billify\Invoicing\Drivers\DatabaseInvoiceDriver;
-use Billify\Proration\Prorator;
-use Billify\Quoting\QuoteBuilder;
-use Billify\Subscriptions\CommitmentManager;
-use Billify\Subscriptions\ItemManager;
-use Billify\Subscriptions\SubscriptionBuilder;
-use Billify\Subscriptions\SubscriptionManager;
-use Billify\Support\SystemClock;
-use Billify\Tax\DatabaseTaxResolver;
-use Billify\Tax\EuVatResolver;
-use Billify\Tax\FlatRateTaxResolver;
-use Billify\Tax\IbericodeVatResolver;
-use Billify\Usage\UsageRollup;
 use Brick\Math\RoundingMode;
 use Ibericode\Vat\Countries;
 use Ibericode\Vat\Rates;
 use Ibericode\Vat\Validator;
 use Illuminate\Support\ServiceProvider;
+use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Charges\ChargeAccruer;
+use Meteric\Console\VatSyncCommand;
+use Meteric\Contracts\Clock;
+use Meteric\Contracts\InvoiceDriver;
+use Meteric\Contracts\TaxResolver;
+use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
+use Meteric\Proration\Prorator;
+use Meteric\Quoting\QuoteBuilder;
+use Meteric\Subscriptions\CommitmentManager;
+use Meteric\Subscriptions\ItemManager;
+use Meteric\Subscriptions\SubscriptionBuilder;
+use Meteric\Subscriptions\SubscriptionManager;
+use Meteric\Support\SystemClock;
+use Meteric\Tax\DatabaseTaxResolver;
+use Meteric\Tax\EuVatResolver;
+use Meteric\Tax\FlatRateTaxResolver;
+use Meteric\Tax\IbericodeVatResolver;
+use Meteric\Usage\UsageRollup;
 
-final class BillifyServiceProvider extends ServiceProvider
+final class MetericServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/billify.php', 'billify');
+        $this->mergeConfigFrom(__DIR__.'/../config/meteric.php', 'meteric');
 
         $this->app->singleton(Clock::class, SystemClock::class);
 
-        // Tax resolver — selected by config('billify.tax.driver').
+        // Tax resolver — selected by config('meteric.tax.driver').
         $this->app->singleton(TaxResolver::class, function ($app) {
-            $cfg = $app['config']['billify.tax'];
+            $cfg = $app['config']['meteric.tax'];
             $key = $cfg['driver'] ?? 'ibericode';
             $class = $cfg['drivers'][$key] ?? EuVatResolver::class;
 
@@ -58,16 +58,16 @@ final class BillifyServiceProvider extends ServiceProvider
 
         // ibericode Rates singleton (used by the vat-sync command).
         $this->app->singleton(Rates::class, function ($app) {
-            $ib = $app['config']['billify.tax.ibericode'] ?? [];
-            $path = $ib['storage_path'] ?? storage_path('framework/cache/billify-vat-rates.json');
+            $ib = $app['config']['meteric.tax.ibericode'] ?? [];
+            $path = $ib['storage_path'] ?? storage_path('framework/cache/meteric-vat-rates.json');
             @mkdir(dirname((string) $path), 0775, true);
 
             return new Rates((string) $path, (int) ($ib['refresh_interval'] ?? 43200));
         });
 
-        // Invoice driver — selected by config('billify.invoice.driver').
+        // Invoice driver — selected by config('meteric.invoice.driver').
         $this->app->singleton(InvoiceDriver::class, function ($app) {
-            $cfg = $app['config']['billify.invoice'];
+            $cfg = $app['config']['meteric.invoice'];
             $key = $cfg['driver'] ?? 'database';
             $class = $cfg['drivers'][$key] ?? DatabaseInvoiceDriver::class;
 
@@ -75,7 +75,7 @@ final class BillifyServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(Prorator::class, function ($app) {
-            $cfg = $app['config']['billify'];
+            $cfg = $app['config']['meteric'];
 
             return new Prorator(
                 unit: $cfg['proration']['unit'] ?? 'second',
@@ -83,7 +83,7 @@ final class BillifyServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->singleton(Billify::class, fn ($app) => new Billify($app->make(InvoiceDriver::class)));
+        $this->app->singleton(Meteric::class, fn ($app) => new Meteric($app->make(InvoiceDriver::class)));
 
         $this->app->singleton(PeriodPlanner::class);
         $this->app->singleton(ChargeAccruer::class, fn ($app) => new ChargeAccruer($app->make(Prorator::class)));
@@ -95,7 +95,7 @@ final class BillifyServiceProvider extends ServiceProvider
             prorator: $app->make(Prorator::class),
             tax: $app->make(TaxResolver::class),
             planner: $app->make(PeriodPlanner::class),
-            currency: $app['config']['billify.currency'] ?? 'EUR',
+            currency: $app['config']['meteric.currency'] ?? 'EUR',
         ));
 
         $this->app->singleton(SubscriptionManager::class, fn ($app) => new SubscriptionManager(
@@ -118,15 +118,15 @@ final class BillifyServiceProvider extends ServiceProvider
             clock: $app->make(Clock::class),
             planner: $app->make(PeriodPlanner::class),
             accruer: $app->make(ChargeAccruer::class),
-            defaultCurrency: $app['config']['billify.currency'] ?? 'EUR',
+            defaultCurrency: $app['config']['meteric.currency'] ?? 'EUR',
         ));
     }
 
-    /** @param array<string,mixed> $cfg billify.tax config */
+    /** @param array<string,mixed> $cfg meteric.tax config */
     private function makeIbericodeResolver(array $cfg): IbericodeVatResolver
     {
         $ib = $cfg['ibericode'] ?? [];
-        $path = $ib['storage_path'] ?? storage_path('framework/cache/billify-vat-rates.json');
+        $path = $ib['storage_path'] ?? storage_path('framework/cache/meteric-vat-rates.json');
         @mkdir(dirname((string) $path), 0775, true);
 
         return new IbericodeVatResolver(
@@ -142,12 +142,12 @@ final class BillifyServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__.'/../config/billify.php' => config_path('billify.php'),
-            ], 'billify-config');
+                __DIR__.'/../config/meteric.php' => config_path('meteric.php'),
+            ], 'meteric-config');
 
             $this->publishes([
                 __DIR__.'/../database/migrations' => database_path('migrations'),
-            ], 'billify-migrations');
+            ], 'meteric-migrations');
 
             $this->commands([VatSyncCommand::class]);
         }

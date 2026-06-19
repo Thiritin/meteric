@@ -9,9 +9,9 @@ or credit, so the invoice breakdown stays line by line.
 An addon is a bookable extra on an item, +4 GB RAM, an extra IP, a backup plan.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
-$addon = Billify::addAddon($item, $ramPrice, qty: 1);
+$addon = Meteric::addAddon($item, $ramPrice, qty: 1);
 ```
 
 The addon's price is prorated over the item's remaining period and booked as a
@@ -27,8 +27,8 @@ unused portion.
 ```php
 // Switch the backup tier: the old one in the "backup" group is credited out,
 // the new one is charged, both prorated over the remaining period.
-Billify::addAddon($item, $backupSilver, group: 'backup');
-Billify::addAddon($item, $backupGold, group: 'backup');
+Meteric::addAddon($item, $backupSilver, group: 'backup');
+Meteric::addAddon($item, $backupGold, group: 'backup');
 ```
 
 This is how you model "pick one" upsells where the customer can change their
@@ -41,9 +41,9 @@ choice, a feature toggle. Options are keyed, so setting the same key again
 updates it.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
-$option = Billify::setOption(
+$option = Meteric::setOption(
     item: $item,
     key: 'slots',
     value: '32',
@@ -59,7 +59,7 @@ $option = Billify::setOption(
 | `choice` | A dropdown or radio (location, OS). |
 | `toggle` | A yes/no flag. |
 
-When you pass a `price`, Billify prorates the *delta* against the previous
+When you pass a `price`, Meteric prorates the *delta* against the previous
 quantity. Raising slots from 16 to 32 charges the prorated 16-slot increase;
 lowering it credits the prorated difference. With no price, the option is stored
 without a charge, useful for `choice` and `toggle` settings that do not change
@@ -71,7 +71,7 @@ To change the base quantity of the item itself (not an option), use
 `setQuantity()`. It prorates the difference like an option does.
 
 ```php
-$item = Billify::setQuantity($item, 5); // from 3 → 5, prorated increase charged
+$item = Meteric::setQuantity($item, 5); // from 3 → 5, prorated increase charged
 ```
 
 Increasing quantity books a prorated charge; decreasing books a prorated credit.
@@ -81,5 +81,5 @@ The item's `quantity` is updated either way.
 
 All of these write `pending` charges and credits with the item's current period
 as their `covers` window. They appear on the next [invoice](/usage/invoicing)
-for the account. Nothing is charged to a card here, Billify accrues; your
+for the account. Nothing is charged to a card here, Meteric accrues; your
 invoice driver and gateway settle.

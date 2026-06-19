@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Billify\Contracts;
+namespace Meteric\Contracts;
 
-use Billify\Tax\TaxContext;
-use Billify\Tax\TaxResult;
 use Brick\Money\Money;
+use Meteric\Tax\TaxContext;
+use Meteric\Tax\TaxResult;
 
 /**
  * Resolves tax for a single net amount in a given context. Swappable driver;
- * Billify ships EuVatResolver (default), FlatRateTaxResolver, NullTaxResolver.
+ * Meteric ships EuVatResolver (default), FlatRateTaxResolver, NullTaxResolver.
  */
 interface TaxResolver
 {

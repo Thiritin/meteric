@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Billify\Subscriptions;
+namespace Meteric\Subscriptions;
 
-use Billify\Contracts\Clock;
-use Billify\Enums\ChargeState;
-use Billify\Enums\CommitmentState;
-use Billify\Enums\Interval;
-use Billify\Enums\LineKind;
-use Billify\Models\Charge;
-use Billify\Models\Commitment;
-use Billify\Models\SubscriptionItem;
-use Billify\Support\Period;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Meteric\Contracts\Clock;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\CommitmentState;
+use Meteric\Enums\Interval;
+use Meteric\Enums\LineKind;
+use Meteric\Models\Charge;
+use Meteric\Models\Commitment;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Period;
 
 /**
  * Term commitments / reservations (AWS RI / WHMCS contract term). A commitment

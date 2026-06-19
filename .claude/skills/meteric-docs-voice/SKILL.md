@@ -1,9 +1,9 @@
 ---
-name: billify-docs-voice
-description: Writing-voice rules for Billify documentation. Use when writing or editing any page under docs/ so the prose reads like a developer wrote it, not an LLM. Covers banned words, sentence shape, and the "lead with code" structure.
+name: meteric-docs-voice
+description: Writing-voice rules for Meteric documentation. Use when writing or editing any page under docs/ so the prose reads like a developer wrote it, not an LLM. Covers banned words, sentence shape, and the "lead with code" structure.
 ---
 
-# Billify docs voice
+# Meteric docs voice
 
 Audience: working Laravel developers. They know Eloquent, migrations, service
 providers, facades, and the container. Do not explain those.

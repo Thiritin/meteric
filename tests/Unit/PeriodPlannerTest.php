@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Billify\Anchoring\PeriodPlanner;
-use Billify\Enums\AnchorMode;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Enums\Interval;
-use Billify\Enums\LineKind;
-use Billify\Support\RecurrenceRule;
 use Carbon\CarbonImmutable;
+use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\Interval;
+use Meteric\Enums\LineKind;
+use Meteric\Support\RecurrenceRule;
 
 function monthly(): RecurrenceRule
 {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Billify\Proration;
+namespace Meteric\Proration;
 
-use Billify\Support\Period;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Meteric\Support\Period;
 
 /** Builds Proration value objects using the configured unit + rounding mode. */
 final class Prorator

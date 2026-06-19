@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Quoting;
+namespace Meteric\Quoting;
 
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;

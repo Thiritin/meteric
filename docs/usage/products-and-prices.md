@@ -7,8 +7,8 @@ A product can have many prices, different currencies, different purposes
 ## Products
 
 ```php
-use Billify\Models\Product;
-use Billify\Enums\PricingModel;
+use Meteric\Models\Product;
+use Meteric\Enums\PricingModel;
 
 $product = Product::create([
     'type' => 'vps',                       // your category, free-form
@@ -30,8 +30,8 @@ default [downgrade policy](/usage/plan-changes); it falls back to `defer`.
 ## Prices
 
 ```php
-use Billify\Models\Price;
-use Billify\Enums\{PricingModel, Interval, BillingMode, PricePurpose};
+use Meteric\Models\Price;
+use Meteric\Enums\{PricingModel, Interval, BillingMode, PricePurpose};
 
 $price = Price::create([
     'product_id' => $product->id,
@@ -70,7 +70,7 @@ mode wins, falling back to `in_advance`.
 billing uses this, a register price and a renew price on the same product.
 
 ```php
-use Billify\Enums\PricePurpose;
+use Meteric\Enums\PricePurpose;
 
 // The current recurring price for a currency.
 $price = $product->priceFor('EUR');
@@ -94,8 +94,8 @@ $price = Price::create([
     'product_id' => $product->id,
     'currency' => 'EUR',
     'unit_rate' => '0.00004200',    // €0.000042 per unit
-    'purpose' => \Billify\Enums\PricePurpose::Recurring,
-    'pricing_model' => \Billify\Enums\PricingModel::PerUnit,
+    'purpose' => \Meteric\Enums\PricePurpose::Recurring,
+    'pricing_model' => \Meteric\Enums\PricingModel::PerUnit,
 ]);
 
 $price->amountFor(100000);          // Money, round(qty × unit_rate)

@@ -2,26 +2,26 @@
 
 declare(strict_types=1);
 
-namespace Billify\Console;
+namespace Meteric\Console;
 
-use Billify\Models\TaxRate;
 use Carbon\CarbonImmutable;
 use Ibericode\Vat\Countries;
 use Ibericode\Vat\Rates;
 use Illuminate\Console\Command;
+use Meteric\Models\TaxRate;
 use Throwable;
 
 /**
- * Refresh the EU rows of billify_tax_rates from ibericode's live service.
+ * Refresh the EU rows of meteric_tax_rates from ibericode's live service.
  * Only touches source='ibericode' rows — manual jurisdictions (CH, UK, …) are
  * never modified. When a rate changes, the old row is closed (effective_to) and
  * a new current row is inserted, preserving history.
  */
 final class VatSyncCommand extends Command
 {
-    protected $signature = 'billify:vat-sync {--category=* : Categories to sync (default: standard, reduced)}';
+    protected $signature = 'meteric:vat-sync {--category=* : Categories to sync (default: standard, reduced)}';
 
-    protected $description = 'Sync EU VAT rates from ibericode into billify_tax_rates';
+    protected $description = 'Sync EU VAT rates from ibericode into meteric_tax_rates';
 
     public function handle(Rates $rates, Countries $countries): int
     {
@@ -59,7 +59,7 @@ final class VatSyncCommand extends Command
             }
         }
 
-        $this->info("billify:vat-sync done — {$changed} rate row(s) written.");
+        $this->info("meteric:vat-sync done — {$changed} rate row(s) written.");
 
         return self::SUCCESS;
     }

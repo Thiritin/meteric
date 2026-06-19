@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\PeriodCast;
-use Billify\Enums\AnchorMode;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Enums\SubscriptionState;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Meteric\Casts\PeriodCast;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\SubscriptionState;
+use Meteric\Support\Period;
 
 /**
  * @property string $id
@@ -25,9 +25,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property ?Period $current_period
  * @property ?CarbonImmutable $trial_end
  */
-class Subscription extends BillifyModel
+class Subscription extends MetericModel
 {
-    protected $table = 'billify_subscriptions';
+    protected $table = 'meteric_subscriptions';
 
     protected $guarded = [];
 

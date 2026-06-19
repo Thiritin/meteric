@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use Billify\Proration\Prorator;
-use Billify\Support\Period;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Meteric\Proration\Prorator;
+use Meteric\Support\Period;
 
 function junePeriod(): Period
 {

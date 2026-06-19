@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Billify\Contracts;
+namespace Meteric\Contracts;
 
-use Billify\Enums\PricingModel;
-use Billify\Models\Price;
+use Meteric\Enums\PricingModel;
+use Meteric\Models\Price;
 
 /**
  * Implemented by a host-app plan (VpsPlan, Tld, WebHostingPlan, …) so it can be
- * attached to a Billify Product as the morph target.
+ * attached to a Meteric Product as the morph target.
  */
 interface Billable
 {

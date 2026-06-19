@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Casts;
+namespace Meteric\Casts;
 
 use Brick\Money\Money;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;

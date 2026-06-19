@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\BillingMode;
-use Billify\Enums\CommitmentState;
-use Billify\Enums\Interval;
-use Billify\Enums\ItemState;
-use Billify\Enums\OptionType;
-use Billify\Enums\SubscriptionState;
-use Billify\Support\Pg;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\CommitmentState;
+use Meteric\Enums\Interval;
+use Meteric\Enums\ItemState;
+use Meteric\Enums\OptionType;
+use Meteric\Enums\SubscriptionState;
+use Meteric\Support\Pg;
 use Tpetry\PostgresqlEnhanced\Schema\Blueprint;
 use Tpetry\PostgresqlEnhanced\Support\Facades\Schema;
 
@@ -18,9 +18,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('billify_subscriptions', function (Blueprint $table) {
+        Schema::create('meteric_subscriptions', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('account_id')->constrained('billify_billing_accounts')->restrictOnDelete();
+            $table->foreignUuid('account_id')->constrained('meteric_billing_accounts')->restrictOnDelete();
             $table->string('customer_type');
             $table->string('customer_id');
             $table->char('currency', 3);
@@ -38,17 +38,17 @@ return new class extends Migration
 
             $table->index('account_id');
             $table->index(['customer_type', 'customer_id']);
-            $table->index('(upper(current_period))', 'billify_subs_due_idx')->where("state IN ('active','trialing','past_due')");
+            $table->index('(upper(current_period))', 'meteric_subs_due_idx')->where("state IN ('active','trialing','past_due')");
         });
-        Pg::currencyCheck('billify_subscriptions');
-        Pg::enumCheck('billify_subscriptions', 'state', SubscriptionState::class);
-        Pg::check('billify_subscriptions', 'billify_subs_anchor_day', 'anchor_day IS NULL OR anchor_day BETWEEN 1 AND 31');
+        Pg::currencyCheck('meteric_subscriptions');
+        Pg::enumCheck('meteric_subscriptions', 'state', SubscriptionState::class);
+        Pg::check('meteric_subscriptions', 'meteric_subs_anchor_day', 'anchor_day IS NULL OR anchor_day BETWEEN 1 AND 31');
 
-        Schema::create('billify_subscription_items', function (Blueprint $table) {
+        Schema::create('meteric_subscription_items', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('subscription_id')->constrained('billify_subscriptions')->cascadeOnDelete();
-            $table->foreignUuid('product_id')->constrained('billify_products')->restrictOnDelete();
-            $table->foreignUuid('price_id')->constrained('billify_prices')->restrictOnDelete();
+            $table->foreignUuid('subscription_id')->constrained('meteric_subscriptions')->cascadeOnDelete();
+            $table->foreignUuid('product_id')->constrained('meteric_products')->restrictOnDelete();
+            $table->foreignUuid('price_id')->constrained('meteric_prices')->restrictOnDelete();
             $table->string('resource_type')->nullable();
             $table->string('resource_id')->nullable();
             $table->decimal('quantity', 20, 6)->default(1);
@@ -64,17 +64,17 @@ return new class extends Migration
 
             $table->index('subscription_id');
             $table->index(['resource_type', 'resource_id']);
-            $table->index('(upper(current_period))', 'billify_items_due_idx')->where("state = 'active'");
+            $table->index('(upper(current_period))', 'meteric_items_due_idx')->where("state = 'active'");
         });
-        Pg::enumCheck('billify_subscription_items', 'state', ItemState::class);
-        Pg::enumCheck('billify_subscription_items', 'billing_mode', BillingMode::class, nullable: true);
-        Pg::check('billify_subscription_items', 'billify_items_qty_nonneg', 'quantity >= 0');
+        Pg::enumCheck('meteric_subscription_items', 'state', ItemState::class);
+        Pg::enumCheck('meteric_subscription_items', 'billing_mode', BillingMode::class, nullable: true);
+        Pg::check('meteric_subscription_items', 'meteric_items_qty_nonneg', 'quantity >= 0');
 
-        Schema::create('billify_addons', function (Blueprint $table) {
+        Schema::create('meteric_addons', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('billify_subscription_items')->cascadeOnDelete();
-            $table->foreignUuid('product_id')->constrained('billify_products')->restrictOnDelete();
-            $table->foreignUuid('price_id')->constrained('billify_prices')->restrictOnDelete();
+            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
+            $table->foreignUuid('product_id')->constrained('meteric_products')->restrictOnDelete();
+            $table->foreignUuid('price_id')->constrained('meteric_prices')->restrictOnDelete();
             $table->string('group_key')->nullable();
             $table->decimal('quantity', 20, 6)->default(1);
             $table->string('state')->default(ItemState::Active->value);
@@ -84,25 +84,25 @@ return new class extends Migration
             // At most one active addon per group per item.
             $table->uniqueIndex(['item_id', 'group_key'])->where("state = 'active' AND group_key IS NOT NULL");
         });
-        Pg::enumCheck('billify_addons', 'state', ItemState::class);
+        Pg::enumCheck('meteric_addons', 'state', ItemState::class);
 
-        Schema::create('billify_item_options', function (Blueprint $table) {
+        Schema::create('meteric_item_options', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('billify_subscription_items')->cascadeOnDelete();
+            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
             $table->string('key');
             $table->string('type');
             $table->string('value');
-            $table->foreignUuid('price_id')->nullable()->constrained('billify_prices')->restrictOnDelete();
+            $table->foreignUuid('price_id')->nullable()->constrained('meteric_prices')->restrictOnDelete();
             $table->decimal('quantity', 20, 6)->default(1);
             $table->timestampsTz();
 
             $table->unique(['item_id', 'key']);
         });
-        Pg::enumCheck('billify_item_options', 'type', OptionType::class);
+        Pg::enumCheck('meteric_item_options', 'type', OptionType::class);
 
-        Schema::create('billify_commitments', function (Blueprint $table) {
+        Schema::create('meteric_commitments', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('billify_subscription_items')->cascadeOnDelete();
+            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
             $table->string('term_interval');
             $table->integer('term_count');
             $table->bigInteger('upfront_minor')->default(0);
@@ -115,15 +115,15 @@ return new class extends Migration
 
             $table->index('item_id');
         });
-        Pg::currencyCheck('billify_commitments');
-        Pg::enumCheck('billify_commitments', 'term_interval', Interval::class);
-        Pg::enumCheck('billify_commitments', 'state', CommitmentState::class);
-        Pg::check('billify_commitments', 'billify_commit_term_pos', 'term_count > 0');
+        Pg::currencyCheck('meteric_commitments');
+        Pg::enumCheck('meteric_commitments', 'term_interval', Interval::class);
+        Pg::enumCheck('meteric_commitments', 'state', CommitmentState::class);
+        Pg::check('meteric_commitments', 'meteric_commit_term_pos', 'term_count > 0');
 
-        Schema::create('billify_allowances', function (Blueprint $table) {
+        Schema::create('meteric_allowances', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('billify_subscription_items')->cascadeOnDelete();
-            $table->foreignUuid('dimension_id')->constrained('billify_meter_dimensions')->cascadeOnDelete();
+            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
+            $table->foreignUuid('dimension_id')->constrained('meteric_meter_dimensions')->cascadeOnDelete();
             $table->decimal('included_qty', 20, 6);
             $table->timestampTzRange('period');
             $table->decimal('consumed_qty', 20, 6)->default(0);
@@ -135,11 +135,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('billify_allowances');
-        Schema::dropIfExists('billify_commitments');
-        Schema::dropIfExists('billify_item_options');
-        Schema::dropIfExists('billify_addons');
-        Schema::dropIfExists('billify_subscription_items');
-        Schema::dropIfExists('billify_subscriptions');
+        Schema::dropIfExists('meteric_allowances');
+        Schema::dropIfExists('meteric_commitments');
+        Schema::dropIfExists('meteric_item_options');
+        Schema::dropIfExists('meteric_addons');
+        Schema::dropIfExists('meteric_subscription_items');
+        Schema::dropIfExists('meteric_subscriptions');
     }
 };

@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\PeriodCast;
-use Billify\Support\Period;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\PeriodCast;
+use Meteric\Support\Period;
 
 /**
  * @property float $included_qty
  * @property float $consumed_qty
  * @property ?Period $period
  */
-class Allowance extends BillifyModel
+class Allowance extends MetericModel
 {
-    protected $table = 'billify_allowances';
+    protected $table = 'meteric_allowances';
 
     public $timestamps = false;
 

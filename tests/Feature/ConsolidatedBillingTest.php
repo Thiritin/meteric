@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\ChargeState;
-use Billify\Enums\LineKind;
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\LineKind;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
 
 uses(RefreshDatabase::class);
 
@@ -33,7 +33,7 @@ it('bills payer + child accounts onto one consolidated invoice', function () {
     pending($childA, 1000, 'Account A VPS');
     pending($childB, 2000, 'Account B VPS');
 
-    $invoice = Billify::invoiceConsolidated($payer);
+    $invoice = Meteric::invoiceConsolidated($payer);
 
     expect($invoice)->not->toBeNull()
         ->and($invoice->account_id)->toBe($payer->id)
@@ -50,7 +50,7 @@ it('does not pull in unrelated accounts', function () {
     pending($payer, 500, 'Mine');
     pending($other, 999, 'Theirs');
 
-    $invoice = Billify::invoiceConsolidated($payer);
+    $invoice = Meteric::invoiceConsolidated($payer);
 
     expect($invoice->subtotal_minor)->toBe(500)
         ->and(Charge::where('account_id', $other->id)->pending()->count())->toBe(1);

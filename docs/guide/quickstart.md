@@ -1,13 +1,13 @@
 # Quickstart
 
 This walks the full path: a product with a price, a subscription, an invoice,
-and a recorded payment. Every call goes through the `Billify` facade.
+and a recorded payment. Every call goes through the `Meteric` facade.
 
 ## 1. Create a product and a price
 
 ```php
-use Billify\Models\{Product, Price};
-use Billify\Enums\{PricingModel, Interval, BillingMode, PricePurpose};
+use Meteric\Models\{Product, Price};
+use Meteric\Enums\{PricingModel, Interval, BillingMode, PricePurpose};
 
 $product = Product::create([
     'type' => 'vps',
@@ -34,9 +34,9 @@ Money is stored in minor units. `amount_minor => 1000` is €10.00.
 ## 2. Subscribe a customer
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
-$subscription = Billify::subscribe($user)
+$subscription = Meteric::subscribe($user)
     ->add($price)
     ->create();
 ```
@@ -49,7 +49,7 @@ the first charge covers the stub up to the anchor.
 ## 3. Issue the invoice
 
 ```php
-$invoice = Billify::invoicePending($subscription->account);
+$invoice = Meteric::invoicePending($subscription->account);
 ```
 
 This collects the account's pending charges in one currency and hands them to
@@ -59,7 +59,7 @@ the `Invoice` back. If the driver throws, the charges stay `pending`.
 To subscribe and invoice in one step, use checkout:
 
 ```php
-$result = Billify::subscribe($user)
+$result = Meteric::subscribe($user)
     ->add($price)
     ->checkout();
 
@@ -74,7 +74,7 @@ Your gateway tells you money arrived. Record it against the invoice.
 ```php
 use Brick\Money\Money;
 
-Billify::recordPayment($invoice, Money::of('10.00', 'EUR'), 'pi_123');
+Meteric::recordPayment($invoice, Money::of('10.00', 'EUR'), 'pi_123');
 ```
 
 The invoice moves to `partially_paid` or `paid` based on the running total.
@@ -85,16 +85,16 @@ Renewal accrues the next cycle for due items. Run it from your scheduler.
 
 ```php
 use Illuminate\Support\Facades\Schedule;
-use Billify\Models\Subscription;
-use Billify\Facades\Billify;
+use Meteric\Models\Subscription;
+use Meteric\Facades\Meteric;
 use Carbon\CarbonImmutable;
 
 Schedule::call(function () {
     $at = CarbonImmutable::now();
 
     Subscription::dueForRenewal($at)->each(function (Subscription $sub) use ($at) {
-        Billify::renew($sub, $at);          // accrue next cycle (idempotent)
-        Billify::invoicePending($sub->account); // bill what accrued
+        Meteric::renew($sub, $at);          // accrue next cycle (idempotent)
+        Meteric::invoicePending($sub->account); // bill what accrued
     });
 })->hourly();
 ```

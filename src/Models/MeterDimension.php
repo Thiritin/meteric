@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\Aggregation;
-use Billify\Support\MoneyMath;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Enums\Aggregation;
+use Meteric\Support\MoneyMath;
 
 /**
  * @property string $key
@@ -17,9 +17,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property float $included_qty
  * @property ?int $cap_minor
  */
-class MeterDimension extends BillifyModel
+class MeterDimension extends MetericModel
 {
-    protected $table = 'billify_meter_dimensions';
+    protected $table = 'meteric_meter_dimensions';
 
     public $timestamps = false;
 

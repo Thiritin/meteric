@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Billify\Support\MoneyMath;
 use Brick\Money\Money;
+use Meteric\Support\MoneyMath;
 
 it('rounds a sub-cent rate times quantity to currency minor', function () {
     // 1250.5 GB at €0.001/GB = €1.2505 -> €1.25

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,9 +15,9 @@ use Illuminate\Database\Eloquent\Builder;
  * @property string $scheme
  * @property ?string $number
  */
-class TaxRegistration extends BillifyModel
+class TaxRegistration extends MetericModel
 {
-    protected $table = 'billify_tax_registrations';
+    protected $table = 'meteric_tax_registrations';
 
     protected $guarded = [];
 

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\PeriodCast;
-use Billify\Support\Period;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\PeriodCast;
+use Meteric\Support\Period;
 
 /**
  * Ledger of fully-billed windows. The GiST EXCLUDE constraint on this table is
@@ -14,9 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property ?Period $covers
  */
-class BillingPeriod extends BillifyModel
+class BillingPeriod extends MetericModel
 {
-    protected $table = 'billify_billing_periods';
+    protected $table = 'meteric_billing_periods';
 
     public $timestamps = false;
 

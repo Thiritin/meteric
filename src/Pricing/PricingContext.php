@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Billify\Pricing;
+namespace Meteric\Pricing;
 
-use Billify\Support\Period;
+use Meteric\Support\Period;
 
 /** Ambient inputs a pricing strategy may need beyond the price + quantity. */
 final class PricingContext

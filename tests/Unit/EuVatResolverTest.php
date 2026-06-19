@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Billify\Tax\EuVatResolver;
-use Billify\Tax\TaxContext;
 use Brick\Money\Money;
+use Meteric\Tax\EuVatResolver;
+use Meteric\Tax\TaxContext;
 
 it('applies the destination rate for B2C in an EU country', function () {
     $resolver = new EuVatResolver(merchantCountry: 'DE');

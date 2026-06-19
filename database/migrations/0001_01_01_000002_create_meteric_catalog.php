@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\Aggregation;
-use Billify\Enums\BillingMode;
-use Billify\Enums\PricePurpose;
-use Billify\Enums\PricingModel;
-use Billify\Support\Pg;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Meteric\Enums\Aggregation;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\PricePurpose;
+use Meteric\Enums\PricingModel;
+use Meteric\Support\Pg;
 use Tpetry\PostgresqlEnhanced\Schema\Blueprint;
 use Tpetry\PostgresqlEnhanced\Support\Facades\Schema;
 
@@ -16,7 +16,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('billify_billing_accounts', function (Blueprint $table) {
+        Schema::create('meteric_billing_accounts', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->uuid('parent_id')->nullable();
             $table->string('owner_type');
@@ -31,12 +31,12 @@ return new class extends Migration
             $table->index('parent_id');
         });
         // Self-referencing FK added after the table (and its PK) exists.
-        Schema::table('billify_billing_accounts', function (Blueprint $table) {
-            $table->foreign('parent_id')->references('id')->on('billify_billing_accounts')->restrictOnDelete();
+        Schema::table('meteric_billing_accounts', function (Blueprint $table) {
+            $table->foreign('parent_id')->references('id')->on('meteric_billing_accounts')->restrictOnDelete();
         });
-        Pg::currencyCheck('billify_billing_accounts');
+        Pg::currencyCheck('meteric_billing_accounts');
 
-        Schema::create('billify_products', function (Blueprint $table) {
+        Schema::create('meteric_products', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->string('billable_type')->nullable();
             $table->string('billable_id')->nullable();
@@ -53,11 +53,11 @@ return new class extends Migration
             $table->index(['billable_type', 'billable_id']);
             $table->index('type')->where('active');
         });
-        Pg::enumCheck('billify_products', 'pricing_model', PricingModel::class);
+        Pg::enumCheck('meteric_products', 'pricing_model', PricingModel::class);
 
-        Schema::create('billify_prices', function (Blueprint $table) {
+        Schema::create('meteric_prices', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('product_id')->constrained('billify_products')->cascadeOnDelete();
+            $table->foreignUuid('product_id')->constrained('meteric_products')->cascadeOnDelete();
             $table->char('currency', 3);
             $table->bigInteger('amount_minor')->default(0);          // flat/base amount (integer minor)
             $table->decimal('unit_rate', 20, 8)->nullable();         // per-unit/usage rate (major units, sub-cent)
@@ -79,16 +79,16 @@ return new class extends Migration
             $table->index(['product_id', 'currency', 'purpose'])->where('valid_to IS NULL');
             $table->index('tiers')->algorithm('gin');
         });
-        Pg::currencyCheck('billify_prices');
-        Pg::enumCheck('billify_prices', 'purpose', PricePurpose::class);
-        Pg::enumCheck('billify_prices', 'pricing_model', PricingModel::class);
-        Pg::enumCheck('billify_prices', 'billing_mode', BillingMode::class);
-        Pg::check('billify_prices', 'billify_prices_amount_nonneg', 'amount_minor >= 0');
-        Pg::check('billify_prices', 'billify_prices_rate_nonneg', 'unit_rate IS NULL OR unit_rate >= 0');
+        Pg::currencyCheck('meteric_prices');
+        Pg::enumCheck('meteric_prices', 'purpose', PricePurpose::class);
+        Pg::enumCheck('meteric_prices', 'pricing_model', PricingModel::class);
+        Pg::enumCheck('meteric_prices', 'billing_mode', BillingMode::class);
+        Pg::check('meteric_prices', 'meteric_prices_amount_nonneg', 'amount_minor >= 0');
+        Pg::check('meteric_prices', 'meteric_prices_rate_nonneg', 'unit_rate IS NULL OR unit_rate >= 0');
 
-        Schema::create('billify_meter_dimensions', function (Blueprint $table) {
+        Schema::create('meteric_meter_dimensions', function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('product_id')->constrained('billify_products')->cascadeOnDelete();
+            $table->foreignUuid('product_id')->constrained('meteric_products')->cascadeOnDelete();
             $table->string('key');
             $table->string('unit');
             $table->string('aggregation')->default(Aggregation::Sum->value);
@@ -101,16 +101,16 @@ return new class extends Migration
 
             $table->unique(['product_id', 'key']);
         });
-        Pg::currencyCheck('billify_meter_dimensions');
-        Pg::enumCheck('billify_meter_dimensions', 'aggregation', Aggregation::class);
-        Pg::check('billify_meter_dimensions', 'billify_md_rate_nonneg', 'rate >= 0');
+        Pg::currencyCheck('meteric_meter_dimensions');
+        Pg::enumCheck('meteric_meter_dimensions', 'aggregation', Aggregation::class);
+        Pg::check('meteric_meter_dimensions', 'meteric_md_rate_nonneg', 'rate >= 0');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('billify_meter_dimensions');
-        Schema::dropIfExists('billify_prices');
-        Schema::dropIfExists('billify_products');
-        Schema::dropIfExists('billify_billing_accounts');
+        Schema::dropIfExists('meteric_meter_dimensions');
+        Schema::dropIfExists('meteric_prices');
+        Schema::dropIfExists('meteric_products');
+        Schema::dropIfExists('meteric_billing_accounts');
     }
 };

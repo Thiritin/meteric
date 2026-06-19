@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Support;
+namespace Meteric\Support;
 
-use Billify\Enums\Interval;
 use Carbon\CarbonImmutable;
+use Meteric\Enums\Interval;
 
 /**
  * Stripe-style dynamic recurrence: every {count} {interval}.

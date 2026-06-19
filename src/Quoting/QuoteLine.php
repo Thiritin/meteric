@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Billify\Quoting;
+namespace Meteric\Quoting;
 
-use Billify\Enums\LineKind;
-use Billify\Support\Period;
 use Brick\Money\Money;
+use Meteric\Enums\LineKind;
+use Meteric\Support\Period;
 
 /** One line of a quote. Serializes to a stable shape for checkout frontends. */
 final class QuoteLine

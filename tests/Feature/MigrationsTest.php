@@ -12,13 +12,13 @@ uses(RefreshDatabase::class);
 
 it('runs all migrations and creates the core tables', function () {
     foreach ([
-        'billify_billing_accounts', 'billify_products', 'billify_prices',
-        'billify_meter_dimensions', 'billify_subscriptions', 'billify_subscription_items',
-        'billify_addons', 'billify_item_options', 'billify_commitments', 'billify_allowances',
-        'billify_usage_records', 'billify_billing_periods', 'billify_charges',
-        'billify_invoices', 'billify_invoice_lines', 'billify_credit_notes',
-        'billify_payments', 'billify_payment_allocations', 'billify_coupons',
-        'billify_discounts', 'billify_ledger',
+        'meteric_billing_accounts', 'meteric_products', 'meteric_prices',
+        'meteric_meter_dimensions', 'meteric_subscriptions', 'meteric_subscription_items',
+        'meteric_addons', 'meteric_item_options', 'meteric_commitments', 'meteric_allowances',
+        'meteric_usage_records', 'meteric_billing_periods', 'meteric_charges',
+        'meteric_invoices', 'meteric_invoice_lines', 'meteric_credit_notes',
+        'meteric_payments', 'meteric_payment_allocations', 'meteric_coupons',
+        'meteric_discounts', 'meteric_ledger',
     ] as $table) {
         expect(Schema::hasTable($table))->toBeTrue("missing table {$table}");
     }
@@ -27,7 +27,7 @@ it('runs all migrations and creates the core tables', function () {
 it('creates tstzrange columns as real ranges', function () {
     $type = DB::selectOne("
         SELECT data_type FROM information_schema.columns
-        WHERE table_name = 'billify_subscriptions' AND column_name = 'current_period'
+        WHERE table_name = 'meteric_subscriptions' AND column_name = 'current_period'
     ");
 
     expect($type->data_type)->toBe('tstzrange');
@@ -36,7 +36,7 @@ it('creates tstzrange columns as real ranges', function () {
 it('enforces enum values via check constraint', function () {
     $accountId = insertAccount();
 
-    DB::table('billify_products')->insert([
+    DB::table('meteric_products')->insert([
         'id' => DB::raw('gen_random_uuid()'),
         'type' => 'vps', 'slug' => 'bad-'.uniqid(), 'name' => 'Bad',
         'pricing_model' => 'not_a_real_model', // violates CHECK
@@ -44,7 +44,7 @@ it('enforces enum values via check constraint', function () {
 })->throws(QueryException::class);
 
 it('rejects an invalid currency format', function () {
-    DB::table('billify_billing_accounts')->insert([
+    DB::table('meteric_billing_accounts')->insert([
         'id' => DB::raw('gen_random_uuid()'),
         'owner_type' => 'user', 'owner_id' => '1',
         'currency' => 'eur', // lowercase violates ^[A-Z]{3}$
@@ -54,7 +54,7 @@ it('rejects an invalid currency format', function () {
 function insertAccount(): string
 {
     $id = (string) Str::uuid();
-    DB::table('billify_billing_accounts')->insert([
+    DB::table('meteric_billing_accounts')->insert([
         'id' => $id, 'owner_type' => 'user', 'owner_id' => '1', 'currency' => 'EUR',
     ]);
 

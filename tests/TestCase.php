@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Billify\Tests;
+namespace Meteric\Tests;
 
-use Billify\BillifyServiceProvider;
+use Meteric\MetericServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Tpetry\PostgresqlEnhanced\PostgresqlEnhancedServiceProvider;
 
@@ -14,7 +14,7 @@ abstract class TestCase extends Orchestra
     {
         return [
             PostgresqlEnhancedServiceProvider::class,
-            BillifyServiceProvider::class,
+            MetericServiceProvider::class,
         ];
     }
 
@@ -25,7 +25,7 @@ abstract class TestCase extends Orchestra
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '55432'),
-            'database' => env('DB_DATABASE', 'billify_test'),
+            'database' => env('DB_DATABASE', 'meteric_test'),
             'username' => env('DB_USERNAME', 'postgres'),
             'password' => env('DB_PASSWORD', 'secret'),
             'charset' => 'utf8',

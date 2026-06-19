@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Enums;
+namespace Meteric\Enums;
 
 enum LineKind: string
 {

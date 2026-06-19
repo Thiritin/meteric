@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Billify\Models\Coupon;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Meteric\Models\Coupon;
 
 it('computes a percentage discount', function () {
     $coupon = new Coupon(['type' => 'percent', 'value' => 50]);

@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-use Billify\Anchoring\PeriodPlanner;
-use Billify\Charges\ChargeAccruer;
-use Billify\Enums\AnchorMode;
-use Billify\Enums\ChargeState;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Enums\SubscriptionState;
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\BillingPeriod;
-use Billify\Models\Charge;
-use Billify\Models\Price;
-use Billify\Models\Product;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Charges\ChargeAccruer;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\SubscriptionState;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\BillingPeriod;
+use Meteric\Models\Charge;
+use Meteric\Models\Price;
+use Meteric\Models\Product;
 
 uses(RefreshDatabase::class);
 
@@ -35,7 +35,7 @@ function account(): BillingAccount
 }
 
 it('creates a subscription and accrues the first cycle (prorate_plus_full)', function () {
-    $sub = Billify::subscribe()
+    $sub = Meteric::subscribe()
         ->account(account())
         ->anchor(AnchorMode::FixedDay, 1)
         ->firstPeriod(FirstPeriodPolicy::ProratePlusFull)
@@ -59,12 +59,12 @@ it('creates a subscription and accrues the first cycle (prorate_plus_full)', fun
 
 it('bills the accrued charges into an invoice', function () {
     $acc = account();
-    Billify::subscribe()->account($acc)
+    Meteric::subscribe()->account($acc)
         ->at(CarbonImmutable::parse('2026-06-01T00:00:00Z'))
         ->add(vpsPrice(1000), 1)
         ->create();
 
-    $invoice = Billify::invoicePending($acc);
+    $invoice = Meteric::invoicePending($acc);
 
     expect($invoice)->not->toBeNull()
         ->and($invoice->subtotal_minor)->toBe(1000);
@@ -72,7 +72,7 @@ it('bills the accrued charges into an invoice', function () {
 
 it('defers billing during a trial', function () {
     $acc = account();
-    $sub = Billify::subscribe()->account($acc)
+    $sub = Meteric::subscribe()->account($acc)
         ->trialDays(14)
         ->at(CarbonImmutable::parse('2026-06-01T00:00:00Z'))
         ->add(vpsPrice(1000), 1)
@@ -85,7 +85,7 @@ it('defers billing during a trial', function () {
 it('is idempotent — re-accruing the same window bills nothing extra', function () {
     $acc = account();
     $price = vpsPrice(1000);
-    $sub = Billify::subscribe()->account($acc)
+    $sub = Meteric::subscribe()->account($acc)
         ->at(CarbonImmutable::parse('2026-06-01T00:00:00Z'))
         ->add($price, 1)
         ->create();

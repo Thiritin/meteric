@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Contracts;
+namespace Meteric\Contracts;
 
 use Carbon\CarbonImmutable;
 

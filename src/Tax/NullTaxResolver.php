@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Tax;
+namespace Meteric\Tax;
 
-use Billify\Contracts\TaxResolver;
 use Brick\Money\Money;
+use Meteric\Contracts\TaxResolver;
 
 final class NullTaxResolver implements TaxResolver
 {

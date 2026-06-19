@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\MeterDimension;
-use Billify\Models\Price;
-use Billify\Models\Product;
-use Billify\Models\Subscription;
-use Billify\Models\SubscriptionItem;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\MeterDimension;
+use Meteric\Models\Price;
+use Meteric\Models\Product;
+use Meteric\Models\Subscription;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Period;
 
 uses(RefreshDatabase::class);
 
@@ -46,10 +46,10 @@ it('bills each metered dimension as its own line (AWS-style)', function () {
         ['key' => 'traffic_gb', 'rate' => '0.500000'],
     ]);
 
-    Billify::recordUsage($item, 'cpu_hour', 100, CarbonImmutable::parse('2026-06-10Z'));   // €1.00
-    Billify::recordUsage($item, 'traffic_gb', 10, CarbonImmutable::parse('2026-06-12Z'));  // €5.00
+    Meteric::recordUsage($item, 'cpu_hour', 100, CarbonImmutable::parse('2026-06-10Z'));   // €1.00
+    Meteric::recordUsage($item, 'traffic_gb', 10, CarbonImmutable::parse('2026-06-12Z'));  // €5.00
 
-    $charges = Billify::rollupUsage($item, dimWindow());
+    $charges = Meteric::rollupUsage($item, dimWindow());
 
     expect($charges)->toHaveCount(2)
         ->and(collect($charges)->sum('amount_minor'))->toBe(100 + 500);
@@ -60,9 +60,9 @@ it('caps a dimension at its monthly cap (Hetzner-style)', function () {
         ['key' => 'traffic_gb', 'rate' => '0.500000', 'cap_minor' => 1000], // cap €10
     ]);
 
-    Billify::recordUsage($item, 'traffic_gb', 100, CarbonImmutable::parse('2026-06-10Z')); // 100×0.5 = €50
+    Meteric::recordUsage($item, 'traffic_gb', 100, CarbonImmutable::parse('2026-06-10Z')); // 100×0.5 = €50
 
-    $charges = Billify::rollupUsage($item, dimWindow());
+    $charges = Meteric::rollupUsage($item, dimWindow());
 
     expect($charges[0]->amount_minor)->toBe(1000); // capped to €10
 });

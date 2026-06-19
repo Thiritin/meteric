@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\OptionType;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Enums\OptionType;
 
 /**
  * @property string $key
@@ -13,9 +13,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $value
  * @property float $quantity
  */
-class ItemOption extends BillifyModel
+class ItemOption extends MetericModel
 {
-    protected $table = 'billify_item_options';
+    protected $table = 'meteric_item_options';
 
     protected $guarded = [];
 

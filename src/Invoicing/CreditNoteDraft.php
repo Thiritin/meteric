@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Invoicing;
+namespace Meteric\Invoicing;
 
 use Brick\Money\Money;
 

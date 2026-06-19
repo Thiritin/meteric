@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\CreditState;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Enums\CreditState;
 
 /**
  * @property CreditState $state
@@ -14,9 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $tax_minor
  * @property string $currency
  */
-class CreditNote extends BillifyModel
+class CreditNote extends MetericModel
 {
-    protected $table = 'billify_credit_notes';
+    protected $table = 'meteric_credit_notes';
 
     public $timestamps = false;
 

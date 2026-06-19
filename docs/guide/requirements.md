@@ -4,7 +4,7 @@
 - Laravel 12
 - PostgreSQL 13+
 
-Billify is PostgreSQL-only by design. It uses `tstzrange`, `btree_gist`,
+Meteric is PostgreSQL-only by design. It uses `tstzrange`, `btree_gist`,
 `pgcrypto`, and a GiST `EXCLUDE` constraint to guarantee no service window is
 billed twice. There is no MySQL or SQLite fallback for those guarantees, so the
 test suite and migrations target Postgres.

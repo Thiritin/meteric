@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-use Billify\Models\BillingAccount;
-use Billify\Models\BillingPeriod;
-use Billify\Models\Price;
-use Billify\Models\Product;
-use Billify\Models\Subscription;
-use Billify\Models\SubscriptionItem;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\BillingPeriod;
+use Meteric\Models\Price;
+use Meteric\Models\Product;
+use Meteric\Models\Subscription;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Period;
 
 uses(RefreshDatabase::class);
 

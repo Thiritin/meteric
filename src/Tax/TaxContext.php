@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Tax;
+namespace Meteric\Tax;
 
 use DateTimeInterface;
 

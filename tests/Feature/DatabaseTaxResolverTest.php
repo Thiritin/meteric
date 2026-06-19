@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Billify\Models\TaxRate;
-use Billify\Models\TaxRegistration;
-use Billify\Tax\DatabaseTaxResolver;
-use Billify\Tax\TaxContext;
 use Brick\Money\Money;
 use Ibericode\Vat\Countries;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Models\TaxRate;
+use Meteric\Models\TaxRegistration;
+use Meteric\Tax\DatabaseTaxResolver;
+use Meteric\Tax\TaxContext;
 
 uses(RefreshDatabase::class);
 

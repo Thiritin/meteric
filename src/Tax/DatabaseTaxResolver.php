@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Billify\Tax;
+namespace Meteric\Tax;
 
-use Billify\Contracts\TaxResolver;
-use Billify\Models\TaxRate;
-use Billify\Models\TaxRegistration;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Ibericode\Vat\Countries;
 use Ibericode\Vat\Validator;
+use Meteric\Contracts\TaxResolver;
+use Meteric\Models\TaxRate;
+use Meteric\Models\TaxRegistration;
 use Throwable;
 
 /**
  * Multi-jurisdiction, configurable tax resolver — the default.
  *
  * Tax is charged only where the merchant is **registered** (a direct
- * `billify_tax_registrations` row, or an `eu_oss` row covering the EU). The rate
- * comes from the editable `billify_tax_rates` table (date-versioned, per product
- * category). EU rows are kept fresh by `billify:vat-sync`; non-EU jurisdictions
+ * `meteric_tax_registrations` row, or an `eu_oss` row covering the EU). The rate
+ * comes from the editable `meteric_tax_rates` table (date-versioned, per product
+ * category). EU rows are kept fresh by `meteric:vat-sync`; non-EU jurisdictions
  * (Switzerland, UK, …) are added manually. EU cross-border B2B reverse charge is
  * confirmed via VIES when a validator is available.
  */

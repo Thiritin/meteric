@@ -1,10 +1,10 @@
-# Billify facade
+# Meteric facade
 
-`Billify\Facades\Billify` is the entry point. It resolves `Billify\Billify` from
+`Meteric\Facades\Meteric` is the entry point. It resolves `Meteric\Meteric` from
 the container. Every method below is a static call on the facade.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 ```
 
 ## Subscriptions

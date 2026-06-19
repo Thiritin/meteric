@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Billify\Casts;
+namespace Meteric\Casts;
 
-use Billify\Support\Period;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Model;
+use Meteric\Support\Period;
 
 /**
  * Casts a Postgres tstzrange column to/from a Period value object.
@@ -35,7 +35,7 @@ final class PeriodCast implements CastsAttributes
         }
 
         if (! $value instanceof Period) {
-            throw new \InvalidArgumentException("{$key} must be a Billify\\Support\\Period instance.");
+            throw new \InvalidArgumentException("{$key} must be a Meteric\\Support\\Period instance.");
         }
 
         return [$key => $value->toRange()];

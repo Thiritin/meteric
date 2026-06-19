@@ -1,6 +1,6 @@
-# Billify
+# Meteric
 
-[![tests](https://github.com/Thiritin/billify/actions/workflows/tests.yml/badge.svg)](https://github.com/Thiritin/billify/actions/workflows/tests.yml)
+[![tests](https://github.com/Thiritin/meteric/actions/workflows/tests.yml/badge.svg)](https://github.com/Thiritin/meteric/actions/workflows/tests.yml)
 
 Dynamic billing engine for hosting systems — subscriptions, proration, usage
 metering, addons, and the charge-vs-invoice safety model, behind a well-tested,
@@ -15,7 +15,7 @@ running VPS, domains, webhosting, cloud, gameservers and IP projects.
 
 ## Why
 
-Most hosting billing tangles money math into the app. Billify isolates it:
+Most hosting billing tangles money math into the app. Meteric isolates it:
 
 - **Charge ≠ invoice.** Charges accrue as the source of truth; an invoice is a
   document that bills them. If your accounting system (e.g. Lexware Office) is
@@ -35,8 +35,8 @@ Most hosting billing tangles money math into the app. Billify isolates it:
 ## Install
 
 ```bash
-composer require pawhost/billify
-php artisan vendor:publish --tag=billify-config
+composer require thiritin/meteric
+php artisan vendor:publish --tag=meteric-config
 php artisan migrate
 ```
 
@@ -54,25 +54,25 @@ php artisan migrate
 ## The invoicing guarantee
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 use Brick\Money\Money;
 
 // Collect an account's pending charges and issue them via the bound driver.
 // If the driver throws (e.g. accounting system down), charges stay `pending`.
-$invoice = Billify::invoicePending($account);
+$invoice = Meteric::invoicePending($account);
 
 // Inbound payment from your gateway drives invoice state.
-Billify::recordPayment($invoice, Money::of('49.98', 'EUR'), 'pi_123');
+Meteric::recordPayment($invoice, Money::of('49.98', 'EUR'), 'pi_123');
 ```
 
 ## Custom drivers
 
 ```php
-// config/billify.php
+// config/meteric.php
 'invoice' => [
     'driver' => 'lexoffice',
     'drivers' => [
-        'database'  => \Billify\Invoicing\Drivers\DatabaseInvoiceDriver::class,
+        'database'  => \Meteric\Invoicing\Drivers\DatabaseInvoiceDriver::class,
         'lexoffice' => \App\Billing\LexofficeInvoiceDriver::class,
     ],
 ],
@@ -83,24 +83,24 @@ Billify::recordPayment($invoice, Money::of('49.98', 'EUR'), 'pi_123');
 ],
 ```
 
-A driver implements `Billify\Contracts\InvoiceDriver`. Throwing from `issue()`
+A driver implements `Meteric\Contracts\InvoiceDriver`. Throwing from `issue()`
 is the failure boundary that preserves pending charges.
 
 ### VAT — configurable, multi-jurisdiction
 
 The default `database` driver is a configurable engine over two editable tables:
 
-- **`billify_tax_registrations`** — where you're VAT-registered. No registration
+- **`meteric_tax_registrations`** — where you're VAT-registered. No registration
   in the customer's country ⇒ no tax charged (out of scope). An `eu_oss` row
   covers all EU destinations.
-- **`billify_tax_rates`** — date-versioned rates per country + product category.
-  EU rows are refreshed from ibericode by `php artisan billify:vat-sync`; non-EU
+- **`meteric_tax_rates`** — date-versioned rates per country + product category.
+  EU rows are refreshed from ibericode by `php artisan meteric:vat-sync`; non-EU
   jurisdictions are added manually.
 
 Registering for **Swiss VAT**:
 
 ```php
-use Billify\Models\{TaxRegistration, TaxRate};
+use Meteric\Models\{TaxRegistration, TaxRate};
 
 TaxRegistration::create(['country' => 'CH', 'scheme' => 'ch_vat', 'number' => 'CHE-123.456.789 MWST']);
 TaxRate::create(['country' => 'CH', 'category' => 'standard', 'rate' => '0.081000', 'effective_from' => '2024-01-01']);
@@ -114,7 +114,7 @@ cross-border B2B reverse charge is confirmed via **VIES**.
 Keep the EU rows current automatically:
 
 ```bash
-php artisan billify:vat-sync   # ibericode → billify_tax_rates (manual rows untouched)
+php artisan meteric:vat-sync   # ibericode → meteric_tax_rates (manual rows untouched)
 ```
 
 Run it on a schedule so EU rates stay fresh (in your app's `routes/console.php`
@@ -123,7 +123,7 @@ or scheduler):
 ```php
 use Illuminate\Support\Facades\Schedule;
 
-Schedule::command('billify:vat-sync')->weekly();
+Schedule::command('meteric:vat-sync')->weekly();
 ```
 
 Other drivers: `ibericode` (live EU-only + VIES), `eu_vat` (static offline,
@@ -135,12 +135,12 @@ correct is ultimately the host's responsibility; the engine makes it manageable.
 `Prorator` computes second-precision proration for upgrades/downgrades and
 mid-cycle changes.
 
-`Billify::quote()` renders a **due-now + recurring breakdown for checkout pages**
+`Meteric::quote()` renders a **due-now + recurring breakdown for checkout pages**
 without persisting anything — same planner/prorator/tax stack as real billing, so
 the quote always matches the eventual invoice:
 
 ```php
-$quote = Billify::quote()
+$quote = Meteric::quote()
     ->anchor(AnchorMode::FixedDay, 1)            // align to the 1st
     ->firstPeriod(FirstPeriodPolicy::ProratePlusFull) // stub + first full month
     ->tax(new TaxContext(countryCode: 'DE'))
@@ -170,7 +170,7 @@ vendor/bin/pint      # format
 - [x] Proration engine + charge/invoice/payment flow
 - [x] Test suite — 34 tests green (unit calc core + feature against real Postgres:
       migrations, GiST no-double-bill guard, immutability trigger, invoicing flow)
-- [x] Configurable multi-jurisdiction tax (registrations + rate table, Swiss-ready) + `billify:vat-sync`
+- [x] Configurable multi-jurisdiction tax (registrations + rate table, Swiss-ready) + `meteric:vat-sync`
 - [x] Anchoring / first-period planner (signup, fixed-day, prorate / prorate+full / free-until-anchor)
 - [x] `quote()` builder — due-now + recurring breakdown as JSON for checkout
 - [x] `subscribe()` — persists subscription + items, accrues first cycle (trial defer, idempotent guard)

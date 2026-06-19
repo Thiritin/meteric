@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Subscriptions;
+namespace Meteric\Subscriptions;
 
-use Billify\Models\Invoice;
-use Billify\Models\Subscription;
+use Meteric\Models\Invoice;
+use Meteric\Models\Subscription;
 
 /** Result of a checkout: the created subscription + the invoice billed now. */
 final class Checkout

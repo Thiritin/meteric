@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Support;
+namespace Meteric\Support;
 
-use Billify\Contracts\Clock;
 use Carbon\CarbonImmutable;
+use Meteric\Contracts\Clock;
 
 final class SystemClock implements Clock
 {

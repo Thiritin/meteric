@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Billify\Enums;
+namespace Meteric\Enums;
 
 /**
  * What happens to the unused value when a prepaid plan is downgraded.

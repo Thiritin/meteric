@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Billify\Enums\Interval;
-use Billify\Support\RecurrenceRule;
 use Carbon\CarbonImmutable;
+use Meteric\Enums\Interval;
+use Meteric\Support\RecurrenceRule;
 
 it('advances by dynamic intervals', function (Interval $interval, int $count, string $start, string $expected) {
     $rule = new RecurrenceRule($interval, $count);

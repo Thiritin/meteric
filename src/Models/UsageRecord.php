@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\PeriodCast;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\PeriodCast;
 
 /**
  * @property float $quantity
  * @property CarbonImmutable $occurred_at
  */
-class UsageRecord extends BillifyModel
+class UsageRecord extends MetericModel
 {
-    protected $table = 'billify_usage_records';
+    protected $table = 'meteric_usage_records';
 
     public $timestamps = false;
 

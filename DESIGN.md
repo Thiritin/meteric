@@ -1,4 +1,4 @@
-# Billify — Design Document
+# Meteric — Design Document
 
 Dynamic billing engine for hosting systems. Inspired by Stripe Billing + WHMCS.
 
@@ -8,7 +8,7 @@ Dynamic billing engine for hosting systems. Inspired by Stripe Billing + WHMCS.
 
 ## 1. Purpose & Scope
 
-Billify is a **calculation + invoicing engine** extracted from the host
+Meteric is a **calculation + invoicing engine** extracted from the host
 application so all money math lives behind one well-tested boundary.
 
 ### In scope
@@ -25,17 +25,17 @@ application so all money math lives behind one well-tested boundary.
 - Own database tables + Eloquent models + migrations.
 
 ### Out of scope (delegated to host app)
-- **Payment gateway I/O.** Billify is gateway-agnostic. It emits a payable
+- **Payment gateway I/O.** Meteric is gateway-agnostic. It emits a payable
   invoice/charge intent and consumes payment results via events. Stripe/PayPal
   wiring lives in the app.
-- **External invoice/accounting system I/O.** Billify defines an `InvoiceDriver`
+- **External invoice/accounting system I/O.** Meteric defines an `InvoiceDriver`
   contract and ships a local DB driver. PawHost binds a **Lexware Office
   (lexoffice)** driver. Network/auth/retry to the external system lives in the
   driver, not the core.
-- **Tax law upkeep.** Billify ships an EU VAT driver (rates, reverse-charge,
+- **Tax law upkeep.** Meteric ships an EU VAT driver (rates, reverse-charge,
   B2B/B2C). Keeping rate tables current / MOSS reporting / non-EU regimes are the
   app's or a custom driver's job.
-- **Dunning UI, emails, PDF rendering.** Billify exposes data + events; app
+- **Dunning UI, emails, PDF rendering.** Meteric exposes data + events; app
   decides presentation and retry policy.
 
 ### Design tenets
@@ -82,7 +82,7 @@ application so all money math lives behind one well-tested boundary.
 | `BillingAccount` | Optional payer node. Subscriptions attach to an account; accounts can nest under a payer for **consolidated invoicing** (AWS org / reseller / agency). |
 | `Discount` / `Coupon` | Percentage or fixed reduction, scoped + time-bounded. |
 | `CreditNote` | Negative document correcting an issued invoice. |
-| `Customer` (morph ref) | Billify references the app's billable party polymorphically; does not own identity. |
+| `Customer` (morph ref) | Meteric references the app's billable party polymorphically; does not own identity. |
 
 ### Morphable strategy
 
@@ -90,14 +90,14 @@ Two morph axes:
 
 1. **Product → concrete plan.** `products.billable_type/billable_id` morphs to
    the host app's `VpsPlan`, `Tld`, `WebHostingPlan`, etc. Lets each product
-   type carry its own attributes/provisioning metadata without Billify knowing
+   type carry its own attributes/provisioning metadata without Meteric knowing
    them.
 
 2. **SubscriptionItem → provisioned resource.** `subscription_items.resource_type/
    resource_id` morphs to the running thing being billed (a specific VPS, a
    registered domain). Enables usage attribution and lifecycle linkage.
 
-A product type opts into Billify by implementing the `Billable` contract:
+A product type opts into Meteric by implementing the `Billable` contract:
 
 ```php
 interface Billable
@@ -156,7 +156,7 @@ pending  ───────────────────►  invoiced 
 - `settled` set by inbound payment events. `void` for corrections (paired with a
   credit note if already invoiced).
 
-This makes Billify the durable ledger of truth; the external accounting system
+This makes Meteric the durable ledger of truth; the external accounting system
 is a downstream sink that may lag or fail without data loss.
 
 ---
@@ -174,7 +174,7 @@ is a downstream sink that may lag or fail without data loss.
 | **OneOff** | Domain registration, setup fee, SSL purchase | single non-recurring line |
 
 **Hourly / openstack-style cloud:** the resource (a VM, a gameserver instance)
-emits start/stop or sampled `UsageRecord`s. At cycle close Billify aggregates
+emits start/stop or sampled `UsageRecord`s. At cycle close Meteric aggregates
 active time → hourly charge. Same engine bills *different* resources (a cloud VM
 vs a gameserver) by attaching distinct `MeterDefinition`s — the math is shared,
 the meter source differs. Caps/min-charge per resource configurable.
@@ -229,7 +229,7 @@ Set per `Price`, so components of one subscription can differ.
   - *CPU hours — usage 2026-05-01 → 05-31 (in arrears)*
   These deliberately span **different windows** on the same document.
 - **Bill-now / checkout:** an order can demand an *immediate* invoice rather than
-  waiting for the next invoicing run. `Billify::checkout()` accrues the order's
+  waiting for the next invoicing run. `Meteric::checkout()` accrues the order's
   charges and invoices them at once via the bound driver. Prepaid items charge
   their first period immediately; arrears items accrue €0 now and bill at first
   period end.
@@ -337,7 +337,7 @@ Direction is detected by price; the two directions behave differently:
     lower price (contracts). Stored as a `pending_change`, applied at renewal.
   - `discard` — switch to the lower plan **now**; the unused value of the higher
     plan is **forfeited** (prepaid). No money moves.
-- **Provisioning-agnostic.** Billify never resizes the resource. The host app
+- **Provisioning-agnostic.** Meteric never resizes the resource. The host app
   performs the stop/resize/start and calls `changePlan(..., at: $whenDone)`; the
   reported instant is what bills. For `defer`, the app resizes at the boundary.
 - **Hourly / metered** plans: a change is just a **rate change going forward** —
@@ -353,7 +353,7 @@ show live prices *before* anything is persisted. Same calculators as real billin
 ⇒ the quote always matches the eventual invoice.
 
 ```php
-$quote = Billify::quote($customer)          // or ::quote() anonymous, for pricing pages
+$quote = Meteric::quote($customer)          // or ::quote() anonymous, for pricing pages
     ->anchor(Anchor::fixedDay(1))
     ->firstPeriod(FirstPeriodPolicy::ProratePlusFull)
     ->add($vpsPlan)
@@ -390,7 +390,7 @@ $quote = Billify::quote($customer)          // or ::quote() anonymous, for prici
   due-now + recurring breakdown.
 - Usage/arrears components are shown as `estimated: true` (no actual usage yet)
   with the rate, so checkout can say "+ €0.05/GB traffic, billed monthly."
-- `Billify::quoteChange($item, ...)` previews an upgrade/downgrade proration for
+- `Meteric::quoteChange($item, ...)` previews an upgrade/downgrade proration for
   an existing customer ("you'll be charged €X now to upgrade").
 - Pure function of inputs + clock ⇒ unit-testable, cacheable, safe to call from
   a public pricing page.
@@ -591,12 +591,12 @@ interface TaxResolver {
 Default is **`DatabaseTaxResolver`** — a configurable, multi-jurisdiction engine
 backed by two editable tables:
 
-- **`billify_tax_registrations`** — where the merchant is VAT-registered. Presence
+- **`meteric_tax_registrations`** — where the merchant is VAT-registered. Presence
   of a registration (direct, or an `eu_oss` row covering all EU destinations) is
   what *authorises* charging tax. No registration ⇒ out of scope (0%).
-- **`billify_tax_rates`** — the rates themselves, date-versioned, per product
+- **`meteric_tax_rates`** — the rates themselves, date-versioned, per product
   category (`standard`/`reduced`/`lodging`/…). EU rows kept fresh by
-  `php artisan billify:vat-sync` (pulls from ibericode, `source='ibericode'`);
+  `php artisan meteric:vat-sync` (pulls from ibericode, `source='ibericode'`);
   non-EU jurisdictions (**Switzerland**, UK, Norway, …) added as `manual` rows.
 
 So registering for Swiss VAT = add a `CH` registration + CH rate rows (8.1% /
@@ -624,7 +624,7 @@ interface InvoiceDriver {
 }
 ```
 
-- Ships **`DatabaseInvoiceDriver`** (writes Billify's own invoice tables — the
+- Ships **`DatabaseInvoiceDriver`** (writes Meteric's own invoice tables — the
   default, always-available sink).
 - PawHost binds **`LexofficeInvoiceDriver`** (maps draft → lexoffice API,
   handles auth/retry/rate-limit, returns the lexoffice voucher id).
@@ -661,7 +661,7 @@ Emitted for app to react (provisioning, email, gateway):
 `InvoiceDrafted/Issued/Paid/PartiallyPaid/Voided/PaymentFailed`,
 `CreditNoteIssued`, `UsageRecorded`, `ProrationApplied`, `RenewalDue`.
 
-Payment is **inbound** too: app calls `Billify::recordPayment($invoice, $amount,
+Payment is **inbound** too: app calls `Meteric::recordPayment($invoice, $amount,
 $ref)` after the gateway settles → drives invoice state.
 
 ---
@@ -669,7 +669,7 @@ $ref)` after the gateway settles → drives invoice state.
 ## 9. Public API (sketch)
 
 ```php
-$sub = Billify::subscribe($customer)
+$sub = Meteric::subscribe($customer)
     ->add($vpsPlan, qty: 1)
     ->add($extraIp, qty: 2)
     ->anchor(BillingAnchor::FirstOfMonth)
@@ -691,37 +691,37 @@ $sub->cancel(at: CancelAt::PeriodEnd);
 $price = Price::recurring(Money::of(2999,'EUR'), Interval::Month, every: 3);
 
 // Bill-now at checkout: accrue + invoice immediately (prepaid charged now)
-$invoice = Billify::checkout($customer)
+$invoice = Meteric::checkout($customer)
     ->add($vpsPlan)                               // in_advance → first period now
     ->add($cloudUsage)                            // in_arrears → €0 now, bills later
     ->issue();                                    // uses bound InvoiceDriver
 
 // Renewal accrues PENDING charges (no invoice yet)
-$charges = Billify::accrueDueCharges($sub);      // idempotent
+$charges = Meteric::accrueDueCharges($sub);      // idempotent
 
 // Invoicing run: pending charges → driver. Driver down ⇒ charges stay pending.
-$invoice = Billify::invoicePending($customer);   // uses bound InvoiceDriver
-Billify::recordPayment($invoice, Money::of(999,'EUR'), 'pi_123');
+$invoice = Meteric::invoicePending($customer);   // uses bound InvoiceDriver
+Meteric::recordPayment($invoice, Money::of(999,'EUR'), 'pi_123');
 ```
 
 ---
 
 ## 10. Persistence (tables)
 
-`billify_products`, `billify_prices`, `billify_subscriptions`,
-`billify_subscription_items`, `billify_addons`, `billify_item_options`,
-`billify_meter_dimensions`, `billify_allowances`, `billify_commitments`,
-`billify_billing_accounts`, `billify_charges`, `billify_invoices`,
-`billify_invoice_lines`, `billify_usage_records`, `billify_discounts`,
-`billify_coupons`, `billify_credit_notes`, `billify_ledger` (optional
+`meteric_products`, `meteric_prices`, `meteric_subscriptions`,
+`meteric_subscription_items`, `meteric_addons`, `meteric_item_options`,
+`meteric_meter_dimensions`, `meteric_allowances`, `meteric_commitments`,
+`meteric_billing_accounts`, `meteric_charges`, `meteric_invoices`,
+`meteric_invoice_lines`, `meteric_usage_records`, `meteric_discounts`,
+`meteric_coupons`, `meteric_credit_notes`, `meteric_ledger` (optional
 double-entry audit).
 
-- `billify_prices`: `interval ENUM(day,week,month,year)` + `interval_count INT`
+- `meteric_prices`: `interval ENUM(day,week,month,year)` + `interval_count INT`
   + `billing_mode ENUM(in_advance,in_arrears)`.
-- `billify_charges`: `state`, `billing_mode`, `morph(origin)`, `amount_minor`,
+- `meteric_charges`: `state`, `billing_mode`, `morph(origin)`, `amount_minor`,
   `currency`, `covers_start`, `covers_end` (the billed service period),
   `invoice_id NULL`, `idempotency_key`. Indexed on `(customer, state)` for the
-  invoicing run. `covers_*` copied onto `billify_invoice_lines` for display.
+  invoicing run. `covers_*` copied onto `meteric_invoice_lines` for display.
 - All money columns: `*_minor BIGINT` + `currency CHAR(3)`. Morphs: `*_type` +
   `*_id`. Optimistic locking via `version` on subscriptions/invoices.
 
@@ -756,14 +756,14 @@ src/
   Subscriptions/    SubscriptionManager, CycleScheduler
   Tax/              EuVatResolver, FlatRateTaxResolver, NullTaxResolver
   Events/           ...
-  Billify.php       facade-backed entrypoint
-  BillifyServiceProvider.php
+  Meteric.php       facade-backed entrypoint
+  MetericServiceProvider.php
 database/migrations/
-config/billify.php   # tax driver, invoice driver(s), proration unit, rounding
+config/meteric.php   # tax driver, invoice driver(s), proration unit, rounding
 tests/
 ```
 
-Drivers are resolved from config (`billify.invoice.driver`, `billify.tax.driver`)
+Drivers are resolved from config (`meteric.invoice.driver`, `meteric.tax.driver`)
 so PawHost binds `LexofficeInvoiceDriver` + `EuVatResolver` without touching core.
 
 ---
@@ -772,7 +772,7 @@ so PawHost binds `LexofficeInvoiceDriver` + `EuVatResolver` without touching cor
 
 Does this design cover what WHMCS / AWS / Hetzner do? Matrix:
 
-| Capability | WHMCS | AWS | Hetzner | Billify |
+| Capability | WHMCS | AWS | Hetzner | Meteric |
 |------------|:-----:|:---:|:-------:|---------|
 | Recurring cycles (mo/qtr/yr/biennial…) | ✓ | – | ✓ | ✓ dynamic `interval×count` |
 | Per-second/hourly usage | – | ✓ | ✓ | ✓ `HourlyUsage` |
@@ -800,7 +800,7 @@ Does this design cover what WHMCS / AWS / Hetzner do? Matrix:
 
 **Net:** design is a superset — covers WHMCS catalog/addon/term model, AWS
 usage/dimension/reservation/consolidation model, and Hetzner hourly-cap +
-included-traffic + per-IP model. Two Billify-native edges WHMCS/AWS/Hetzner don't
+included-traffic + per-IP model. Two Meteric-native edges WHMCS/AWS/Hetzner don't
 expose cleanly: the **charge-vs-invoice outage guarantee** and the **pluggable
 invoice driver** (lexoffice).
 
@@ -821,7 +821,7 @@ affiliate/commission.
 7. Charge batching window — one invoice per due-charge run, or accumulate
    multiple cycles before billing?
 8. Lexoffice failure backoff/alert policy — retry forever, or dead-letter after N?
-9. Hourly usage: trust app-pushed start/stop, or Billify samples a heartbeat?
+9. Hourly usage: trust app-pushed start/stop, or Meteric samples a heartbeat?
 10. Addon group exclusivity + slot step/min/max — per-product config schema shape?
 11. Bill-now checkout failure (driver down at order time) — block the order, or
     accept order + leave charges `pending` and provision anyway?

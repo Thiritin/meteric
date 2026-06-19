@@ -19,7 +19,7 @@
     </source>
     <php>
         <env name="DB_CONNECTION" value="pgsql"/>
-        <env name="DB_DATABASE" value="billify_test"/>
-        <env name="BILLIFY_TAX_DRIVER" value="eu_vat"/>
+        <env name="DB_DATABASE" value="meteric_test"/>
+        <env name="METERIC_TAX_DRIVER" value="eu_vat"/>
     </php>
 </phpunit>

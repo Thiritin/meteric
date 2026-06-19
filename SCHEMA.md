@@ -1,4 +1,4 @@
-# Billify — Database Schema (PostgreSQL)
+# Meteric — Database Schema (PostgreSQL)
 
 Postgres-only by design. Leans on Postgres features that make billing safer:
 
@@ -17,7 +17,7 @@ Postgres-only by design. Leans on Postgres features that make billing safer:
 - **`gen_random_uuid()`** PKs (core in PG13+).
 - **Triggers** — enforce invoice/charge immutability + `updated_at`.
 
-Conventions: all tables `billify_*`, money = `*_minor BIGINT` + `currency
+Conventions: all tables `meteric_*`, money = `*_minor BIGINT` + `currency
 CHAR(3)`, time = `timestamptz`, periods = `tstzrange [start, end)`. Morphs =
 `*_type TEXT` + `*_id` (uuid or bigint via text; host PK type configurable).
 
@@ -44,8 +44,8 @@ Rates keep full precision; only the billable amount is rounded.
 > migrations use Laravel's Blueprint + `tpetry/laravel-postgresql-enhanced`
 > (for `tstzrange`, partial/GIN/expression indexes, identity) with thin raw
 > `DB::statement` only for the GiST `EXCLUDE` constraint and the immutability
-> triggers. Enum-typed columns shown below as `billify_*_state` etc. are actually
-> `varchar` + a `CHECK` listing the PHP enum's values (`Billify\Support\Pg::enumCheck`).
+> triggers. Enum-typed columns shown below as `meteric_*_state` etc. are actually
+> `varchar` + a `CHECK` listing the PHP enum's values (`Meteric\Support\Pg::enumCheck`).
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;    -- gen_random_uuid()
@@ -56,7 +56,7 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;  -- EXCLUDE: scalar = + range &&
 
 ```sql
 state varchar NOT NULL DEFAULT 'pending'
-  CONSTRAINT billify_charges_state_check
+  CONSTRAINT meteric_charges_state_check
   CHECK (state IN ('pending','invoiced','settled','void'))
 ```
 
@@ -74,13 +74,13 @@ Immutability of issued invoices/lines is enforced by triggers (see §8).
 
 ## 1. Accounts & catalog
 
-### billify_billing_accounts
+### meteric_billing_accounts
 Payer node. Nestable for consolidated / reseller invoicing (§13 of DESIGN).
 
 ```sql
-CREATE TABLE billify_billing_accounts (
+CREATE TABLE meteric_billing_accounts (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  parent_id     uuid REFERENCES billify_billing_accounts(id) ON DELETE RESTRICT,
+  parent_id     uuid REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
   owner_type    text NOT NULL,                 -- morph → app User/Org
   owner_id      text NOT NULL,
   currency      char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
@@ -90,22 +90,22 @@ CREATE TABLE billify_billing_accounts (
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX billify_accounts_owner_idx  ON billify_billing_accounts (owner_type, owner_id);
-CREATE INDEX billify_accounts_parent_idx ON billify_billing_accounts (parent_id);
+CREATE INDEX meteric_accounts_owner_idx  ON meteric_billing_accounts (owner_type, owner_id);
+CREATE INDEX meteric_accounts_parent_idx ON meteric_billing_accounts (parent_id);
 ```
 
-### billify_products
+### meteric_products
 Catalog entry. Morphs to the concrete plan (VpsPlan, Tld, …).
 
 ```sql
-CREATE TABLE billify_products (
+CREATE TABLE meteric_products (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   billable_type  text,                          -- morph → host plan (nullable for synthetic)
   billable_id    text,
   type           text NOT NULL,                 -- 'vps' | 'domain' | 'webhosting' | 'cloud' | 'gameserver' | 'ip' | 'addon' | ...
   slug           text NOT NULL UNIQUE,
   name           text NOT NULL,
-  pricing_model  billify_pricing_model NOT NULL,
+  pricing_model  meteric_pricing_model NOT NULL,
   is_proratable  boolean NOT NULL DEFAULT true,
   config         jsonb NOT NULL DEFAULT '{}',   -- model-specific (slot step/min/max, subnet sizing, …)
   active         boolean NOT NULL DEFAULT true,
@@ -113,24 +113,24 @@ CREATE TABLE billify_products (
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX billify_products_billable_idx ON billify_products (billable_type, billable_id);
-CREATE INDEX billify_products_type_idx     ON billify_products (type) WHERE active;
+CREATE INDEX meteric_products_billable_idx ON meteric_products (billable_type, billable_id);
+CREATE INDEX meteric_products_type_idx     ON meteric_products (type) WHERE active;
 ```
 
-### billify_prices
+### meteric_prices
 Versioned price. Carries recurrence, timing, purpose, caps, tiers.
 
 ```sql
-CREATE TABLE billify_prices (
+CREATE TABLE meteric_prices (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id      uuid NOT NULL REFERENCES billify_products(id) ON DELETE CASCADE,
+  product_id      uuid NOT NULL REFERENCES meteric_products(id) ON DELETE CASCADE,
   currency        char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   amount_minor    bigint NOT NULL CHECK (amount_minor >= 0),     -- unit/base amount
-  purpose         billify_price_purpose NOT NULL DEFAULT 'recurring',
-  pricing_model   billify_pricing_model NOT NULL,
-  interval        billify_interval,                              -- NULL ⇒ one-off
+  purpose         meteric_price_purpose NOT NULL DEFAULT 'recurring',
+  pricing_model   meteric_pricing_model NOT NULL,
+  interval        meteric_interval,                              -- NULL ⇒ one-off
   interval_count  integer CHECK (interval_count IS NULL OR interval_count > 0),
-  billing_mode    billify_billing_mode NOT NULL DEFAULT 'in_advance',
+  billing_mode    meteric_billing_mode NOT NULL DEFAULT 'in_advance',
   setup_fee_minor bigint NOT NULL DEFAULT 0 CHECK (setup_fee_minor >= 0),
   cap_minor       bigint CHECK (cap_minor IS NULL OR cap_minor >= 0),   -- hourly monthly cap
   min_charge_minor bigint NOT NULL DEFAULT 0,
@@ -144,21 +144,21 @@ CREATE TABLE billify_prices (
   CHECK (interval IS NOT NULL OR purpose IN ('one_off','setup','register'))
 );
 -- One active price per (product, currency, purpose) at any instant.
-CREATE INDEX billify_prices_lookup_idx ON billify_prices (product_id, currency, purpose)
+CREATE INDEX meteric_prices_lookup_idx ON meteric_prices (product_id, currency, purpose)
   WHERE valid_to IS NULL;
-CREATE INDEX billify_prices_tiers_gin  ON billify_prices USING gin (tiers);
+CREATE INDEX meteric_prices_tiers_gin  ON meteric_prices USING gin (tiers);
 ```
 
-### billify_meter_dimensions
+### meteric_meter_dimensions
 AWS-style: many usage dimensions per product, each priced + optional allowance.
 
 ```sql
-CREATE TABLE billify_meter_dimensions (
+CREATE TABLE meteric_meter_dimensions (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id     uuid NOT NULL REFERENCES billify_products(id) ON DELETE CASCADE,
+  product_id     uuid NOT NULL REFERENCES meteric_products(id) ON DELETE CASCADE,
   key            text NOT NULL,                 -- 'cpu_hour' | 'traffic_out_gb' | 'iops' | 'slot_hour'
   unit           text NOT NULL,                 -- display unit
-  aggregation    billify_aggregation NOT NULL DEFAULT 'sum',
+  aggregation    meteric_aggregation NOT NULL DEFAULT 'sum',
   rate_minor     bigint NOT NULL CHECK (rate_minor >= 0),
   currency       char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   included_qty   numeric(20,6) NOT NULL DEFAULT 0,   -- free allowance per cycle
@@ -173,19 +173,19 @@ CREATE TABLE billify_meter_dimensions (
 
 ## 2. Subscriptions, items, addons, options
 
-### billify_subscriptions
+### meteric_subscriptions
 
 ```sql
-CREATE TABLE billify_subscriptions (
+CREATE TABLE meteric_subscriptions (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  account_id       uuid NOT NULL REFERENCES billify_billing_accounts(id) ON DELETE RESTRICT,
+  account_id       uuid NOT NULL REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
   customer_type    text NOT NULL,               -- morph → app billable party
   customer_id      text NOT NULL,
   currency         char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
-  state            billify_sub_state NOT NULL DEFAULT 'incomplete',
-  anchor_mode      billify_anchor_mode NOT NULL DEFAULT 'signup',
+  state            meteric_sub_state NOT NULL DEFAULT 'incomplete',
+  anchor_mode      meteric_anchor_mode NOT NULL DEFAULT 'signup',
   anchor_day       smallint CHECK (anchor_day BETWEEN 1 AND 31),   -- for fixed_day
-  first_period     billify_first_period NOT NULL DEFAULT 'prorate_only',
+  first_period     meteric_first_period NOT NULL DEFAULT 'prorate_only',
   current_period   tstzrange,                   -- the subscription-level window
   trial_end        timestamptz,
   canceled_at      timestamptz,
@@ -195,28 +195,28 @@ CREATE TABLE billify_subscriptions (
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX billify_subs_account_idx  ON billify_subscriptions (account_id);
-CREATE INDEX billify_subs_customer_idx ON billify_subscriptions (customer_type, customer_id);
-CREATE INDEX billify_subs_due_idx      ON billify_subscriptions (upper(current_period))
+CREATE INDEX meteric_subs_account_idx  ON meteric_subscriptions (account_id);
+CREATE INDEX meteric_subs_customer_idx ON meteric_subscriptions (customer_type, customer_id);
+CREATE INDEX meteric_subs_due_idx      ON meteric_subscriptions (upper(current_period))
   WHERE state IN ('active','trialing','past_due');
-CREATE TRIGGER billify_subs_touch BEFORE UPDATE ON billify_subscriptions
-  FOR EACH ROW EXECUTE FUNCTION billify_touch_updated_at();
+CREATE TRIGGER meteric_subs_touch BEFORE UPDATE ON meteric_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION meteric_touch_updated_at();
 ```
 
-### billify_subscription_items
+### meteric_subscription_items
 Base line. Morphs to the provisioned resource (a specific VPS, IP, gameserver).
 
 ```sql
-CREATE TABLE billify_subscription_items (
+CREATE TABLE meteric_subscription_items (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  subscription_id  uuid NOT NULL REFERENCES billify_subscriptions(id) ON DELETE CASCADE,
-  product_id       uuid NOT NULL REFERENCES billify_products(id) ON DELETE RESTRICT,
-  price_id         uuid NOT NULL REFERENCES billify_prices(id) ON DELETE RESTRICT,
+  subscription_id  uuid NOT NULL REFERENCES meteric_subscriptions(id) ON DELETE CASCADE,
+  product_id       uuid NOT NULL REFERENCES meteric_products(id) ON DELETE RESTRICT,
+  price_id         uuid NOT NULL REFERENCES meteric_prices(id) ON DELETE RESTRICT,
   resource_type    text,                        -- morph → running resource
   resource_id      text,
   quantity         numeric(20,6) NOT NULL DEFAULT 1 CHECK (quantity >= 0),
-  billing_mode     billify_billing_mode,        -- NULL ⇒ inherit price
-  state            billify_item_state NOT NULL DEFAULT 'pending',
+  billing_mode     meteric_billing_mode,        -- NULL ⇒ inherit price
+  state            meteric_item_state NOT NULL DEFAULT 'pending',
   current_period   tstzrange,                   -- per-item window (items may differ)
   activated_at     timestamptz,
   ends_at          timestamptz,                 -- resource destroyed / item closed
@@ -226,44 +226,44 @@ CREATE TABLE billify_subscription_items (
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX billify_items_sub_idx      ON billify_subscription_items (subscription_id);
-CREATE INDEX billify_items_resource_idx ON billify_subscription_items (resource_type, resource_id);
-CREATE INDEX billify_items_due_idx      ON billify_subscription_items (upper(current_period))
+CREATE INDEX meteric_items_sub_idx      ON meteric_subscription_items (subscription_id);
+CREATE INDEX meteric_items_resource_idx ON meteric_subscription_items (resource_type, resource_id);
+CREATE INDEX meteric_items_due_idx      ON meteric_subscription_items (upper(current_period))
   WHERE state = 'active';
 ```
 
-### billify_addons
+### meteric_addons
 Bookable extra on an item. `group_key` enforces mutual exclusivity (one RAM tier).
 
 ```sql
-CREATE TABLE billify_addons (
+CREATE TABLE meteric_addons (
   id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id   uuid NOT NULL REFERENCES billify_subscription_items(id) ON DELETE CASCADE,
-  product_id uuid NOT NULL REFERENCES billify_products(id) ON DELETE RESTRICT,
-  price_id  uuid NOT NULL REFERENCES billify_prices(id) ON DELETE RESTRICT,
+  item_id   uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
+  product_id uuid NOT NULL REFERENCES meteric_products(id) ON DELETE RESTRICT,
+  price_id  uuid NOT NULL REFERENCES meteric_prices(id) ON DELETE RESTRICT,
   group_key text,                               -- e.g. 'ram'; one active per group
   quantity  numeric(20,6) NOT NULL DEFAULT 1,
-  state     billify_item_state NOT NULL DEFAULT 'active',
+  state     meteric_item_state NOT NULL DEFAULT 'active',
   metadata  jsonb NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 -- At most one active addon per group per item:
-CREATE UNIQUE INDEX billify_addons_group_uq ON billify_addons (item_id, group_key)
+CREATE UNIQUE INDEX meteric_addons_group_uq ON meteric_addons (item_id, group_key)
   WHERE state = 'active' AND group_key IS NOT NULL;
 ```
 
-### billify_item_options
+### meteric_item_options
 Configurable option of an item (qty / choice / toggle).
 
 ```sql
-CREATE TABLE billify_item_options (
+CREATE TABLE meteric_item_options (
   id        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id   uuid NOT NULL REFERENCES billify_subscription_items(id) ON DELETE CASCADE,
+  item_id   uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
   key       text NOT NULL,                      -- 'slots' | 'location' | 'backups'
-  type      billify_option_type NOT NULL,
+  type      meteric_option_type NOT NULL,
   value     text NOT NULL,                      -- '16' | 'eu-central' | 'true'
-  price_id  uuid REFERENCES billify_prices(id) ON DELETE RESTRICT,
+  price_id  uuid REFERENCES meteric_prices(id) ON DELETE RESTRICT,
   quantity  numeric(20,6) NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -271,34 +271,34 @@ CREATE TABLE billify_item_options (
 );
 ```
 
-### billify_commitments
+### meteric_commitments
 Term/reservation: upfront + committed rate + early-termination rule.
 
 ```sql
-CREATE TABLE billify_commitments (
+CREATE TABLE meteric_commitments (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id        uuid NOT NULL REFERENCES billify_subscription_items(id) ON DELETE CASCADE,
-  term_interval  billify_interval NOT NULL,
+  item_id        uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
+  term_interval  meteric_interval NOT NULL,
   term_count     integer NOT NULL CHECK (term_count > 0),
   upfront_minor  bigint NOT NULL DEFAULT 0,
   rate_minor     bigint NOT NULL,               -- committed (discounted) rate
   currency       char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   term           tstzrange NOT NULL,
   early_term     jsonb NOT NULL DEFAULT '{}',   -- { fee_minor | remaining_pct }
-  state          billify_commitment_state NOT NULL DEFAULT 'active',
+  state          meteric_commitment_state NOT NULL DEFAULT 'active',
   created_at     timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX billify_commitments_item_idx ON billify_commitments (item_id);
+CREATE INDEX meteric_commitments_item_idx ON meteric_commitments (item_id);
 ```
 
-### billify_allowances
+### meteric_allowances
 Per-subscription-item override / tracking of included units (resets per cycle).
 
 ```sql
-CREATE TABLE billify_allowances (
+CREATE TABLE meteric_allowances (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id       uuid NOT NULL REFERENCES billify_subscription_items(id) ON DELETE CASCADE,
-  dimension_id  uuid NOT NULL REFERENCES billify_meter_dimensions(id) ON DELETE CASCADE,
+  item_id       uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
+  dimension_id  uuid NOT NULL REFERENCES meteric_meter_dimensions(id) ON DELETE CASCADE,
   included_qty  numeric(20,6) NOT NULL,
   period        tstzrange NOT NULL,
   consumed_qty  numeric(20,6) NOT NULL DEFAULT 0,
@@ -311,14 +311,14 @@ CREATE TABLE billify_allowances (
 
 ## 3. Usage & periods (the no-double-bill core)
 
-### billify_usage_records
+### meteric_usage_records
 Raw reported usage. Idempotent ingest via unique key.
 
 ```sql
-CREATE TABLE billify_usage_records (
+CREATE TABLE meteric_usage_records (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id       uuid NOT NULL REFERENCES billify_subscription_items(id) ON DELETE CASCADE,
-  dimension_id  uuid NOT NULL REFERENCES billify_meter_dimensions(id) ON DELETE RESTRICT,
+  item_id       uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
+  dimension_id  uuid NOT NULL REFERENCES meteric_meter_dimensions(id) ON DELETE RESTRICT,
   quantity      numeric(20,6) NOT NULL CHECK (quantity >= 0),
   occurred_at   timestamptz NOT NULL,
   window        tstzrange,                      -- for interval-sampled records
@@ -328,25 +328,25 @@ CREATE TABLE billify_usage_records (
   created_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (idempotency_key)
 );
-CREATE INDEX billify_usage_unbilled_idx ON billify_usage_records (item_id, dimension_id, occurred_at)
+CREATE INDEX meteric_usage_unbilled_idx ON meteric_usage_records (item_id, dimension_id, occurred_at)
   WHERE charge_id IS NULL;
 ```
 
-### billify_billing_periods
+### meteric_billing_periods
 **The double-bill guard.** One row per fully-billed window per item+dimension.
 A GiST EXCLUDE constraint makes overlapping windows physically impossible.
 
 ```sql
-CREATE TABLE billify_billing_periods (
+CREATE TABLE meteric_billing_periods (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id       uuid NOT NULL REFERENCES billify_subscription_items(id) ON DELETE CASCADE,
+  item_id       uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
   dimension_id  uuid,                           -- NULL = base recurring; else metered dimension
   covers        tstzrange NOT NULL,
   charge_id     uuid,                           -- the charge that billed it
   created_at    timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT billify_period_valid CHECK (lower(covers) < upper(covers)),
+  CONSTRAINT meteric_period_valid CHECK (lower(covers) < upper(covers)),
   -- No two billed windows for the same item+dimension may overlap:
-  CONSTRAINT billify_no_overlap EXCLUDE USING gist (
+  CONSTRAINT meteric_no_overlap EXCLUDE USING gist (
     item_id WITH =,
     COALESCE(dimension_id, '00000000-0000-0000-0000-000000000000'::uuid) WITH =,
     covers  WITH &&
@@ -362,20 +362,20 @@ CREATE TABLE billify_billing_periods (
 
 ## 4. Charges (source of truth)
 
-### billify_charges
+### meteric_charges
 Money owed, decoupled from invoicing (DESIGN §2.5).
 
 ```sql
-CREATE TABLE billify_charges (
+CREATE TABLE meteric_charges (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  account_id      uuid NOT NULL REFERENCES billify_billing_accounts(id) ON DELETE RESTRICT,
-  subscription_id uuid REFERENCES billify_subscriptions(id) ON DELETE SET NULL,
+  account_id      uuid NOT NULL REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
+  subscription_id uuid REFERENCES meteric_subscriptions(id) ON DELETE SET NULL,
   origin_type     text NOT NULL,               -- morph: item | usage | proration | one_off | commitment | setup
   origin_id       text NOT NULL,
-  dimension_id    uuid REFERENCES billify_meter_dimensions(id),
-  kind            billify_line_kind NOT NULL,
-  billing_mode    billify_billing_mode NOT NULL,
-  state           billify_charge_state NOT NULL DEFAULT 'pending',
+  dimension_id    uuid REFERENCES meteric_meter_dimensions(id),
+  kind            meteric_line_kind NOT NULL,
+  billing_mode    meteric_billing_mode NOT NULL,
+  state           meteric_charge_state NOT NULL DEFAULT 'pending',
   description     text NOT NULL,
   quantity        numeric(20,6) NOT NULL DEFAULT 1,
   unit_minor      bigint NOT NULL,
@@ -391,31 +391,31 @@ CREATE TABLE billify_charges (
   UNIQUE (idempotency_key)
 );
 -- The invoicing run's hot path — only pending rows:
-CREATE INDEX billify_charges_pending_idx ON billify_charges (account_id, currency)
+CREATE INDEX meteric_charges_pending_idx ON meteric_charges (account_id, currency)
   WHERE state = 'pending';
-CREATE INDEX billify_charges_origin_idx  ON billify_charges (origin_type, origin_id);
-CREATE INDEX billify_charges_invoice_idx ON billify_charges (invoice_id);
-CREATE TRIGGER billify_charges_touch BEFORE UPDATE ON billify_charges
-  FOR EACH ROW EXECUTE FUNCTION billify_touch_updated_at();
+CREATE INDEX meteric_charges_origin_idx  ON meteric_charges (origin_type, origin_id);
+CREATE INDEX meteric_charges_invoice_idx ON meteric_charges (invoice_id);
+CREATE TRIGGER meteric_charges_touch BEFORE UPDATE ON meteric_charges
+  FOR EACH ROW EXECUTE FUNCTION meteric_touch_updated_at();
 ```
 
 ---
 
 ## 5. Invoices, lines, credit notes, payments
 
-### billify_invoices
+### meteric_invoices
 
 ```sql
-CREATE TABLE billify_invoices (
+CREATE TABLE meteric_invoices (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  account_id     uuid NOT NULL REFERENCES billify_billing_accounts(id) ON DELETE RESTRICT,
+  account_id     uuid NOT NULL REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
   customer_type  text NOT NULL,
   customer_id    text NOT NULL,
   number         text,                          -- assigned at issue; null while draft
   driver         text NOT NULL DEFAULT 'database',
   external_id    text,                          -- lexoffice voucher id
   external_url   text,
-  state          billify_invoice_state NOT NULL DEFAULT 'draft',
+  state          meteric_invoice_state NOT NULL DEFAULT 'draft',
   currency       char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   subtotal_minor bigint NOT NULL DEFAULT 0,
   tax_minor      bigint NOT NULL DEFAULT 0,
@@ -430,24 +430,24 @@ CREATE TABLE billify_invoices (
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX billify_invoices_number_uq  ON billify_invoices (number) WHERE number IS NOT NULL;
-CREATE UNIQUE INDEX billify_invoices_batch_uq   ON billify_invoices (idempotency_key) WHERE idempotency_key IS NOT NULL;
-CREATE INDEX billify_invoices_account_idx ON billify_invoices (account_id, state);
-CREATE TRIGGER billify_invoices_touch BEFORE UPDATE ON billify_invoices
-  FOR EACH ROW EXECUTE FUNCTION billify_touch_updated_at();
+CREATE UNIQUE INDEX meteric_invoices_number_uq  ON meteric_invoices (number) WHERE number IS NOT NULL;
+CREATE UNIQUE INDEX meteric_invoices_batch_uq   ON meteric_invoices (idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX meteric_invoices_account_idx ON meteric_invoices (account_id, state);
+CREATE TRIGGER meteric_invoices_touch BEFORE UPDATE ON meteric_invoices
+  FOR EACH ROW EXECUTE FUNCTION meteric_touch_updated_at();
 -- Lock lines once issued (state ≠ draft): block any UPDATE to financial cols via app guard;
 -- hard guard on lines table below.
 ```
 
-### billify_invoice_lines
+### meteric_invoice_lines
 Immutable snapshot. Carries its own `covers` window (prepaid vs arrears differ).
 
 ```sql
-CREATE TABLE billify_invoice_lines (
+CREATE TABLE meteric_invoice_lines (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_id    uuid NOT NULL REFERENCES billify_invoices(id) ON DELETE CASCADE,
-  charge_id     uuid REFERENCES billify_charges(id) ON DELETE SET NULL,
-  kind          billify_line_kind NOT NULL,
+  invoice_id    uuid NOT NULL REFERENCES meteric_invoices(id) ON DELETE CASCADE,
+  charge_id     uuid REFERENCES meteric_charges(id) ON DELETE SET NULL,
+  kind          meteric_line_kind NOT NULL,
   description   text NOT NULL,
   quantity      numeric(20,6) NOT NULL DEFAULT 1,
   unit_minor    bigint NOT NULL,
@@ -461,19 +461,19 @@ CREATE TABLE billify_invoice_lines (
   sort          integer NOT NULL DEFAULT 0,
   metadata      jsonb NOT NULL DEFAULT '{}'
 );
-CREATE INDEX billify_lines_invoice_idx ON billify_invoice_lines (invoice_id, sort);
+CREATE INDEX meteric_lines_invoice_idx ON meteric_invoice_lines (invoice_id, sort);
 ```
 
-### billify_credit_notes (+ lines mirror invoice lines)
+### meteric_credit_notes (+ lines mirror invoice lines)
 
 ```sql
-CREATE TABLE billify_credit_notes (
+CREATE TABLE meteric_credit_notes (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_id   uuid NOT NULL REFERENCES billify_invoices(id) ON DELETE RESTRICT,
+  invoice_id   uuid NOT NULL REFERENCES meteric_invoices(id) ON DELETE RESTRICT,
   number       text,
   driver       text NOT NULL DEFAULT 'database',
   external_id  text,
-  state        billify_credit_state NOT NULL DEFAULT 'draft',
+  state        meteric_credit_state NOT NULL DEFAULT 'draft',
   reason       text,
   amount_minor bigint NOT NULL,               -- positive magnitude credited
   tax_minor    bigint NOT NULL DEFAULT 0,
@@ -482,16 +482,16 @@ CREATE TABLE billify_credit_notes (
   metadata     jsonb NOT NULL DEFAULT '{}',
   created_at   timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX billify_credit_number_uq ON billify_credit_notes (number) WHERE number IS NOT NULL;
+CREATE UNIQUE INDEX meteric_credit_number_uq ON meteric_credit_notes (number) WHERE number IS NOT NULL;
 ```
 
-### billify_payments + allocations
+### meteric_payments + allocations
 Inbound (app calls `recordPayment`). Allocation supports partial / split.
 
 ```sql
-CREATE TABLE billify_payments (
+CREATE TABLE meteric_payments (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  account_id   uuid NOT NULL REFERENCES billify_billing_accounts(id) ON DELETE RESTRICT,
+  account_id   uuid NOT NULL REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
   amount_minor bigint NOT NULL CHECK (amount_minor > 0),
   currency     char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   reference    text,                            -- gateway id (pi_..., paypal txn)
@@ -499,10 +499,10 @@ CREATE TABLE billify_payments (
   metadata     jsonb NOT NULL DEFAULT '{}',
   UNIQUE (reference)
 );
-CREATE TABLE billify_payment_allocations (
+CREATE TABLE meteric_payment_allocations (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  payment_id   uuid NOT NULL REFERENCES billify_payments(id) ON DELETE CASCADE,
-  invoice_id   uuid NOT NULL REFERENCES billify_invoices(id) ON DELETE RESTRICT,
+  payment_id   uuid NOT NULL REFERENCES meteric_payments(id) ON DELETE CASCADE,
+  invoice_id   uuid NOT NULL REFERENCES meteric_invoices(id) ON DELETE RESTRICT,
   amount_minor bigint NOT NULL CHECK (amount_minor > 0),
   UNIQUE (payment_id, invoice_id)
 );
@@ -513,10 +513,10 @@ CREATE TABLE billify_payment_allocations (
 ## 6. Discounts & coupons
 
 ```sql
-CREATE TABLE billify_coupons (
+CREATE TABLE meteric_coupons (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   code           text NOT NULL UNIQUE,
-  type           billify_discount_type NOT NULL,
+  type           meteric_discount_type NOT NULL,
   value          numeric(12,4) NOT NULL,        -- percent (0–100) or fixed minor (store minor in value_minor)
   value_minor    bigint,                        -- used when type = fixed
   currency       char(3) CHECK (currency ~ '^[A-Z]{3}$'),
@@ -530,15 +530,15 @@ CREATE TABLE billify_coupons (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE billify_discounts (              -- a coupon applied to a target
+CREATE TABLE meteric_discounts (              -- a coupon applied to a target
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  coupon_id     uuid REFERENCES billify_coupons(id) ON DELETE SET NULL,
+  coupon_id     uuid REFERENCES meteric_coupons(id) ON DELETE SET NULL,
   target_type   text NOT NULL,                  -- subscription | item
   target_id     text NOT NULL,
   remaining_cycles integer,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX billify_discounts_target_idx ON billify_discounts (target_type, target_id);
+CREATE INDEX meteric_discounts_target_idx ON meteric_discounts (target_type, target_id);
 ```
 
 ---
@@ -549,9 +549,9 @@ Enable via config for accounting-grade trails. Every money movement = balanced
 debit/credit rows.
 
 ```sql
-CREATE TABLE billify_ledger (
+CREATE TABLE meteric_ledger (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  account_id    uuid NOT NULL REFERENCES billify_billing_accounts(id) ON DELETE RESTRICT,
+  account_id    uuid NOT NULL REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
   txn_id        uuid NOT NULL,                  -- groups balanced rows
   entry         text NOT NULL,                  -- 'charge' | 'invoice' | 'payment' | 'credit' | 'refund'
   debit_minor   bigint NOT NULL DEFAULT 0,
@@ -561,8 +561,8 @@ CREATE TABLE billify_ledger (
   posted_at     timestamptz NOT NULL DEFAULT now(),
   CHECK (debit_minor = 0 OR credit_minor = 0)
 );
-CREATE INDEX billify_ledger_account_idx ON billify_ledger (account_id, posted_at);
-CREATE INDEX billify_ledger_txn_idx     ON billify_ledger (txn_id);
+CREATE INDEX meteric_ledger_account_idx ON meteric_ledger (account_id, posted_at);
+CREATE INDEX meteric_ledger_txn_idx     ON meteric_ledger (txn_id);
 ```
 
 ---
@@ -571,36 +571,36 @@ CREATE INDEX billify_ledger_txn_idx     ON billify_ledger (txn_id);
 
 ```sql
 -- Issued invoices: block deletes; block updates to financial columns.
-CREATE OR REPLACE FUNCTION billify_invoice_immutable() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION meteric_invoice_immutable() RETURNS trigger AS $$
 BEGIN
   IF OLD.state <> 'draft' THEN
     IF TG_OP = 'DELETE' THEN
-      RAISE EXCEPTION 'billify: issued invoice % cannot be deleted', OLD.id;
+      RAISE EXCEPTION 'meteric: issued invoice % cannot be deleted', OLD.id;
     END IF;
     IF NEW.currency <> OLD.currency OR NEW.subtotal_minor <> OLD.subtotal_minor
        OR NEW.total_minor <> OLD.total_minor OR NEW.tax_minor <> OLD.tax_minor THEN
-      RAISE EXCEPTION 'billify: issued invoice % financials are immutable', OLD.id;
+      RAISE EXCEPTION 'meteric: issued invoice % financials are immutable', OLD.id;
     END IF;
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-CREATE TRIGGER billify_invoices_immutable BEFORE UPDATE OR DELETE ON billify_invoices
-  FOR EACH ROW EXECUTE FUNCTION billify_invoice_immutable();
+CREATE TRIGGER meteric_invoices_immutable BEFORE UPDATE OR DELETE ON meteric_invoices
+  FOR EACH ROW EXECUTE FUNCTION meteric_invoice_immutable();
 
 -- Invoice lines of a non-draft invoice are frozen entirely.
-CREATE OR REPLACE FUNCTION billify_line_immutable() RETURNS trigger AS $$
-DECLARE st billify_invoice_state;
+CREATE OR REPLACE FUNCTION meteric_line_immutable() RETURNS trigger AS $$
+DECLARE st meteric_invoice_state;
 BEGIN
-  SELECT state INTO st FROM billify_invoices WHERE id = COALESCE(NEW.invoice_id, OLD.invoice_id);
+  SELECT state INTO st FROM meteric_invoices WHERE id = COALESCE(NEW.invoice_id, OLD.invoice_id);
   IF st <> 'draft' THEN
-    RAISE EXCEPTION 'billify: lines of issued invoice are immutable';
+    RAISE EXCEPTION 'meteric: lines of issued invoice are immutable';
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
-CREATE TRIGGER billify_lines_immutable BEFORE INSERT OR UPDATE OR DELETE ON billify_invoice_lines
-  FOR EACH ROW EXECUTE FUNCTION billify_line_immutable();
+CREATE TRIGGER meteric_lines_immutable BEFORE INSERT OR UPDATE OR DELETE ON meteric_invoice_lines
+  FOR EACH ROW EXECUTE FUNCTION meteric_line_immutable();
 ```
 
 ---
@@ -638,7 +638,7 @@ custom Eloquent cast (`MoneyCast`). Ranges cast to a `Period` value object
 ## 10. Migration & extensibility notes
 
 - Table prefix + morph PK type (`uuid` vs `bigint`) configurable in
-  `config/billify.php` (publish migrations, host owns them).
+  `config/meteric.php` (publish migrations, host owns them).
 - Enums added via `ALTER TYPE ... ADD VALUE` in later migrations — never
   destructive.
 - All `jsonb` config columns give the open-source consumer room to extend

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Billify\Contracts;
+namespace Meteric\Contracts;
 
-use Billify\Models\Price;
-use Billify\Pricing\PricingContext;
 use Brick\Money\Money;
+use Meteric\Models\Price;
+use Meteric\Pricing\PricingContext;
 
 /**
  * Strategy for turning a quantity + price into a Money amount.

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Tax\TaxContext;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Meteric\Tax\TaxContext;
 
 /**
  * @property string $id
@@ -19,9 +19,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property array $tax_profile
  * @property int $balance_minor
  */
-class BillingAccount extends BillifyModel
+class BillingAccount extends MetericModel
 {
-    protected $table = 'billify_billing_accounts';
+    protected $table = 'meteric_billing_accounts';
 
     protected $guarded = [];
 

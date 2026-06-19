@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Enums\DiscountType;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Meteric\Enums\DiscountType;
 
 /**
  * @property string $code
@@ -20,9 +20,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ?CarbonImmutable $valid_from
  * @property ?CarbonImmutable $valid_to
  */
-class Coupon extends BillifyModel
+class Coupon extends MetericModel
 {
-    protected $table = 'billify_coupons';
+    protected $table = 'meteric_coupons';
 
     public $timestamps = false;
 

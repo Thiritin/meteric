@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
-abstract class BillifyModel extends Model
+abstract class MetericModel extends Model
 {
     use HasUuids;
 

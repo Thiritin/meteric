@@ -1,6 +1,6 @@
 # Invoicing
 
-Invoicing is where Billify's core promise lives: a charge is the source of
+Invoicing is where Meteric's core promise lives: a charge is the source of
 truth, and an invoice is a document that bills a set of charges. The two are
 decoupled so an outage in your accounting system never loses revenue.
 
@@ -19,9 +19,9 @@ a draft, and hands it to the bound invoice driver. Then:
   next run picks the same charges up.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
-$invoice = Billify::invoicePending($account);
+$invoice = Meteric::invoicePending($account);
 // null when nothing was pending; otherwise the issued Invoice.
 ```
 
@@ -32,15 +32,15 @@ for the same charges.
 ## Drivers
 
 The invoice driver is swappable. The default `database` driver writes the
-invoice and its lines to the `billify_*` tables. To send invoices to an external
-system, bind a class implementing `Billify\Contracts\InvoiceDriver`:
+invoice and its lines to the `meteric_*` tables. To send invoices to an external
+system, bind a class implementing `Meteric\Contracts\InvoiceDriver`:
 
 ```php
-// config/billify.php
+// config/meteric.php
 'invoice' => [
     'driver' => 'lexoffice',
     'drivers' => [
-        'database'  => \Billify\Invoicing\Drivers\DatabaseInvoiceDriver::class,
+        'database'  => \Meteric\Invoicing\Drivers\DatabaseInvoiceDriver::class,
         'lexoffice' => \App\Billing\LexofficeInvoiceDriver::class,
     ],
     'mirror_to_database' => true,
@@ -51,17 +51,17 @@ Throwing from `issue()` is the boundary that preserves pending charges, so a
 remote driver that fails to reach its API should throw rather than swallow the
 error. With `mirror_to_database` on, the canonical invoice is still written
 locally even when a remote driver is primary. Reach the active driver directly
-with `Billify::driver()`.
+with `Meteric::driver()`.
 
 ## Payments
 
-Billify does not talk to gateways. When your gateway confirms money arrived, you
+Meteric does not talk to gateways. When your gateway confirms money arrived, you
 record it against the invoice:
 
 ```php
 use Brick\Money\Money;
 
-Billify::recordPayment($invoice, Money::of('49.98', 'EUR'), 'pi_123');
+Meteric::recordPayment($invoice, Money::of('49.98', 'EUR'), 'pi_123');
 ```
 
 This creates a `Payment` and a `PaymentAllocation` and advances the invoice
@@ -81,7 +81,7 @@ A payer account can bill its own pending charges plus all its child accounts'
 charges onto a single invoice, a reseller or an organization with sub-accounts.
 
 ```php
-$invoice = Billify::invoiceConsolidated($payer);
+$invoice = Meteric::invoiceConsolidated($payer);
 ```
 
 This collects pending charges across the payer's scope (itself and its
@@ -91,7 +91,7 @@ The same guarantee applies: a driver failure leaves every charge `pending`.
 Set the relationship by giving a child account a `parent_id`:
 
 ```php
-use Billify\Models\BillingAccount;
+use Meteric\Models\BillingAccount;
 
 BillingAccount::create([
     'owner_type' => $org->getMorphClass(),

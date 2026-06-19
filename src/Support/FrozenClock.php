@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Billify\Support;
+namespace Meteric\Support;
 
-use Billify\Contracts\Clock;
 use Carbon\CarbonImmutable;
+use Meteric\Contracts\Clock;
 
 /** Test/quote clock pinned to a fixed instant. */
 final class FrozenClock implements Clock

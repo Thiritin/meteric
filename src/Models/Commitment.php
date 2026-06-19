@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\PeriodCast;
-use Billify\Enums\CommitmentState;
-use Billify\Enums\Interval;
-use Billify\Support\Period;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\PeriodCast;
+use Meteric\Enums\CommitmentState;
+use Meteric\Enums\Interval;
+use Meteric\Support\Period;
 
 /**
  * @property Interval $term_interval
@@ -19,9 +19,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CommitmentState $state
  * @property ?Period $term
  */
-class Commitment extends BillifyModel
+class Commitment extends MetericModel
 {
-    protected $table = 'billify_commitments';
+    protected $table = 'meteric_commitments';
 
     public $timestamps = false;
 

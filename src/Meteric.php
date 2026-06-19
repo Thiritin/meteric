@@ -2,47 +2,47 @@
 
 declare(strict_types=1);
 
-namespace Billify;
+namespace Meteric;
 
-use Billify\Contracts\InvoiceDriver;
-use Billify\Enums\DowngradePolicy;
-use Billify\Enums\Interval;
-use Billify\Enums\InvoiceState;
-use Billify\Invoicing\InvoiceDraft;
-use Billify\Models\Addon;
-use Billify\Models\BillingAccount;
-use Billify\Models\Charge;
-use Billify\Models\Commitment;
-use Billify\Models\Invoice;
-use Billify\Models\ItemOption;
-use Billify\Models\Payment;
-use Billify\Models\PaymentAllocation;
-use Billify\Models\Price;
-use Billify\Models\Subscription;
-use Billify\Models\SubscriptionItem;
-use Billify\Models\UsageRecord;
-use Billify\Quoting\QuoteBuilder;
-use Billify\Subscriptions\CommitmentManager;
-use Billify\Subscriptions\ItemManager;
-use Billify\Subscriptions\SubscriptionBuilder;
-use Billify\Subscriptions\SubscriptionManager;
-use Billify\Support\Period;
-use Billify\Usage\UsageRollup;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Meteric\Contracts\InvoiceDriver;
+use Meteric\Enums\DowngradePolicy;
+use Meteric\Enums\Interval;
+use Meteric\Enums\InvoiceState;
+use Meteric\Invoicing\InvoiceDraft;
+use Meteric\Models\Addon;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
+use Meteric\Models\Commitment;
+use Meteric\Models\Invoice;
+use Meteric\Models\ItemOption;
+use Meteric\Models\Payment;
+use Meteric\Models\PaymentAllocation;
+use Meteric\Models\Price;
+use Meteric\Models\Subscription;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Models\UsageRecord;
+use Meteric\Quoting\QuoteBuilder;
+use Meteric\Subscriptions\CommitmentManager;
+use Meteric\Subscriptions\ItemManager;
+use Meteric\Subscriptions\SubscriptionBuilder;
+use Meteric\Subscriptions\SubscriptionManager;
+use Meteric\Support\Period;
+use Meteric\Usage\UsageRollup;
 use Throwable;
 
 /**
- * Package entrypoint. Resolved from the container; exposed via the Billify facade.
+ * Package entrypoint. Resolved from the container; exposed via the Meteric facade.
  *
  * The invoicing flow is the heart of the charge-vs-invoice guarantee:
  * charges accrue as `pending`, and only a confirmed driver success flips them to
  * `invoiced`. A driver failure leaves everything `pending` for the next run.
  */
-final class Billify
+final class Meteric
 {
     public function __construct(private InvoiceDriver $driver) {}
 

@@ -12,8 +12,8 @@ outbound traffic, requests. Each dimension carries its own rate, aggregation,
 free allowance, and optional cap.
 
 ```php
-use Billify\Models\MeterDimension;
-use Billify\Enums\Aggregation;
+use Meteric\Models\MeterDimension;
+use Meteric\Enums\Aggregation;
 
 MeterDimension::create([
     'product_id' => $product->id,
@@ -53,10 +53,10 @@ $dimension->amountFor(150);        // Money: round(50 × rate), clamped to the c
 ## Recording usage
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 use Carbon\CarbonImmutable;
 
-Billify::recordUsage(
+Meteric::recordUsage(
     item: $item,
     dimension: 'cpu_hours',
     quantity: 4.5,
@@ -76,7 +76,7 @@ by `key` against the item's product, so it must exist on that product.
 At period close, roll up the window into charges.
 
 ```php
-use Billify\Support\Period;
+use Meteric\Support\Period;
 use Carbon\CarbonImmutable;
 
 $period = new Period(
@@ -84,7 +84,7 @@ $period = new Period(
     CarbonImmutable::parse('2026-07-01 00:00:00'),
 );
 
-$charges = Billify::rollupUsage($item, $period);
+$charges = Meteric::rollupUsage($item, $period);
 ```
 
 `rollupUsage()`:
@@ -93,7 +93,7 @@ $charges = Billify::rollupUsage($item, $period);
    window. Dimensions are discovered from the records themselves, so usage
    recorded before a plan change (different product) still rolls up.
 2. Aggregates each dimension's records per its `aggregation`.
-3. Reserves the window in `billify_billing_periods`, keyed by dimension. If the
+3. Reserves the window in `meteric_billing_periods`, keyed by dimension. If the
    window was already billed for that dimension, it skips, no double billing.
 4. Creates one in-arrears `Charge` per dimension for the overage (allowance
    subtracted, cap applied) and stamps the records with the charge id.

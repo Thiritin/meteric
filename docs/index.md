@@ -1,6 +1,6 @@
 # Introduction
 
-Billify is a billing engine for hosting systems, built as a Laravel package. It
+Meteric is a billing engine for hosting systems, built as a Laravel package. It
 handles subscriptions, proration, usage metering, addons, commitments, and
 invoicing for products like VPS, domains, webhosting, cloud, and gameservers.
 The design borrows from Stripe Billing and WHMCS and is sized for hosts running
@@ -12,7 +12,7 @@ payments and, optionally, an accounting system as an invoice driver.
 
 ## The two ideas that matter
 
-Most hosting billing tangles the money math into the application. Billify keeps
+Most hosting billing tangles the money math into the application. Meteric keeps
 two things separate and leans on the database to keep them honest.
 
 ### A charge is not an invoice
@@ -27,16 +27,16 @@ system is down or the API timed out, nothing flips. The charges stay `pending`
 and the next run picks them up. You do not lose revenue to an outage.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
 // Collect an account's pending charges and issue them via the bound driver.
 // If issue() throws, every charge stays pending for the next run.
-$invoice = Billify::invoicePending($account);
+$invoice = Meteric::invoicePending($account);
 ```
 
 ### A service window is billed once
 
-Billed periods are recorded in `billify_billing_periods`. A PostgreSQL GiST
+Billed periods are recorded in `meteric_billing_periods`. A PostgreSQL GiST
 `EXCLUDE` constraint on that table rejects any overlapping window for the same
 item and dimension. Renewals and usage rollups are idempotent because the
 database refuses to record a window twice. A retried renewal is a no-op, not a
@@ -53,6 +53,6 @@ double charge.
 | `Charge` | Money owed. Accrues `pending`, flips to `invoiced` only on driver success. |
 | `Invoice` / `InvoiceLine` | An immutable document. Each line carries its own service period. |
 
-Everything runs through the `Billify` facade. The next pages get you installed
+Everything runs through the `Meteric` facade. The next pages get you installed
 and writing your first subscription. Start with [Installation](/guide/installation),
 or jump to the [Quickstart](/guide/quickstart).

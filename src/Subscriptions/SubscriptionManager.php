@@ -2,27 +2,27 @@
 
 declare(strict_types=1);
 
-namespace Billify\Subscriptions;
+namespace Meteric\Subscriptions;
 
-use Billify\Anchoring\BillingPlan;
-use Billify\Anchoring\PlannedPeriod;
-use Billify\Charges\ChargeAccruer;
-use Billify\Contracts\Clock;
-use Billify\Enums\ChargeState;
-use Billify\Enums\DowngradePolicy;
-use Billify\Enums\ItemState;
-use Billify\Enums\LineKind;
-use Billify\Enums\SubscriptionState;
-use Billify\Models\Charge;
-use Billify\Models\Price;
-use Billify\Models\Subscription;
-use Billify\Models\SubscriptionItem;
-use Billify\Proration\Prorator;
-use Billify\Support\Period;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Meteric\Anchoring\BillingPlan;
+use Meteric\Anchoring\PlannedPeriod;
+use Meteric\Charges\ChargeAccruer;
+use Meteric\Contracts\Clock;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\DowngradePolicy;
+use Meteric\Enums\ItemState;
+use Meteric\Enums\LineKind;
+use Meteric\Enums\SubscriptionState;
+use Meteric\Models\Charge;
+use Meteric\Models\Price;
+use Meteric\Models\Subscription;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Proration\Prorator;
+use Meteric\Support\Period;
 
 /** Lifecycle operations on existing subscriptions: renew, change plan, cancel. */
 final class SubscriptionManager

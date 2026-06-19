@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Billify\Models;
+namespace Meteric\Models;
 
-use Billify\Casts\MoneyCast;
-use Billify\Enums\BillingMode;
-use Billify\Enums\Interval;
-use Billify\Enums\PricePurpose;
-use Billify\Enums\PricingModel;
-use Billify\Support\MoneyMath;
-use Billify\Support\RecurrenceRule;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Casts\MoneyCast;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\Interval;
+use Meteric\Enums\PricePurpose;
+use Meteric\Enums\PricingModel;
+use Meteric\Support\MoneyMath;
+use Meteric\Support\RecurrenceRule;
 
 /**
  * @property string $id
@@ -32,9 +32,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array $tiers
  * @property bool $tax_inclusive
  */
-class Price extends BillifyModel
+class Price extends MetericModel
 {
-    protected $table = 'billify_prices';
+    protected $table = 'meteric_prices';
 
     protected $guarded = [];
 

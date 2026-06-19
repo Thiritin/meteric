@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Billify\Usage;
+namespace Meteric\Usage;
 
-use Billify\Enums\Aggregation;
-use Billify\Enums\BillingMode;
-use Billify\Enums\ChargeState;
-use Billify\Enums\LineKind;
-use Billify\Models\BillingPeriod;
-use Billify\Models\Charge;
-use Billify\Models\MeterDimension;
-use Billify\Models\SubscriptionItem;
-use Billify\Models\UsageRecord;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Meteric\Enums\Aggregation;
+use Meteric\Enums\BillingMode;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\LineKind;
+use Meteric\Models\BillingPeriod;
+use Meteric\Models\Charge;
+use Meteric\Models\MeterDimension;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Models\UsageRecord;
+use Meteric\Support\Period;
 
 /**
  * Metered/hourly billing. Usage is reported as UsageRecords, then rolled up at

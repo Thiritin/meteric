@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-use Billify\Facades\Billify;
-use Billify\Models\BillingAccount;
-use Billify\Models\MeterDimension;
-use Billify\Models\Price;
-use Billify\Models\Product;
-use Billify\Models\SubscriptionItem;
-use Billify\Support\Period;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\MeterDimension;
+use Meteric\Models\Price;
+use Meteric\Models\Product;
+use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Period;
 
 uses(RefreshDatabase::class);
 
@@ -38,7 +38,7 @@ it('combines recurring, one-off and usage charges on one invoice', function () {
     $acc = BillingAccount::create(['owner_type' => 'user', 'owner_id' => '1', 'currency' => 'EUR']);
 
     // Recurring €10 + one-off setup €5 in one subscription.
-    $sub = Billify::subscribe()->account($acc)
+    $sub = Meteric::subscribe()->account($acc)
         ->at(CarbonImmutable::parse('2026-06-01T00:00:00Z'))
         ->add(recurringProductPrice(1000), 1)
         ->add(oneOffProductPrice(500), 1)
@@ -50,10 +50,10 @@ it('combines recurring, one-off and usage charges on one invoice', function () {
     $cloudPrice = Price::create(['product_id' => $cloud->id, 'currency' => 'EUR', 'amount_minor' => 0, 'pricing_model' => 'metered', 'interval' => 'month', 'interval_count' => 1, 'billing_mode' => 'in_arrears']);
     $cloudItem = SubscriptionItem::create(['subscription_id' => $sub->id, 'product_id' => $cloud->id, 'price_id' => $cloudPrice->id, 'quantity' => 1]);
 
-    Billify::recordUsage($cloudItem, 'traffic', 20, CarbonImmutable::parse('2026-06-10Z')); // €10
-    Billify::rollupUsage($cloudItem, new Period(CarbonImmutable::parse('2026-06-01Z'), CarbonImmutable::parse('2026-07-01Z')));
+    Meteric::recordUsage($cloudItem, 'traffic', 20, CarbonImmutable::parse('2026-06-10Z')); // €10
+    Meteric::rollupUsage($cloudItem, new Period(CarbonImmutable::parse('2026-06-01Z'), CarbonImmutable::parse('2026-07-01Z')));
 
-    $invoice = Billify::invoicePending($acc);
+    $invoice = Meteric::invoicePending($acc);
 
     // €10 recurring + €5 one-off + €10 usage = €25
     expect($invoice->lines)->toHaveCount(3)

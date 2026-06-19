@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Billify\Anchoring;
+namespace Meteric\Anchoring;
 
-use Billify\Enums\AnchorMode;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Enums\LineKind;
-use Billify\Support\Period;
-use Billify\Support\RecurrenceRule;
 use Carbon\CarbonImmutable;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\LineKind;
+use Meteric\Support\Period;
+use Meteric\Support\RecurrenceRule;
 
 /**
  * Plans the first cycle's billing from a signup instant, recurrence and anchor

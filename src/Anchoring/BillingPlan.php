@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Billify\Anchoring;
+namespace Meteric\Anchoring;
 
-use Billify\Support\Period;
+use Meteric\Support\Period;
 
 /**
  * Result of planning the first cycle: the period(s) to bill now and the

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Billify\Tax\IbericodeVatResolver;
-use Billify\Tax\TaxContext;
 use Brick\Money\Money;
 use Ibericode\Vat\Countries;
 use Ibericode\Vat\Period;
 use Ibericode\Vat\Rates;
 use Ibericode\Vat\Validator;
+use Meteric\Tax\IbericodeVatResolver;
+use Meteric\Tax\TaxContext;
 
 /**
  * Seed ibericode's local cache file (serialized Period[]) so Rates never hits the
@@ -16,7 +16,7 @@ use Ibericode\Vat\Validator;
  */
 function offlineRates(): Rates
 {
-    $path = sys_get_temp_dir().'/billify-vat-'.uniqid().'.cache';
+    $path = sys_get_temp_dir().'/meteric-vat-'.uniqid().'.cache';
     $data = [
         'DE' => [new Period(new DateTimeImmutable('2020-01-01'), ['standard' => 19.0, 'reduced' => 7.0])],
         'AT' => [new Period(new DateTimeImmutable('2020-01-01'), ['standard' => 20.0])],

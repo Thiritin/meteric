@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Billify\Tax;
+namespace Meteric\Tax;
 
-use Billify\Contracts\TaxResolver;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Ibericode\Vat\Countries;
 use Ibericode\Vat\Rates;
 use Ibericode\Vat\Validator;
+use Meteric\Contracts\TaxResolver;
 use Throwable;
 
 /**

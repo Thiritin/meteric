@@ -7,12 +7,12 @@ billing, so the quote matches the invoice that gets issued.
 ## Building a quote
 
 ```php
-use Billify\Facades\Billify;
-use Billify\Enums\{AnchorMode, FirstPeriodPolicy};
-use Billify\Tax\TaxContext;
+use Meteric\Facades\Meteric;
+use Meteric\Enums\{AnchorMode, FirstPeriodPolicy};
+use Meteric\Tax\TaxContext;
 use Carbon\CarbonImmutable;
 
-$quote = Billify::quote()
+$quote = Meteric::quote()
     ->anchor(AnchorMode::FixedDay, 1)                  // align to the 1st
     ->firstPeriod(FirstPeriodPolicy::ProratePlusFull)  // stub + first full month
     ->tax(new TaxContext(countryCode: 'DE'))
@@ -67,12 +67,12 @@ Checkout is subscribe then immediately invoice. Use the subscription builder and
 end with `checkout()` instead of `create()`.
 
 ```php
-use Billify\Facades\Billify;
+use Meteric\Facades\Meteric;
 
-$result = Billify::subscribe($user)
+$result = Meteric::subscribe($user)
     ->add($vpsPrice, qty: 1)
-    ->anchor(\Billify\Enums\AnchorMode::FixedDay, 1)
-    ->firstPeriod(\Billify\Enums\FirstPeriodPolicy::ProratePlusFull)
+    ->anchor(\Meteric\Enums\AnchorMode::FixedDay, 1)
+    ->firstPeriod(\Meteric\Enums\FirstPeriodPolicy::ProratePlusFull)
     ->checkout();
 
 $result->subscription;  // created Subscription

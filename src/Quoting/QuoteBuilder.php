@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Billify\Quoting;
+namespace Meteric\Quoting;
 
-use Billify\Anchoring\PeriodPlanner;
-use Billify\Anchoring\PlannedPeriod;
-use Billify\Contracts\Clock;
-use Billify\Contracts\TaxResolver;
-use Billify\Enums\AnchorMode;
-use Billify\Enums\FirstPeriodPolicy;
-use Billify\Enums\LineKind;
-use Billify\Models\Price;
-use Billify\Proration\Prorator;
-use Billify\Support\Period;
-use Billify\Tax\TaxContext;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Anchoring\PlannedPeriod;
+use Meteric\Contracts\Clock;
+use Meteric\Contracts\TaxResolver;
+use Meteric\Enums\AnchorMode;
+use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\LineKind;
+use Meteric\Models\Price;
+use Meteric\Proration\Prorator;
+use Meteric\Support\Period;
+use Meteric\Tax\TaxContext;
 
 /**
  * Builds a read-only Quote — no persistence. Same planner/prorator/tax stack as
