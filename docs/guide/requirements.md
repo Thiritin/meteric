@@ -1,6 +1,6 @@
 # Requirements
 
-- PHP 8.5+
+- PHP 8.3+
 - Laravel 12
 - PostgreSQL 13+
 

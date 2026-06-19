@@ -2,7 +2,7 @@
 
 Dynamic billing engine for hosting systems. Inspired by Stripe Billing + WHMCS.
 
-**Status:** Draft · **Laravel:** 12 · **PHP:** 8.5+
+**Status:** Draft · **Laravel:** 12 · **PHP:** 8.3+
 
 ---
 

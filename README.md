@@ -20,7 +20,7 @@ Start with the [Introduction](https://thiritin.github.io/meteric/), then
 
 ## Requirements
 
-PHP 8.5, Laravel 12, PostgreSQL 13+.
+PHP 8.3+, Laravel 12, PostgreSQL 13+.
 
 ## Installation
 

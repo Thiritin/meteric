@@ -5,7 +5,7 @@
     "license": "MIT",
     "type": "library",
     "require": {
-        "php": "^8.5",
+        "php": "^8.3",
         "brick/math": "^0.12",
         "brick/money": "^0.10",
         "ibericode/vat": "^2.1",
