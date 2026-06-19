@@ -96,13 +96,15 @@ final class UsageRollup
                     'kind' => LineKind::Usage,
                     'billing_mode' => BillingMode::InArrears,
                     'state' => ChargeState::Pending,
-                    'description' => "{$dimension->key} usage",
+                    'description' => $item->lineTitle(),
                     'quantity' => $dimension->billedUnits($used),  // blocks when block_size set, else overage units
+                    'unit' => $dimension->unit,                    // GB, hours, ...
                     'unit_rate' => $dimension->rate,
                     'amount_minor' => $amount->getMinorAmount()->toInt(),
                     'currency' => $dimension->currency,
                     'covers' => $period,
                     'metadata' => [
+                        'dimension' => $dimension->key,
                         'used' => $used,
                         'unit' => $dimension->unit,
                         'overage' => $dimension->overage($used),

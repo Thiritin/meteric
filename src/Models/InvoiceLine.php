@@ -13,12 +13,16 @@ use Meteric\Support\Period;
 
 /**
  * @property LineKind $kind
+ * @property string $description
+ * @property ?string $unit
+ * @property float $quantity
  * @property Money $amount
  * @property int $amount_minor
  * @property float $tax_rate
  * @property int $tax_minor
  * @property string $currency
  * @property ?Period $covers
+ * @property array $metadata
  */
 class InvoiceLine extends MetericModel
 {
@@ -60,5 +64,29 @@ class InvoiceLine extends MetericModel
     public function gross(): Money
     {
         return Money::ofMinor($this->amount_minor + $this->tax_minor, $this->currency);
+    }
+
+    /** The service period as a string, e.g. "2026-06-01 to 2026-07-01". Null for one-off lines. */
+    public function coversLabel(string $format = 'Y-m-d'): ?string
+    {
+        if ($this->covers === null) {
+            return null;
+        }
+
+        return $this->covers->start->format($format).' to '.$this->covers->end->format($format);
+    }
+
+    /**
+     * For usage lines: the total consumed and its unit, e.g. "1500 GB".
+     * Reads the rollup metadata; null when not a usage line.
+     */
+    public function usedSummary(): ?string
+    {
+        $used = $this->metadata['used'] ?? null;
+        if ($used === null) {
+            return null;
+        }
+
+        return rtrim(rtrim(number_format((float) $used, 2, '.', ''), '0'), '.').' '.($this->unit ?? '');
     }
 }

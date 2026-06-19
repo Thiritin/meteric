@@ -48,7 +48,7 @@ final class SubscriptionBuilder
 
     private ?CarbonImmutable $at = null;
 
-    /** @var list<array{price:Price,qty:float,resource:?Model}> */
+    /** @var list<array{price:Price,qty:float,resource:?Model,label:?string}> */
     private array $items = [];
 
     public function __construct(
@@ -111,9 +111,9 @@ final class SubscriptionBuilder
         return $this;
     }
 
-    public function add(Price $price, float $qty = 1, ?Model $resource = null): self
+    public function add(Price $price, float $qty = 1, ?Model $resource = null, ?string $label = null): self
     {
-        $this->items[] = ['price' => $price, 'qty' => $qty, 'resource' => $resource];
+        $this->items[] = ['price' => $price, 'qty' => $qty, 'resource' => $resource, 'label' => $label];
 
         return $this;
     }
@@ -159,7 +159,7 @@ final class SubscriptionBuilder
         return new Checkout($sub, $invoice);
     }
 
-    /** @param array{price:Price,qty:float,resource:?Model} $row */
+    /** @param array{price:Price,qty:float,resource:?Model,label:?string} $row */
     private function addItem(Subscription $sub, array $row, CarbonImmutable $signup, bool $deferBilling): CarbonImmutable
     {
         $price = $row['price'];
@@ -170,6 +170,7 @@ final class SubscriptionBuilder
             'price_id' => $price->id,
             'resource_type' => $row['resource']?->getMorphClass(),
             'resource_id' => $row['resource']?->getKey(),
+            'label' => $row['label'] ?? null,
             'quantity' => $row['qty'],
             'state' => ItemState::Active,
             'activated_at' => $signup,
@@ -209,7 +210,7 @@ final class SubscriptionBuilder
             'kind' => LineKind::OneOff,
             'billing_mode' => $item->billingMode(),
             'state' => ChargeState::Pending,
-            'description' => $price->product->name ?? 'One-off',
+            'description' => $item->lineTitle(),
             'quantity' => $item->quantity,
             'unit_minor' => $price->amount_minor,
             'amount_minor' => $amount->getMinorAmount()->toInt(),

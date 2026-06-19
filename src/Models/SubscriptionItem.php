@@ -20,6 +20,7 @@ use Meteric\Support\Period;
  * @property string $subscription_id
  * @property string $product_id
  * @property string $price_id
+ * @property ?string $label
  * @property float $quantity
  * @property ?BillingMode $billing_mode
  * @property ItemState $state
@@ -92,6 +93,12 @@ class SubscriptionItem extends MetericModel
     public function usageRecords(): HasMany
     {
         return $this->hasMany(UsageRecord::class, 'item_id');
+    }
+
+    /** Invoice line title for this item: the set label (e.g. a hostname), else the product name. */
+    public function lineTitle(): string
+    {
+        return $this->label ?? $this->product->name;
     }
 
     /** Effective billing mode (item override → price → in-advance default). */

@@ -51,6 +51,7 @@ return new class extends Migration
             $table->foreignUuid('price_id')->constrained('meteric_prices')->restrictOnDelete();
             $table->string('resource_type')->nullable();
             $table->string('resource_id')->nullable();
+            $table->string('label')->nullable();              // line title on invoices (e.g. the resource hostname)
             $table->decimal('quantity', 20, 6)->default(1);
             $table->string('billing_mode')->nullable();
             $table->string('state')->default(ItemState::Pending->value);

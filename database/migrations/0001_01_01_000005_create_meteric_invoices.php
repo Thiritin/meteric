@@ -52,6 +52,7 @@ return new class extends Migration
             $table->string('kind');
             $table->string('description');
             $table->decimal('quantity', 20, 6)->default(1);
+            $table->string('unit')->nullable();              // quantity unit label (month, hours, GB)
             $table->bigInteger('unit_minor')->nullable();
             $table->decimal('unit_rate', 20, 8)->nullable();
             $table->bigInteger('amount_minor');

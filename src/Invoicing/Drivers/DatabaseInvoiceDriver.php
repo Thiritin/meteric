@@ -56,6 +56,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
                     'kind' => $charge->kind,
                     'description' => $charge->description,
                     'quantity' => $charge->quantity,
+                    'unit' => $charge->unit,
                     'unit_minor' => $charge->unit_minor,
                     'unit_rate' => $charge->unit_rate,
                     'amount_minor' => $charge->amount_minor,
@@ -65,6 +66,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
                     'currency' => $draft->currency,
                     'covers' => $charge->covers,
                     'dimension_id' => $charge->dimension_id,
+                    'metadata' => $charge->metadata,
                     'sort' => $sort++,
                 ]);
 

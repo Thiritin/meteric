@@ -62,6 +62,7 @@ return new class extends Migration
             $table->string('state')->default(ChargeState::Pending->value);
             $table->string('description');
             $table->decimal('quantity', 20, 6)->default(1);
+            $table->string('unit')->nullable();                  // quantity unit label (month, hours, GB)
             $table->bigInteger('unit_minor')->nullable();        // integer unit price (fixed/per-unit)
             $table->decimal('unit_rate', 20, 8)->nullable();     // sub-cent unit rate (usage), for display
             $table->bigInteger('amount_minor');                  // rounded billable amount (integer minor)

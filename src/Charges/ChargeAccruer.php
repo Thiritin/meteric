@@ -53,8 +53,9 @@ final class ChargeAccruer
                     'kind' => $pp->kind,
                     'billing_mode' => $item->billingMode(),
                     'state' => ChargeState::Pending,
-                    'description' => $price->product->name ?? 'Subscription',
+                    'description' => $item->lineTitle(),
                     'quantity' => $item->quantity,
+                    'unit' => $price->interval?->value,   // month, year, ...
                     'unit_minor' => $price->unit_rate === null ? $price->amount_minor : null,
                     'unit_rate' => $price->unit_rate,
                     'amount_minor' => $amount->getMinorAmount()->toInt(),
