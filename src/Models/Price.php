@@ -12,6 +12,7 @@ use Meteric\Enums\BillingMode;
 use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
+use Meteric\Pricing\Tiers;
 use Meteric\Support\MoneyMath;
 use Meteric\Support\RecurrenceRule;
 
@@ -92,11 +93,25 @@ class Price extends MetericModel
     }
 
     /**
-     * Charge for $quantity units of a per-unit/usage price: round(qty × unit_rate)
-     * to currency minor. Falls back to the flat amount when no rate is set.
+     * Charge for $quantity units.
+     *
+     *  - Volume / Tiered: priced from the `tiers` table (quantity discounts).
+     *  - per-unit with a unit_rate: round(qty × unit_rate).
+     *  - otherwise: flat amount × qty.
      */
     public function amountFor(float|int|string $quantity): Money
     {
+        $qty = (float) $quantity;
+        $tiers = $this->tiers ?? [];
+
+        if ($tiers !== [] && $this->pricing_model === PricingModel::Volume) {
+            return Tiers::volume($tiers, $qty, $this->currency);
+        }
+
+        if ($tiers !== [] && $this->pricing_model === PricingModel::Tiered) {
+            return Tiers::graduated($tiers, $qty, $this->currency);
+        }
+
         if ($this->unit_rate === null) {
             return $this->amount->multipliedBy((string) $quantity, RoundingMode::HALF_UP);
         }

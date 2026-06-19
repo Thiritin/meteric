@@ -102,5 +102,34 @@ $price->amountFor(100000);          // Money, round(qty × unit_rate)
 ```
 
 `amountFor($qty)` multiplies by `unit_rate` when set, otherwise by the flat
-`amount`. Caps and tiers live on the price (`cap_minor`, `tiers`); usage caps
-and allowances live on the [meter dimension](/usage/usage-billing).
+`amount`. Usage caps and allowances live on the
+[meter dimension](/usage/usage-billing).
+
+### Quantity discounts (tiers)
+
+To make a quantity cheaper as it grows, set the `tiers` table and a tiered
+pricing model. A tier is `{ up_to, unit_minor }`, ordered low to high, where
+`up_to: null` is the last, unbounded tier.
+
+```php
+$price = Price::create([
+    'product_id' => $product->id,
+    'currency' => 'EUR',
+    'pricing_model' => PricingModel::Volume,   // or Tiered
+    'tiers' => [
+        ['up_to' => 10,   'unit_minor' => 500], // 1 to 10 at €5
+        ['up_to' => 50,   'unit_minor' => 400], // 11 to 50 at €4
+        ['up_to' => null, 'unit_minor' => 300], // 51+ at €3
+    ],
+]);
+```
+
+Two models, picked by `pricing_model`:
+
+- **`Volume`**: the whole quantity is priced at the tier it lands in. 60 units
+  bills `60 × €3 = €180`. This is the usual "the more you buy, the cheaper" deal.
+- **`Tiered`**: each slice is priced at its own tier, then summed. 60 units bills
+  `10 × €5 + 40 × €4 + 10 × €3 = €240`.
+
+This runs through `amountFor()`, so it applies anywhere a quantity is priced:
+base items, configurable options (slots, extra IPs), and addons.
