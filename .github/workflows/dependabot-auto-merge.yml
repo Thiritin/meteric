@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Fetch update metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       # Patch and minor updates merge themselves once CI passes (the required
       # ci-success check gates the actual merge). Major updates open a PR and
