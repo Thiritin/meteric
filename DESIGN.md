@@ -325,17 +325,26 @@ Distinct from quantity/addon edits: switching the **base product/plan** of a
 running item (Webhosting Starter → Pro, VPS S → XL, even across product *types*
 where the host allows).
 
-- Same engine as upgrade/downgrade: credit the old plan's unused portion + charge
-  the new plan's portion, both prorated to the change instant within the current
-  period.
-- Change can be **immediate** or **scheduled** (`apply_at: now | period_end`).
-  Scheduled changes are stored and applied by the cycle job.
+Direction is detected by price; the two directions behave differently:
+
+- **Upgrade** (new > old): charge the **prorated difference now** — credit the
+  old plan's unused portion + charge the new plan's prorated portion, both to the
+  change instant within the current period. You want more capacity → pay the gap.
+- **Downgrade** (new < old): a `DowngradePolicy`, per product (`product.config`)
+  or per call. **Neither refunds, credits, nor extends** — they differ only on
+  timing:
+  - `defer` — keep the higher tier until the paid period ends, then renew at the
+    lower price (contracts). Stored as a `pending_change`, applied at renewal.
+  - `discard` — switch to the lower plan **now**; the unused value of the higher
+    plan is **forfeited** (prepaid). No money moves.
+- **Provisioning-agnostic.** Billify never resizes the resource. The host app
+  performs the stop/resize/start and calls `changePlan(..., at: $whenDone)`; the
+  reported instant is what bills. For `defer`, the app resizes at the boundary.
+- **Hourly / metered** plans: a change is just a **rate change going forward** —
+  no proration. Hours before the change bill at the old tier's rate, hours after
+  at the new (each tier carries its own meter dimension; usage rolls up per
+  dimension). Use `discard` to switch the rate immediately.
 - Crossing recurrence (monthly → annual) re-anchors the period per §3.4.
-- Crossing billing-mode (advance ↔ arrears) handled per UC-T7.
-- Downgrades may **defer** by config (no instant refund; new lower price at next
-  cycle) — common in hosting.
-- Every change emits `SubscriptionItemChanged` with a `ChangePreview` of the
-  resulting proration for audit + display.
 
 ### 3.6 Quote / Preview API (checkout rendering)
 
@@ -424,7 +433,8 @@ Grouped by lifecycle. Each is a target acceptance test.
 ### 4.1h Package / plan changes
 - UC-PC1 Switch base plan mid-cycle (Starter→Pro): prorated credit + charge.
 - UC-PC2 Scheduled change applied at period end, not now.
-- UC-PC3 Deferred downgrade: no instant refund, lower price next cycle.
+- UC-PC3 Deferred downgrade (`defer`): keep higher tier till period end, lower next cycle.
+- UC-PC3b Discard downgrade (`discard`, prepaid): switch now, unused value forfeited.
 - UC-PC4 Plan change crossing interval (monthly→annual) re-anchors correctly.
 - UC-PC5 `quoteChange()` returns the exact proration before the change commits.
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Billify;
 
 use Billify\Contracts\InvoiceDriver;
+use Billify\Enums\DowngradePolicy;
 use Billify\Enums\Interval;
 use Billify\Enums\InvoiceState;
 use Billify\Invoicing\InvoiceDraft;
@@ -167,10 +168,10 @@ final class Billify
         return app(SubscriptionManager::class)->renew($sub, $at);
     }
 
-    /** Switch an item's plan: 'now' (prorated) or 'period_end' (deferred). */
-    public function changePlan(SubscriptionItem $item, Price $newPrice, string $apply = 'now', ?CarbonImmutable $at = null): SubscriptionItem
+    /** Switch an item's plan. Upgrade → prorated charge now; downgrade → defer or discard. */
+    public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
     {
-        return app(SubscriptionManager::class)->changePlan($item, $newPrice, $apply, $at);
+        return app(SubscriptionManager::class)->changePlan($item, $newPrice, $downgrade, $at);
     }
 
     /** Cancel a subscription: 'period_end' or 'now'. */

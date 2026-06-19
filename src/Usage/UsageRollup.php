@@ -61,7 +61,15 @@ final class UsageRollup
         $created = [];
 
         return DB::transaction(function () use ($item, $sub, $period, &$created): array {
-            foreach ($item->product->meterDimensions as $dimension) {
+            // Discover dimensions from the usage itself, not the item's current product —
+            // so usage recorded before a plan change (different product) still rolls up.
+            $dimensionIds = UsageRecord::query()->unbilled()
+                ->where('item_id', $item->id)
+                ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
+                ->distinct()->pluck('dimension_id');
+
+            foreach ($dimensionIds as $dimensionId) {
+                $dimension = MeterDimension::findOrFail($dimensionId);
                 $records = UsageRecord::query()->unbilled()
                     ->where('item_id', $item->id)
                     ->where('dimension_id', $dimension->id)

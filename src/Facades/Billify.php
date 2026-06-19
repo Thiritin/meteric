@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Billify\Subscriptions\SubscriptionBuilder subscribe(?\Illuminate\Database\Eloquent\Model $customer = null)
  * @method static \Billify\Subscriptions\SubscriptionBuilder checkout(?\Illuminate\Database\Eloquent\Model $customer = null)
  * @method static array renew(\Billify\Models\Subscription $sub, ?\Carbon\CarbonImmutable $at = null)
- * @method static \Billify\Models\SubscriptionItem changePlan(\Billify\Models\SubscriptionItem $item, \Billify\Models\Price $newPrice, string $apply = 'now', ?\Carbon\CarbonImmutable $at = null)
+ * @method static \Billify\Models\SubscriptionItem changePlan(\Billify\Models\SubscriptionItem $item, \Billify\Models\Price $newPrice, ?\Billify\Enums\DowngradePolicy $downgrade = null, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Billify\Models\Subscription cancel(\Billify\Models\Subscription $sub, string $at = 'period_end', ?\Carbon\CarbonImmutable $when = null)
  * @method static \Billify\Models\Addon addAddon(\Billify\Models\SubscriptionItem $item, \Billify\Models\Price $price, ?string $group = null, float $qty = 1, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Billify\Models\ItemOption setOption(\Billify\Models\SubscriptionItem $item, string $key, string $value, string $type, ?\Billify\Models\Price $price = null, float $qty = 1, ?\Carbon\CarbonImmutable $at = null)

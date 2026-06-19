@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Billify\Enums\DowngradePolicy;
 use Billify\Enums\SubscriptionState;
 use Billify\Facades\Billify;
 use Billify\Models\BillingAccount;
@@ -67,8 +68,8 @@ it('prorates an immediate plan change (credit old + charge new)', function () {
     $item->setRelation('subscription', $sub);
     $item->setRelation('price', $small);
 
-    // Upgrade halfway through June (15 days left of 30).
-    Billify::changePlan($item, $large, 'now', CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+    // Upgrade halfway through June (15 days left of 30) — charges the difference now.
+    Billify::changePlan($item, $large, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
 
     $charges = Charge::where('subscription_id', $sub->id)->get();
     // base 1000 + credit (~-500 unused small) + prorated large (~+1500)
@@ -79,23 +80,42 @@ it('prorates an immediate plan change (credit old + charge new)', function () {
     expect($net)->toBe(1000 - 500 + 1500); // 2000
 });
 
-it('schedules a deferred plan change for period end', function () {
+it('defers a downgrade to the next renewal (contracts)', function () {
     $acc = freshAccount();
-    $small = planPrice(1000, 'small');
     $large = planPrice(3000, 'large');
-    $sub = subAt($acc, $small, '2026-06-01T00:00:00Z');
+    $small = planPrice(1000, 'small');
+    $sub = subAt($acc, $large, '2026-06-01T00:00:00Z');
     $item = $sub->items->first();
     $item->setRelation('subscription', $sub);
-    $item->setRelation('price', $small);
+    $item->setRelation('price', $large);
 
-    Billify::changePlan($item, $large, 'period_end');
+    Billify::changePlan($item, $small, DowngradePolicy::Defer, CarbonImmutable::parse('2026-06-16T00:00:00Z'));
 
-    expect($item->fresh()->price_id)->toBe($small->id)              // not yet applied
-        ->and($item->fresh()->pending_change['price_id'])->toBe($large->id);
+    // No money moved; still on the large plan until the period ends.
+    expect(Charge::where('subscription_id', $sub->id)->count())->toBe(1) // only the original
+        ->and($item->fresh()->price_id)->toBe($large->id)
+        ->and($item->fresh()->pending_change['price_id'])->toBe($small->id);
 
-    // Renew at next cycle applies the change, then bills the new price.
+    // Renewal applies the change and bills the lower price.
     Billify::renew($sub, CarbonImmutable::parse('2026-07-02T00:00:00Z'));
-    expect($item->fresh()->price_id)->toBe($large->id);
+    expect($item->fresh()->price_id)->toBe($small->id);
+    expect(Charge::where('subscription_id', $sub->id)->where('amount_minor', 1000)->exists())->toBeTrue();
+});
+
+it('discards a downgrade immediately with no refund (prepaid)', function () {
+    $acc = freshAccount();
+    $large = planPrice(3000, 'large');
+    $small = planPrice(1000, 'small');
+    $sub = subAt($acc, $large, '2026-06-01T00:00:00Z');
+    $item = $sub->items->first();
+    $item->setRelation('subscription', $sub);
+    $item->setRelation('price', $large);
+
+    Billify::changePlan($item, $small, DowngradePolicy::Discard, CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+
+    // Switched now, no credit/refund — only the original €30 charge exists.
+    expect($item->fresh()->price_id)->toBe($small->id)
+        ->and(Charge::where('subscription_id', $sub->id)->count())->toBe(1);
 });
 
 it('cancels immediately', function () {

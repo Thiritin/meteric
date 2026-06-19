@@ -9,6 +9,7 @@ use Billify\Anchoring\PlannedPeriod;
 use Billify\Charges\ChargeAccruer;
 use Billify\Contracts\Clock;
 use Billify\Enums\ChargeState;
+use Billify\Enums\DowngradePolicy;
 use Billify\Enums\ItemState;
 use Billify\Enums\LineKind;
 use Billify\Enums\SubscriptionState;
@@ -90,28 +91,48 @@ final class SubscriptionManager
     }
 
     /**
-     * Switch an item's plan. `now` prorates immediately (credit old + charge new);
-     * `period_end` defers the swap to the next renewal.
+     * Switch an item's plan. Direction is detected by price:
+     *  - Upgrade  → charge the prorated difference now (credit unused old + charge prorated new).
+     *  - Downgrade→ apply the downgrade policy: `defer` (swap at next renewal, keep current tier
+     *               until then) or `discard` (swap now, unused value forfeited — no credit/refund).
+     *
+     * Neither downgrade path moves money mid-cycle. $downgrade overrides the product's policy.
      */
-    public function changePlan(SubscriptionItem $item, Price $newPrice, string $apply = 'now', ?CarbonImmutable $at = null): SubscriptionItem
+    public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
     {
         $at ??= $this->clock->now();
+        $qty = (float) $item->quantity;
+        $oldFull = $item->price->amountFor($qty);
+        $newFull = $newPrice->amountFor($qty);
 
-        if ($apply === 'period_end') {
+        if ($newFull->isGreaterThan($oldFull)) {
+            return $this->upgrade($item, $newPrice, $at);
+        }
+
+        $policy = $downgrade ?? $item->product?->downgradePolicy() ?? DowngradePolicy::Defer;
+
+        if ($policy === DowngradePolicy::Defer) {
             $item->forceFill(['pending_change' => ['price_id' => $newPrice->id, 'apply_at' => $item->current_period?->end?->toIso8601String()]])->save();
 
             return $item;
         }
 
+        // Discard: switch now, no money. Unused value of the higher plan is forfeited.
+        $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+
+        return $item->refresh();
+    }
+
+    private function upgrade(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at): SubscriptionItem
+    {
         return DB::transaction(function () use ($item, $newPrice, $at): SubscriptionItem {
             $sub = $item->subscription;
             $period = $item->current_period;
-            $oldFull = $item->price->amountFor((float) $item->quantity);
-            $newFull = $newPrice->amountFor((float) $item->quantity);
+            $qty = (float) $item->quantity;
 
             if ($period !== null) {
-                $unusedOld = $this->prorator->for($period, $at, $oldFull)->amount();
-                $proratedNew = $this->prorator->for($period, $at, $newFull)->amount();
+                $unusedOld = $this->prorator->for($period, $at, $item->price->amountFor($qty))->amount();
+                $proratedNew = $this->prorator->for($period, $at, $newPrice->amountFor($qty))->amount();
 
                 $this->prorationCharge($item, $sub, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
                 $this->prorationCharge($item, $sub, LineKind::Prorated, $proratedNew, 'Upgrade '.($newPrice->product->name ?? 'plan'));

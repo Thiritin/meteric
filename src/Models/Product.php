@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Billify\Models;
 
+use Billify\Enums\DowngradePolicy;
 use Billify\Enums\PricePurpose;
 use Billify\Enums\PricingModel;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -65,5 +66,12 @@ class Product extends BillifyModel
     public function isMetered(): bool
     {
         return $this->pricing_model->isUsageBased();
+    }
+
+    /** Downgrade policy for this product (config 'downgrade' key); defaults to defer. */
+    public function downgradePolicy(): DowngradePolicy
+    {
+        return DowngradePolicy::tryFrom($this->config['downgrade'] ?? '')
+            ?? DowngradePolicy::Defer;
     }
 }
