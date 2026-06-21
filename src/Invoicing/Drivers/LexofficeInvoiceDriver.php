@@ -233,6 +233,10 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         $date = ($note->issued_at ?? Carbon::now())->format('Y-m-d\TH:i:s.vP');
         $currency = $note->currency;
 
+        // Mirror the credited invoice's tax rate so the credit note reverses
+        // the same VAT it charged. The credited amount is net.
+        $taxRate = (float) ($invoice?->lines->max('tax_rate') ?? 0);
+
         return [
             'voucherDate' => $date,
             'address' => [
@@ -248,7 +252,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
                 'unitPrice' => [
                     'currency' => $currency,
                     'netAmount' => $this->minorToDecimal($note->amount_minor, $currency),
-                    'taxRatePercentage' => 0,
+                    'taxRatePercentage' => (int) round($taxRate * 100),
                 ],
             ]],
             'totalPrice' => [

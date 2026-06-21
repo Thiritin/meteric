@@ -217,6 +217,7 @@ it('issues a credit note through the lexoffice driver and stores the returned id
             && $request->hasHeader('Authorization', 'Bearer test-token')
             && $body['lineItems'][0]['name'] === 'Customer refund'
             && $body['lineItems'][0]['unitPrice']['netAmount'] === 15.6
+            && $body['lineItems'][0]['unitPrice']['taxRatePercentage'] === 19  // mirrors the invoice VAT
             && $body['taxConditions']['taxType'] === 'net';
     });
 });

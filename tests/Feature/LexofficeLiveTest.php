@@ -82,7 +82,8 @@ it('issues a real credit note in the lexoffice sandbox', function () {
     $meteric->subscribe()->account($acc)->at(CarbonImmutable::parse('2026-06-01Z'))->add($price, 1, null, label: 'vps-cn.example')->create();
     $invoice = $meteric->invoicePending($acc);
 
-    $note = $meteric->creditNote($invoice, Money::ofMinor($invoice->total_minor, 'EUR'), 'Sandbox correction');
+    // Credit the net amount; the driver mirrors the invoice's VAT on top.
+    $note = $meteric->creditNote($invoice, Money::ofMinor($invoice->subtotal_minor, 'EUR'), 'Sandbox correction');
 
     // A real lexoffice credit-note document was created.
     expect($note->external_id)->not->toBeNull();

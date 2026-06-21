@@ -104,12 +104,18 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     {
         $model = Invoice::findOrFail($invoice->invoiceId);
 
+        // Credit the given net amount at the invoice's tax rate, so the note
+        // reverses the same VAT the invoice charged.
+        $rate = (float) ($model->lines->max('tax_rate') ?? 0);
+        $net = $draft->amount->getMinorAmount()->toInt();
+
         $note = CreditNote::create([
             'invoice_id' => $model->id,
             'driver' => 'database',
             'state' => CreditState::Issued,
             'reason' => $draft->reason,
-            'amount_minor' => $draft->amount->getMinorAmount()->toInt(),
+            'amount_minor' => $net,
+            'tax_minor' => (int) round($net * $rate),
             'currency' => $draft->amount->getCurrency()->getCurrencyCode(),
             'number' => $this->nextNumber('CN'),
             'issued_at' => now(),
