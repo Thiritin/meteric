@@ -55,6 +55,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
                     'charge_id' => $charge->id,
                     'kind' => $charge->kind,
                     'title' => $charge->title,
+                    'group' => $charge->group,
                     'description' => $charge->description,
                     'quantity' => $charge->quantity,
                     'unit' => $charge->unit,

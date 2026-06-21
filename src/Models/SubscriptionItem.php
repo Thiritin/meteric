@@ -21,6 +21,7 @@ use Meteric\Support\Period;
  * @property string $product_id
  * @property string $price_id
  * @property ?string $label
+ * @property ?string $group
  * @property float $quantity
  * @property ?BillingMode $billing_mode
  * @property ItemState $state

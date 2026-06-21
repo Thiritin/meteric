@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Brick\Money\Money;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -18,6 +19,7 @@ use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
+use Meteric\Support\Period;
 
 uses(RefreshDatabase::class);
 
@@ -117,6 +119,44 @@ it('issues an invoice through the lexoffice driver and stores the external id', 
             && $body['lineItems'][0]['description'] === "Hosting plan\nFrankfurt region"
             && $body['lineItems'][0]['quantity'] === 1.0
             && $body['lineItems'][0]['unitName'] === 'Stück';
+    });
+});
+
+it('groups lines under text separators and spans a service period', function () {
+    Http::fake([
+        'api.lexoffice.io/v1/invoices*' => Http::response(lexInvoiceResponse(), 201),
+    ]);
+
+    $account = lexAccount();
+    $covers = new Period(CarbonImmutable::parse('2026-06-01Z'), CarbonImmutable::parse('2026-07-01Z'));
+    foreach ([['Domains', 'example.com', 1200], ['Servers', 'VPS XL - h1', 1000], ['Servers', 'VPS XL - h2', 1000]] as [$group, $title, $minor]) {
+        Charge::create([
+            'account_id' => $account->id, 'origin_type' => 'manual', 'origin_id' => (string) Str::uuid(),
+            'kind' => LineKind::Recurring, 'billing_mode' => 'in_advance', 'state' => ChargeState::Pending,
+            'title' => $title, 'group' => $group, 'description' => '2026-06-01 to 2026-07-01',
+            'quantity' => 1, 'unit' => 'month', 'unit_minor' => $minor, 'amount_minor' => $minor,
+            'currency' => 'EUR', 'covers' => $covers, 'idempotency_key' => (string) Str::uuid(),
+        ]);
+    }
+
+    lexDriver()->issue(lexDraft($account));
+
+    Http::assertSent(function ($request) {
+        $body = $request->data();
+        $items = $body['lineItems'];
+        $names = array_column($items, 'name');
+        $texts = array_values(array_filter($items, fn ($i) => $i['type'] === 'text'));
+
+        // One text separator per group, the group's lines following it.
+        return count($texts) === 2
+            && $texts[0]['name'] === 'Domains'
+            && $texts[1]['name'] === 'Servers'
+            && in_array('example.com', $names, true)
+            && in_array('VPS XL - h1', $names, true)
+            // The service period spans the billed range.
+            && $body['shippingConditions']['shippingType'] === 'serviceperiod'
+            && str_starts_with($body['shippingConditions']['shippingDate'], '2026-06-01')
+            && str_starts_with($body['shippingConditions']['shippingEndDate'], '2026-07-01');
     });
 });
 

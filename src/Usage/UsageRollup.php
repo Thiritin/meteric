@@ -97,6 +97,7 @@ final class UsageRollup
                     'billing_mode' => BillingMode::InArrears,
                     'state' => ChargeState::Pending,
                     'title' => $item->lineTitle(),
+                    'group' => $item->group,
                     'description' => sprintf("%s: %s %s\n%s", ucfirst($dimension->key), $this->trim($used), $dimension->unit, $period->label()),
                     'quantity' => $dimension->billedUnits($used),  // blocks when block_size set, else overage units
                     'unit' => $dimension->unit,                    // GB, hours, ...

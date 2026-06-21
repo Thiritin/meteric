@@ -118,6 +118,7 @@ final class CommitmentManager
             'billing_mode' => $item->billingMode(),
             'state' => ChargeState::Pending,
             'title' => $item->lineTitle(),
+            'group' => $item->group,
             'description' => $desc,
             'quantity' => 1,
             'unit_minor' => $amount->getMinorAmount()->toInt(),

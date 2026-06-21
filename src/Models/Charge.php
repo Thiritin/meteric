@@ -22,6 +22,7 @@ use Meteric\Support\Period;
  * @property BillingMode $billing_mode
  * @property LineKind $kind
  * @property ?string $title
+ * @property ?string $group
  * @property ?string $description
  * @property ?string $unit
  * @property Money $amount

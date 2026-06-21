@@ -54,6 +54,7 @@ final class ChargeAccruer
                     'billing_mode' => $item->billingMode(),
                     'state' => ChargeState::Pending,
                     'title' => $item->lineTitle(),
+                    'group' => $item->group,
                     'description' => $pp->period->label(),    // the service period, on its own line
                     'quantity' => $item->quantity,
                     'unit' => $price->interval?->value,   // month, year, ...

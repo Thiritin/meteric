@@ -48,7 +48,7 @@ final class SubscriptionBuilder
 
     private ?CarbonImmutable $at = null;
 
-    /** @var list<array{price:Price,qty:float,resource:?Model,label:?string}> */
+    /** @var list<array{price:Price,qty:float,resource:?Model,label:?string,group:?string}> */
     private array $items = [];
 
     public function __construct(
@@ -111,9 +111,9 @@ final class SubscriptionBuilder
         return $this;
     }
 
-    public function add(Price $price, float $qty = 1, ?Model $resource = null, ?string $label = null): self
+    public function add(Price $price, float $qty = 1, ?Model $resource = null, ?string $label = null, ?string $group = null): self
     {
-        $this->items[] = ['price' => $price, 'qty' => $qty, 'resource' => $resource, 'label' => $label];
+        $this->items[] = ['price' => $price, 'qty' => $qty, 'resource' => $resource, 'label' => $label, 'group' => $group];
 
         return $this;
     }
@@ -159,7 +159,7 @@ final class SubscriptionBuilder
         return new Checkout($sub, $invoice);
     }
 
-    /** @param array{price:Price,qty:float,resource:?Model,label:?string} $row */
+    /** @param array{price:Price,qty:float,resource:?Model,label:?string,group:?string} $row */
     private function addItem(Subscription $sub, array $row, CarbonImmutable $signup, bool $deferBilling): CarbonImmutable
     {
         $price = $row['price'];
@@ -171,6 +171,7 @@ final class SubscriptionBuilder
             'resource_type' => $row['resource']?->getMorphClass(),
             'resource_id' => $row['resource']?->getKey(),
             'label' => $row['label'] ?? null,
+            'group' => $row['group'] ?? null,
             'quantity' => $row['qty'],
             'state' => ItemState::Active,
             'activated_at' => $signup,
@@ -211,6 +212,7 @@ final class SubscriptionBuilder
             'billing_mode' => $item->billingMode(),
             'state' => ChargeState::Pending,
             'title' => $item->lineTitle(),
+            'group' => $item->group,
             'description' => $price->purpose->value === 'setup' ? 'Setup' : null,
             'quantity' => $item->quantity,
             'unit_minor' => $price->amount_minor,

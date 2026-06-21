@@ -127,28 +127,80 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         $profile = $draft->account->tax_profile ?? [];
         $date = ($invoice->issued_at ?? Carbon::now())->format('Y-m-d\TH:i:s.vP');
 
-        $lineItems = $invoice->lines
-            ->map(fn (InvoiceLine $line): array => $this->lineItem($line, $invoice->currency))
-            ->values()
-            ->all();
-
         return [
             'voucherDate' => $date,
             'address' => [
                 'name' => (string) ($profile['name'] ?? 'Customer'),
                 'countryCode' => (string) ($profile['country'] ?? $this->defaultCountry),
             ],
-            'lineItems' => $lineItems,
+            'lineItems' => $this->lineItems($invoice),
             'totalPrice' => [
                 'currency' => $invoice->currency,
             ],
             'taxConditions' => [
                 'taxType' => $this->taxType,
             ],
-            'shippingConditions' => [
-                'shippingDate' => $date,
-                'shippingType' => 'service',
-            ],
+            'shippingConditions' => $this->shippingConditions($invoice, $date),
+        ];
+    }
+
+    /**
+     * Build the lexoffice line items. Lines that carry a `group` are clustered
+     * into sections, each preceded by a `type:text` separator (the heading), so
+     * invoices with many resources or usage lines stay readable. Ungrouped lines
+     * lead, in their original order; with no groups the output is flat.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function lineItems(Invoice $invoice): array
+    {
+        $lines = $invoice->lines->sortBy('sort')->values();
+
+        $ungrouped = [];
+        /** @var array<string,list<array<string,mixed>>> $groups */
+        $groups = [];
+        foreach ($lines as $line) {
+            $item = $this->lineItem($line, $invoice->currency);
+            if ($line->group === null || $line->group === '') {
+                $ungrouped[] = $item;
+            } else {
+                $groups[$line->group][] = $item;
+            }
+        }
+
+        $out = $ungrouped;
+        foreach ($groups as $name => $items) {
+            $out[] = ['type' => 'text', 'name' => $name, 'description' => ''];
+            foreach ($items as $item) {
+                $out[] = $item;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The service timeframe lexoffice shows on the invoice. Spans the billed
+     * periods (earliest line start to latest line end) as a `serviceperiod`;
+     * falls back to a single-date `service` when no line carries a period.
+     *
+     * @return array<string,string>
+     */
+    private function shippingConditions(Invoice $invoice, string $fallbackDate): array
+    {
+        $periods = $invoice->lines->map(fn (InvoiceLine $line) => $line->covers)->filter()->values();
+
+        if ($periods->isEmpty()) {
+            return ['shippingDate' => $fallbackDate, 'shippingType' => 'service'];
+        }
+
+        $start = $periods->map(fn ($p) => $p->start)->min();
+        $end = $periods->map(fn ($p) => $p->end)->max();
+
+        return [
+            'shippingDate' => $start->format('Y-m-d\TH:i:s.vP'),
+            'shippingEndDate' => $end->format('Y-m-d\TH:i:s.vP'),
+            'shippingType' => 'serviceperiod',
         ];
     }
 

@@ -51,9 +51,13 @@ it('creates a real invoice in the lexoffice sandbox', function () {
         'pricing_model' => 'fixed', 'interval' => 'month', 'interval_count' => 1,
     ]);
 
+    $domain = Product::create(['type' => 'domain', 'slug' => 'live-d-'.uniqid(), 'name' => 'Domain', 'pricing_model' => 'fixed']);
+    $domainPrice = Price::create(['product_id' => $domain->id, 'currency' => 'EUR', 'amount_minor' => 1200, 'pricing_model' => 'fixed', 'interval' => 'year', 'interval_count' => 1]);
+
     $meteric->subscribe()->account($acc)
         ->at(CarbonImmutable::parse('2026-06-01Z'))
-        ->add($price, 1, null, label: 'vps-live.example')
+        ->add($price, 1, null, label: 'vps-live.example', group: 'Servers')
+        ->add($domainPrice, 1, null, label: 'example.com', group: 'Domains')
         ->create();
 
     $invoice = $meteric->invoicePending($acc);
