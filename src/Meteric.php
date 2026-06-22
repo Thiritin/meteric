@@ -13,6 +13,7 @@ use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\Interval;
 use Meteric\Enums\InvoiceState;
+use Meteric\Enums\UpgradePolicy;
 use Meteric\Events\CreditNoteIssued;
 use Meteric\Events\InvoiceIssued;
 use Meteric\Events\InvoicePaid;
@@ -221,9 +222,9 @@ final class Meteric
     }
 
     /** Switch an item's plan. Upgrade → prorated charge now; downgrade → defer or discard. */
-    public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
+    public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?UpgradePolicy $upgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
     {
-        return app(SubscriptionManager::class)->changePlan($item, $newPrice, $downgrade, $at);
+        return app(SubscriptionManager::class)->changePlan($item, $newPrice, $downgrade, $upgrade, $at);
     }
 
     /** Cancel a subscription: 'period_end' or 'now'. */

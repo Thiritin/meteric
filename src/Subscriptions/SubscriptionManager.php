@@ -18,6 +18,7 @@ use Meteric\Enums\InvoiceState;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\SubscriptionState;
+use Meteric\Enums\UpgradePolicy;
 use Meteric\Events\InvoiceOverdue;
 use Meteric\Events\SubscriptionCanceled;
 use Meteric\Events\SubscriptionPastDue;
@@ -179,14 +180,16 @@ final class SubscriptionManager
     }
 
     /**
-     * Switch an item's plan. Direction is detected by price:
-     *  - Upgrade  → charge the prorated difference now (credit unused old + charge prorated new).
-     *  - Downgrade→ apply the downgrade policy: `defer` (swap at next renewal, keep current tier
-     *               until then) or `discard` (swap now, unused value forfeited — no credit/refund).
+     * Switch an item's plan. Direction is detected by price. Each direction takes
+     * a policy ($upgrade / $downgrade overrides the product default):
      *
-     * Neither downgrade path moves money mid-cycle. $downgrade overrides the product's policy.
+     *  Upgrade   prorate_now: credit the unused old, charge the prorated new (default).
+     *            defer: swap at the next renewal. full_now: swap and charge the full new plan.
+     *  Downgrade defer: keep the tier until the period ends, then renew lower.
+     *            discard: swap now, unused value forfeited. credit: swap now, credit the
+     *            unused old as a pending charge on the next invoice.
      */
-    public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
+    public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?UpgradePolicy $upgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
     {
         $at ??= $this->clock->now();
         $qty = (float) $item->quantity;
@@ -194,24 +197,30 @@ final class SubscriptionManager
         $newFull = $newPrice->amountFor($qty);
 
         if ($newFull->isGreaterThan($oldFull)) {
-            return $this->upgrade($item, $newPrice, $at);
+            return match ($upgrade ?? UpgradePolicy::ProrateNow) {
+                UpgradePolicy::Defer => $this->deferChange($item, $newPrice),
+                UpgradePolicy::FullNow => $this->switchNow($item, $newPrice, $at, chargeFull: true),
+                UpgradePolicy::ProrateNow => $this->prorateChange($item, $newPrice, $at),
+            };
         }
 
-        $policy = $downgrade ?? $item->product?->downgradePolicy() ?? DowngradePolicy::Defer;
-
-        if ($policy === DowngradePolicy::Defer) {
-            $item->forceFill(['pending_change' => ['price_id' => $newPrice->id, 'apply_at' => $item->current_period?->end?->toIso8601String()]])->save();
-
-            return $item;
-        }
-
-        // Discard: switch now, no money. Unused value of the higher plan is forfeited.
-        $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
-
-        return $item->refresh();
+        return match ($downgrade ?? $item->product?->downgradePolicy() ?? DowngradePolicy::Defer) {
+            DowngradePolicy::Defer => $this->deferChange($item, $newPrice),
+            DowngradePolicy::Credit => $this->switchNow($item, $newPrice, $at, creditOld: true),
+            DowngradePolicy::Discard => $this->switchNow($item, $newPrice, $at),
+        };
     }
 
-    private function upgrade(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at): SubscriptionItem
+    /** Queue the swap for the next renewal boundary; no money moves mid-cycle. */
+    private function deferChange(SubscriptionItem $item, Price $newPrice): SubscriptionItem
+    {
+        $item->forceFill(['pending_change' => ['price_id' => $newPrice->id, 'apply_at' => $item->current_period?->end?->toIso8601String()]])->save();
+
+        return $item;
+    }
+
+    /** Prorate_now upgrade: credit the unused old and charge the prorated new. */
+    private function prorateChange(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at): SubscriptionItem
     {
         return DB::transaction(function () use ($item, $newPrice, $at): SubscriptionItem {
             $sub = $item->subscription;
@@ -224,6 +233,33 @@ final class SubscriptionManager
 
                 $this->prorationCharge($item, $sub, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
                 $this->prorationCharge($item, $sub, LineKind::Prorated, $proratedNew, 'Upgrade '.($newPrice->product->name ?? 'plan'));
+            }
+
+            $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+
+            return $item->refresh();
+        });
+    }
+
+    /**
+     * Swap the plan immediately. Optionally credit the unused old value (downgrade
+     * `credit`) and/or charge the full new plan (upgrade `full_now`); plain discard
+     * does neither. Credits and charges are pending, landing on the next invoice.
+     */
+    private function switchNow(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at, bool $creditOld = false, bool $chargeFull = false): SubscriptionItem
+    {
+        return DB::transaction(function () use ($item, $newPrice, $at, $creditOld, $chargeFull): SubscriptionItem {
+            $sub = $item->subscription;
+            $period = $item->current_period;
+            $qty = (float) $item->quantity;
+
+            if ($creditOld && $period !== null) {
+                $unusedOld = $this->prorator->for($period, $at, $item->price->amountFor($qty))->amount();
+                $this->prorationCharge($item, $sub, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
+            }
+
+            if ($chargeFull) {
+                $this->prorationCharge($item, $sub, LineKind::Prorated, $newPrice->amountFor($qty), 'Upgrade '.($newPrice->product->name ?? 'plan'));
             }
 
             $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();

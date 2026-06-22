@@ -21,7 +21,7 @@ use Meteric\Models\Payment;
  * @method static \Meteric\Subscriptions\SubscriptionBuilder subscribe(?\Illuminate\Database\Eloquent\Model $customer = null)
  * @method static \Meteric\Subscriptions\SubscriptionBuilder checkout(?\Illuminate\Database\Eloquent\Model $customer = null)
  * @method static array renew(\Meteric\Models\Subscription $sub, ?\Carbon\CarbonImmutable $at = null)
- * @method static \Meteric\Models\SubscriptionItem changePlan(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Meteric\Enums\DowngradePolicy $downgrade = null, ?\Carbon\CarbonImmutable $at = null)
+ * @method static \Meteric\Models\SubscriptionItem changePlan(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Meteric\Enums\DowngradePolicy $downgrade = null, ?\Meteric\Enums\UpgradePolicy $upgrade = null, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\Subscription cancel(\Meteric\Models\Subscription $sub, string $at = 'period_end', ?\Carbon\CarbonImmutable $when = null)
  * @method static \Meteric\Models\Subscription pause(\Meteric\Models\Subscription $sub)
  * @method static \Meteric\Models\Subscription resume(\Meteric\Models\Subscription $sub, ?\Carbon\CarbonImmutable $at = null)

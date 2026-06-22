@@ -59,7 +59,7 @@ it('simulates a full monthly cycle S → M → S with prepaid discard downgrade'
     expect(Charge::where('subscription_id', $sub->id)->count())->toBe(3);
 
     // Day 21 — downgrade back to S, prepaid discard: switch now, no money.
-    Meteric::changePlan($item, $s, DowngradePolicy::Discard, CarbonImmutable::parse('2026-06-21T00:00:00Z'));
+    Meteric::changePlan($item, $s, DowngradePolicy::Discard, at: CarbonImmutable::parse('2026-06-21T00:00:00Z'));
     $item = $item->fresh()->setRelation('subscription', $sub);
     expect($item->price_id)->toBe($s->id)
         ->and(Charge::where('subscription_id', $sub->id)->count())->toBe(3); // no new charge
@@ -86,11 +86,11 @@ it('simulates a full hourly cycle S → M → S billed on usage', function () {
     // Runs as S for 100h, upgrade to M, runs 200h, downgrade to S, runs 100h.
     Meteric::recordUsage($item, 'hours', 100, CarbonImmutable::parse('2026-06-05T00:00:00Z'));
 
-    Meteric::changePlan($item, $m, DowngradePolicy::Discard, CarbonImmutable::parse('2026-06-10T00:00:00Z'));
+    Meteric::changePlan($item, $m, DowngradePolicy::Discard, at: CarbonImmutable::parse('2026-06-10T00:00:00Z'));
     $item = $item->fresh()->setRelation('subscription', $sub);
     Meteric::recordUsage($item, 'hours', 200, CarbonImmutable::parse('2026-06-15T00:00:00Z'));
 
-    Meteric::changePlan($item, $s, DowngradePolicy::Discard, CarbonImmutable::parse('2026-06-20T00:00:00Z'));
+    Meteric::changePlan($item, $s, DowngradePolicy::Discard, at: CarbonImmutable::parse('2026-06-20T00:00:00Z'));
     $item = $item->fresh()->setRelation('subscription', $sub);
     Meteric::recordUsage($item, 'hours', 100, CarbonImmutable::parse('2026-06-25T00:00:00Z'));
 

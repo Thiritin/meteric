@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\SubscriptionState;
+use Meteric\Enums\UpgradePolicy;
 use Meteric\Facades\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
@@ -109,7 +110,7 @@ it('defers a downgrade to the next renewal (contracts)', function () {
     $item->setRelation('subscription', $sub);
     $item->setRelation('price', $large);
 
-    Meteric::changePlan($item, $small, DowngradePolicy::Defer, CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+    Meteric::changePlan($item, $small, DowngradePolicy::Defer, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
 
     // No money moved; still on the large plan until the period ends.
     expect(Charge::where('subscription_id', $sub->id)->count())->toBe(1) // only the original
@@ -131,11 +132,69 @@ it('discards a downgrade immediately with no refund (prepaid)', function () {
     $item->setRelation('subscription', $sub);
     $item->setRelation('price', $large);
 
-    Meteric::changePlan($item, $small, DowngradePolicy::Discard, CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+    Meteric::changePlan($item, $small, DowngradePolicy::Discard, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
 
     // Switched now, no credit/refund — only the original €30 charge exists.
     expect($item->fresh()->price_id)->toBe($small->id)
         ->and(Charge::where('subscription_id', $sub->id)->count())->toBe(1);
+});
+
+it('defers an upgrade to the next renewal', function () {
+    $acc = freshAccount();
+    $small = planPrice(1000, 'small');
+    $large = planPrice(3000, 'large');
+    $sub = subAt($acc, $small, '2026-06-01T00:00:00Z');
+    $item = $sub->items->first();
+    $item->setRelation('subscription', $sub);
+    $item->setRelation('price', $small);
+
+    Meteric::changePlan($item, $large, upgrade: UpgradePolicy::Defer, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+
+    // No mid-cycle money; the swap is queued for renewal.
+    expect(Charge::where('subscription_id', $sub->id)->count())->toBe(1)
+        ->and($item->fresh()->price_id)->toBe($small->id)
+        ->and($item->fresh()->pending_change['price_id'])->toBe($large->id);
+
+    Meteric::renew($sub, CarbonImmutable::parse('2026-07-02T00:00:00Z'));
+    expect($item->fresh()->price_id)->toBe($large->id);
+});
+
+it('charges the full new plan on a full_now upgrade', function () {
+    $acc = freshAccount();
+    $small = planPrice(1000, 'small');
+    $large = planPrice(3000, 'large');
+    $sub = subAt($acc, $small, '2026-06-01T00:00:00Z');
+    $item = $sub->items->first();
+    $item->setRelation('subscription', $sub);
+    $item->setRelation('price', $small);
+
+    Meteric::changePlan($item, $large, upgrade: UpgradePolicy::FullNow, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+
+    // Swapped now, full new plan charged (no proration, no old credit): 1000 + 3000.
+    $charges = Charge::where('subscription_id', $sub->id)->get();
+    expect($charges)->toHaveCount(2)
+        ->and($item->fresh()->price_id)->toBe($large->id)
+        ->and((int) $charges->sum('amount_minor'))->toBe(4000)
+        ->and($charges->where('amount_minor', 3000)->count())->toBe(1);
+});
+
+it('credits the unused value on a credit downgrade', function () {
+    $acc = freshAccount();
+    $large = planPrice(3000, 'large');
+    $small = planPrice(1000, 'small');
+    $sub = subAt($acc, $large, '2026-06-01T00:00:00Z');
+    $item = $sub->items->first();
+    $item->setRelation('subscription', $sub);
+    $item->setRelation('price', $large);
+
+    // Halfway through June: credit the unused half of the large plan (~-1500).
+    Meteric::changePlan($item, $small, DowngradePolicy::Credit, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
+
+    $charges = Charge::where('subscription_id', $sub->id)->get();
+    expect($item->fresh()->price_id)->toBe($small->id)
+        ->and($charges)->toHaveCount(2)                       // base 3000 + credit
+        ->and($charges->where('amount_minor', -1500)->count())->toBe(1)
+        ->and((int) $charges->sum('amount_minor'))->toBe(1500);
 });
 
 it('cancels immediately', function () {

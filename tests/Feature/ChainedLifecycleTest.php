@@ -92,7 +92,7 @@ it('runs a full subscription lifecycle and reconciles the invoice', function () 
     $bigger = chainPrice(5000, 'bigger');
     Meteric::changePlan($baseItem->fresh()->setRelation('subscription', $sub), $bigger, at: $mid);
     $smaller = chainPrice(4000, 'smaller');
-    Meteric::changePlan($baseItem->fresh()->setRelation('subscription', $sub), $smaller, DowngradePolicy::Defer, $mid);
+    Meteric::changePlan($baseItem->fresh()->setRelation('subscription', $sub), $smaller, DowngradePolicy::Defer, at: $mid);
 
     // 7. Roll usage up into an in-arrears charge.
     $window = new Period(CarbonImmutable::parse('2026-06-01Z'), CarbonImmutable::parse('2026-07-01Z'));
