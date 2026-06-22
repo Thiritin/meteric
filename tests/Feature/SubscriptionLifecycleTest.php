@@ -204,7 +204,14 @@ it('charges the full new plan on a full_now upgrade', function () {
     expect($charges)->toHaveCount(2)
         ->and($item->fresh()->price_id)->toBe($large->id)
         ->and((int) $charges->sum('amount_minor'))->toBe(4000)
-        ->and($charges->where('amount_minor', 3000)->count())->toBe(1);
+        ->and($charges->where('amount_minor', 3000)->count())->toBe(1)
+        // The cycle restarts at the change date: a fresh full month from 06-16.
+        ->and($item->fresh()->current_period->start->toDateString())->toBe('2026-06-16')
+        ->and($item->fresh()->current_period->end->toDateString())->toBe('2026-07-16');
+
+    // The next renewal is a full interval out: the old 07-01 boundary bills nothing.
+    expect(Meteric::renew($sub->fresh(), CarbonImmutable::parse('2026-07-02T00:00:00Z')))->toHaveCount(0);
+    expect(Meteric::renew($sub->fresh(), CarbonImmutable::parse('2026-07-17T00:00:00Z')))->toHaveCount(1);
 });
 
 it('credits the unused value on a credit downgrade', function () {

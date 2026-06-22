@@ -297,6 +297,9 @@ final class SubscriptionManager
      * Swap the plan immediately. Optionally credit the unused old value (downgrade
      * `credit`) and/or charge the full new plan (upgrade `full_now`); plain discard
      * does neither. Credits and charges are pending, landing on the next invoice.
+     *
+     * `full_now` restarts the cycle: a fresh full period begins at the change date,
+     * so the customer pays a full term and the next renewal is a full interval out.
      */
     private function switchNow(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at, bool $creditOld = false, bool $chargeFull = false): SubscriptionItem
     {
@@ -311,7 +314,15 @@ final class SubscriptionManager
             }
 
             if ($chargeFull) {
+                // Fresh full cycle from the change date, then charge it in full.
+                $item->forceFill([
+                    'price_id' => $newPrice->id,
+                    'product_id' => $newPrice->product_id,
+                    'current_period' => $newPrice->recurrence()->period($at),
+                ])->save();
                 $this->prorationCharge($item, $sub, LineKind::Prorated, $newPrice->amountFor($qty), 'Upgrade '.($newPrice->product->name ?? 'plan'));
+
+                return $item->refresh();
             }
 
             $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
