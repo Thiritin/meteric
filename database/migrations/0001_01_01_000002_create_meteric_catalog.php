@@ -105,10 +105,41 @@ return new class extends Migration
         Pg::currencyCheck('meteric_meter_dimensions');
         Pg::enumCheck('meteric_meter_dimensions', 'aggregation', Aggregation::class);
         Pg::check('meteric_meter_dimensions', 'meteric_md_rate_nonneg', 'rate >= 0');
+
+        // Configurable options: a product declares options (dropdown/radio/qty/toggle),
+        // each with allowed values that point at a Price (per-term, tiered, setup fee).
+        Schema::create('meteric_product_options', function (Blueprint $table) {
+            $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
+            $table->foreignUuid('product_id')->constrained('meteric_products')->cascadeOnDelete();
+            $table->string('key');
+            $table->string('label')->nullable();
+            $table->string('type');                                  // OptionType: quantity | choice | toggle
+            $table->boolean('required')->default(false);
+            $table->decimal('min_qty', 20, 6)->nullable();           // quantity options
+            $table->decimal('max_qty', 20, 6)->nullable();
+            $table->integer('sort')->default(0);
+            $table->timestampTz('created_at')->useCurrent();
+
+            $table->unique(['product_id', 'key']);
+        });
+
+        Schema::create('meteric_product_option_values', function (Blueprint $table) {
+            $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
+            $table->foreignUuid('option_id')->constrained('meteric_product_options')->cascadeOnDelete();
+            $table->string('value');
+            $table->string('label')->nullable();
+            $table->foreignUuid('price_id')->nullable()->constrained('meteric_prices')->restrictOnDelete();
+            $table->integer('sort')->default(0);
+            $table->timestampTz('created_at')->useCurrent();
+
+            $table->unique(['option_id', 'value']);
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('meteric_product_option_values');
+        Schema::dropIfExists('meteric_product_options');
         Schema::dropIfExists('meteric_meter_dimensions');
         Schema::dropIfExists('meteric_prices');
         Schema::dropIfExists('meteric_products');

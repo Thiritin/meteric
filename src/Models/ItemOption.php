@@ -9,9 +9,12 @@ use Meteric\Enums\OptionType;
 
 /**
  * @property string $key
+ * @property ?string $price_id
  * @property OptionType $type
  * @property string $value
  * @property float $quantity
+ * @property ?float $min_qty
+ * @property ?float $max_qty
  */
 class ItemOption extends MetericModel
 {
@@ -24,6 +27,8 @@ class ItemOption extends MetericModel
         return [
             'type' => OptionType::class,
             'quantity' => 'float',
+            'min_qty' => 'float',
+            'max_qty' => 'float',
         ];
     }
 

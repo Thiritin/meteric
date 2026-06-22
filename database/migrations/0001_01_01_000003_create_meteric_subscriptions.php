@@ -96,6 +96,8 @@ return new class extends Migration
             $table->string('value');
             $table->foreignUuid('price_id')->nullable()->constrained('meteric_prices')->restrictOnDelete();
             $table->decimal('quantity', 20, 6)->default(1);
+            $table->decimal('min_qty', 20, 6)->nullable();   // quantity bounds (WHMCS-style)
+            $table->decimal('max_qty', 20, 6)->nullable();
             $table->timestampsTz();
 
             $table->unique(['item_id', 'key']);

@@ -31,6 +31,7 @@ use Meteric\Models\ItemOption;
 use Meteric\Models\Payment;
 use Meteric\Models\PaymentAllocation;
 use Meteric\Models\Price;
+use Meteric\Models\ProductOptionValue;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Models\UsageRecord;
@@ -256,15 +257,21 @@ final class Meteric
     }
 
     /** Set a configurable option (e.g. slots) on an item, prorating the delta. */
-    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null): ItemOption
+    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null, ?float $min = null, ?float $max = null): ItemOption
     {
-        return app(ItemManager::class)->setOption($item, $key, $value, $type, $price, $qty, $at);
+        return app(ItemManager::class)->setOption($item, $key, $value, $type, $price, $qty, $at, $min, $max);
     }
 
     /** Change an item's base quantity, prorating the difference. */
     public function setQuantity(SubscriptionItem $item, float $qty, ?CarbonImmutable $at = null): SubscriptionItem
     {
         return app(ItemManager::class)->setQuantity($item, $qty, $at);
+    }
+
+    /** Select a catalog product-option value (resolves its price + bounds). */
+    public function chooseOption(SubscriptionItem $item, ProductOptionValue $value, float $qty = 1, ?CarbonImmutable $at = null): ItemOption
+    {
+        return app(ItemManager::class)->chooseOption($item, $value, $qty, $at);
     }
 
     /** Add a term commitment (upfront + reduced rate) to an item. */

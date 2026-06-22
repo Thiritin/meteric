@@ -53,6 +53,12 @@ class Product extends MetericModel
         return $this->hasMany(MeterDimension::class, 'product_id');
     }
 
+    /** @return HasMany<ProductOption, $this> */
+    public function options(): HasMany
+    {
+        return $this->hasMany(ProductOption::class, 'product_id')->orderBy('sort');
+    }
+
     public function priceFor(string $currency, PricePurpose $purpose = PricePurpose::Recurring): ?Price
     {
         return $this->prices()

@@ -9,9 +9,12 @@ use Illuminate\Support\Facades\DB;
 use Meteric\Anchoring\BillingPlan;
 use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Enums\ChargeState;
+use Meteric\Enums\ItemState;
+use Meteric\Enums\LineKind;
 use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
 use Meteric\Models\Price;
+use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
 use Meteric\Support\Period;
@@ -65,12 +68,91 @@ final class ChargeAccruer
                     'covers' => $pp->period,
                     'idempotency_key' => $this->key($item, $pp),
                 ]);
+
+                // Configurable options and addons recur with the item: bill each
+                // for the same period. Gated by the base reservation above, so a
+                // re-run of an already-billed period skips these too.
+                $created = array_merge($created, $this->billExtras($item, $sub, $pp->period));
             }
 
             $item->forceFill(['current_period' => $plan->ongoing])->save();
 
             return $created;
         });
+    }
+
+    /**
+     * Recurring charges for an item's active configurable options and addons,
+     * priced through the same Price engine (tiers included) for one period.
+     *
+     * @return list<Charge>
+     */
+    private function billExtras(SubscriptionItem $item, Subscription $sub, Period $period): array
+    {
+        $created = [];
+
+        foreach ($item->options as $option) {
+            if ($option->price_id === null) {
+                continue;
+            }
+            $price = $option->price;
+            $amount = $price->amountFor((float) $option->quantity);
+            if ($amount->isZero()) {
+                continue;
+            }
+
+            $created[] = Charge::create([
+                'account_id' => $sub->account_id,
+                'subscription_id' => $sub->id,
+                'origin_type' => 'item_option',
+                'origin_id' => $option->id,
+                'kind' => LineKind::Option,
+                'billing_mode' => $item->billingMode(),
+                'state' => ChargeState::Pending,
+                'title' => $item->lineTitle(),
+                'group' => $item->group,
+                'description' => ucfirst($option->key),
+                'quantity' => $option->quantity,
+                'unit' => $price->interval?->value,
+                'unit_minor' => $price->unit_rate === null ? $price->amount_minor : null,
+                'unit_rate' => $price->unit_rate,
+                'amount_minor' => $amount->getMinorAmount()->toInt(),
+                'currency' => $sub->currency,
+                'covers' => $period,
+                'idempotency_key' => 'opt_'.substr(hash('sha256', $option->id.$period->toRange()), 0, 36),
+            ]);
+        }
+
+        foreach ($item->addons()->where('state', ItemState::Active->value)->get() as $addon) {
+            $price = $addon->price;
+            $amount = $price->amountFor((float) $addon->quantity);
+            if ($amount->isZero()) {
+                continue;
+            }
+
+            $created[] = Charge::create([
+                'account_id' => $sub->account_id,
+                'subscription_id' => $sub->id,
+                'origin_type' => 'addon',
+                'origin_id' => $addon->id,
+                'kind' => LineKind::Addon,
+                'billing_mode' => $item->billingMode(),
+                'state' => ChargeState::Pending,
+                'title' => $item->lineTitle(),
+                'group' => $item->group,
+                'description' => $addon->product->name ?? 'Addon',
+                'quantity' => $addon->quantity,
+                'unit' => $price->interval?->value,
+                'unit_minor' => $price->unit_rate === null ? $price->amount_minor : null,
+                'unit_rate' => $price->unit_rate,
+                'amount_minor' => $amount->getMinorAmount()->toInt(),
+                'currency' => $sub->currency,
+                'covers' => $period,
+                'idempotency_key' => 'addon_'.substr(hash('sha256', $addon->id.$period->toRange()), 0, 34),
+            ]);
+        }
+
+        return $created;
     }
 
     /**

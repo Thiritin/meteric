@@ -16,6 +16,7 @@ use Meteric\Models\Addon;
 use Meteric\Models\Charge;
 use Meteric\Models\ItemOption;
 use Meteric\Models\Price;
+use Meteric\Models\ProductOptionValue;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
 
@@ -74,21 +75,38 @@ final class ItemManager
         $addon->forceFill(['state' => ItemState::Canceled])->save();
     }
 
-    /** Set a configurable option (e.g. gameserver slots). Prorates the price delta. */
-    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null): ItemOption
+    /**
+     * Set a configurable option (e.g. gameserver slots). Prorates the price delta
+     * for the current cycle; the option then recurs every renewal via the accruer.
+     * Quantity options honour optional min/max bounds. A one-time setup fee on the
+     * price is charged once, when the option is first added.
+     */
+    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null, ?float $min = null, ?float $max = null): ItemOption
     {
         $at ??= $this->clock->now();
 
-        return DB::transaction(function () use ($item, $key, $value, $type, $price, $qty, $at): ItemOption {
+        if ($min !== null && $qty < $min) {
+            throw new \InvalidArgumentException("Option {$key} quantity {$qty} is below the minimum {$min}.");
+        }
+        if ($max !== null && $qty > $max) {
+            throw new \InvalidArgumentException("Option {$key} quantity {$qty} is above the maximum {$max}.");
+        }
+
+        return DB::transaction(function () use ($item, $key, $value, $type, $price, $qty, $at, $min, $max): ItemOption {
             $existing = $item->options()->where('key', $key)->first();
             $oldQty = (float) ($existing->quantity ?? 0);
 
             $option = ItemOption::updateOrCreate(
                 ['item_id' => $item->id, 'key' => $key],
-                ['type' => $type, 'value' => $value, 'price_id' => $price?->id, 'quantity' => $qty],
+                ['type' => $type, 'value' => $value, 'price_id' => $price?->id, 'quantity' => $qty, 'min_qty' => $min, 'max_qty' => $max],
             );
 
             if ($price !== null) {
+                // One-time setup fee, charged once when the option is first added.
+                if ($existing === null && $price->hasSetupFee()) {
+                    $this->charge($item, 'item_option', $option->id, LineKind::Setup, $price->setupFee(), ucfirst($key).' setup', covers: false);
+                }
+
                 $deltaQty = $qty - $oldQty;
                 if ($deltaQty != 0.0) {
                     $deltaFull = $price->amountFor(abs($deltaQty));
@@ -101,6 +119,20 @@ final class ItemManager
 
             return $option;
         });
+    }
+
+    /**
+     * Select a catalog option value (dropdown/radio/quantity/toggle). Resolves
+     * the option's key, type, bounds, and the value's Price, then sets it.
+     */
+    public function chooseOption(SubscriptionItem $item, ProductOptionValue $value, float $qty = 1, ?CarbonImmutable $at = null): ItemOption
+    {
+        $option = $value->option;
+
+        return $this->setOption(
+            $item, $option->key, $value->value, $option->type->value,
+            $value->price, $qty, $at, $option->min_qty, $option->max_qty,
+        );
     }
 
     /** Change the base quantity of an item, prorating the difference. */
@@ -134,7 +166,7 @@ final class ItemManager
         return $this->prorator->for($period, $at, $full)->amount();
     }
 
-    private function charge(SubscriptionItem $item, string $originType, string $originId, LineKind $kind, Money $amount, string $desc): void
+    private function charge(SubscriptionItem $item, string $originType, string $originId, LineKind $kind, Money $amount, string $desc, bool $covers = true): void
     {
         $sub = $item->subscription;
 
@@ -153,7 +185,7 @@ final class ItemManager
             'unit_minor' => $amount->getMinorAmount()->toInt(),
             'amount_minor' => $amount->getMinorAmount()->toInt(),
             'currency' => $sub->currency,
-            'covers' => $item->current_period,
+            'covers' => $covers ? $item->current_period : null,
             'idempotency_key' => 'item_'.Str::uuid()->toString(),
         ]);
     }
