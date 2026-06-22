@@ -185,7 +185,7 @@ final class SubscriptionManager
      * a policy ($upgrade / $downgrade overrides the product default):
      *
      *  Upgrade   prorate_now: credit the unused old, charge the prorated new (default).
-     *            defer: swap at the next renewal. full_now: swap and charge the full new plan.
+     *            defer: swap at the next renewal, keep the current plan until then.
      *  Downgrade defer: keep the tier until the period ends, then renew lower.
      *            discard: swap now, unused value forfeited. credit: swap now, credit the
      *            unused old as a pending charge on the next invoice. refund: swap now and
@@ -201,7 +201,6 @@ final class SubscriptionManager
         if ($newFull->isGreaterThan($oldFull)) {
             return match ($upgrade ?? UpgradePolicy::ProrateNow) {
                 UpgradePolicy::Defer => $this->deferChange($item, $newPrice),
-                UpgradePolicy::FullNow => $this->switchNow($item, $newPrice, $at, chargeFull: true),
                 UpgradePolicy::ProrateNow => $this->prorateChange($item, $newPrice, $at),
             };
         }
@@ -295,15 +294,12 @@ final class SubscriptionManager
 
     /**
      * Swap the plan immediately. Optionally credit the unused old value (downgrade
-     * `credit`) and/or charge the full new plan (upgrade `full_now`); plain discard
-     * does neither. Credits and charges are pending, landing on the next invoice.
-     *
-     * `full_now` restarts the cycle: a fresh full period begins at the change date,
-     * so the customer pays a full term and the next renewal is a full interval out.
+     * `credit`); plain discard does not. The credit is a pending charge on the next
+     * invoice.
      */
-    private function switchNow(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at, bool $creditOld = false, bool $chargeFull = false): SubscriptionItem
+    private function switchNow(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at, bool $creditOld = false): SubscriptionItem
     {
-        return DB::transaction(function () use ($item, $newPrice, $at, $creditOld, $chargeFull): SubscriptionItem {
+        return DB::transaction(function () use ($item, $newPrice, $at, $creditOld): SubscriptionItem {
             $sub = $item->subscription;
             $period = $item->current_period;
             $qty = (float) $item->quantity;
@@ -311,18 +307,6 @@ final class SubscriptionManager
             if ($creditOld && $period !== null) {
                 $unusedOld = $this->prorator->for($period, $at, $item->price->amountFor($qty))->amount();
                 $this->prorationCharge($item, $sub, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
-            }
-
-            if ($chargeFull) {
-                // Fresh full cycle from the change date, then charge it in full.
-                $item->forceFill([
-                    'price_id' => $newPrice->id,
-                    'product_id' => $newPrice->product_id,
-                    'current_period' => $newPrice->recurrence()->period($at),
-                ])->save();
-                $this->prorationCharge($item, $sub, LineKind::Prorated, $newPrice->amountFor($qty), 'Upgrade '.($newPrice->product->name ?? 'plan'));
-
-                return $item->refresh();
             }
 
             $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();

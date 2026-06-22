@@ -34,7 +34,6 @@ and how it is billed.
 |------|--------|
 | `ProrateNow` (default) | Credit the unused portion of the old plan, charge the new plan prorated over the rest of the cycle. The item moves to the new price right away. |
 | `Defer` | Swap at the next renewal. Keep the current plan until then. No money moves mid-cycle. |
-| `FullNow` | Swap immediately and restart the cycle: a fresh full period begins at the change date, charged in full. The customer pays a full term and the next renewal is a full interval out. |
 
 The default prorated upgrade settles the difference for the rest of the period
 with two itemized charges:
@@ -45,15 +44,12 @@ with two itemized charges:
 $item = Meteric::changePlan($item, $biggerPrice);
 ```
 
-`FullNow` charges the whole new plan and restarts the cycle. A change on June 16
-on a monthly plan bills a full month and runs the new period June 16 to July 16,
-so the next renewal is July 16:
+`Defer` swaps at the next renewal, keeping the current plan until then:
 
 ```php
 use Meteric\Enums\UpgradePolicy;
 
-// Swap to the bigger plan, charge a full period, restart the cycle from today.
-Meteric::changePlan($item, $biggerPrice, upgrade: UpgradePolicy::FullNow);
+Meteric::changePlan($item, $biggerPrice, upgrade: UpgradePolicy::Defer);
 ```
 
 ## Downgrades
