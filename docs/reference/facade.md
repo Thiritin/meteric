@@ -24,10 +24,11 @@ subscription and immediately invoice the first cycle.
 Accrue the next cycle for every due item, rolling forward through elapsed
 periods. Idempotent. Returns the created charges.
 
-#### `changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?CarbonImmutable $at = null): SubscriptionItem`
+#### `changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?UpgradePolicy $upgrade = null, ?CarbonImmutable $at = null): SubscriptionItem`
 
-Switch an item's plan. Upgrade prorates the difference; downgrade defers or
-discards. See [Plan changes](/usage/plan-changes).
+Switch an item's plan. Direction is detected from the price. `$upgrade` picks the
+upgrade policy, `$downgrade` the downgrade policy. See
+[Plan changes](/usage/plan-changes).
 
 #### `cancel(Subscription $sub, string $at = 'period_end', ?CarbonImmutable $when = null): Subscription`
 
