@@ -12,6 +12,7 @@ use Meteric\Anchoring\BillingPlan;
 use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Contracts\Clock;
+use Meteric\Enums\BillingMode;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceState;
@@ -190,10 +191,22 @@ final class SubscriptionManager
      *            discard: swap now, unused value forfeited. credit: swap now, credit the
      *            unused old as a pending charge on the next invoice. refund: swap now and
      *            issue a credit note for the unused value (a host listener moves the money).
+     *
+     * In-arrears (usage/postpaid) items ignore the policies: a change is rate-forward.
      */
     public function changePlan(SubscriptionItem $item, Price $newPrice, ?DowngradePolicy $downgrade = null, ?UpgradePolicy $upgrade = null, ?CarbonImmutable $at = null): SubscriptionItem
     {
         $at ??= $this->clock->now();
+
+        // Postpaid / usage items have no prepaid value to prorate, credit, or
+        // refund. A change is rate-forward: swap the price, the rest of the cycle
+        // bills at the new rate. Proration policies apply only to prepaid items.
+        if ($item->billingMode() === BillingMode::InArrears) {
+            $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+
+            return $item->refresh();
+        }
+
         $qty = (float) $item->quantity;
         $oldFull = $item->price->amountFor($qty);
         $newFull = $newPrice->amountFor($qty);

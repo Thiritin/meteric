@@ -111,10 +111,10 @@ refunds](/usage/invoicing#credit-notes-and-refunds).
 ## Hourly and metered plans
 
 Usage-based plans bill in arrears at the real rate. There is no prepaid value to
-prorate or forfeit, so a change of an hourly or metered price takes effect
-immediately: usage before the change bills at the old rate, usage after bills at the
-new one. Roll up the old window before switching the rate if you want a clean
-cutover. See [Usage billing](/usage/usage-billing).
+prorate or forfeit, so `changePlan()` ignores the policies for any in-arrears
+item: the change is rate-forward. Usage before the change bills at the old rate,
+usage after bills at the new one. Roll up the old window before switching the
+rate if you want a clean cutover. See [Usage billing](/usage/usage-billing).
 
 See also: [Build a web hosting company's billing](/recipes/web-hosting-company)
 walks an upgrade and a downgrade through to invoicing.
