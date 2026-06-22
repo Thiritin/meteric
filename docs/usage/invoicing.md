@@ -168,9 +168,8 @@ instead.
 
 With the [Lexware Office driver](#lexware-office-lexoffice), `creditNote()` also
 POSTs a real credit-note document to lexoffice (`POST /v1/credit-notes?finalize=true`)
-and stores its `external_id`. Verified live: a credit note of net 10.00 EUR at
-19% VAT produces gross 11.90 EUR (totalNetAmount 10.00, totalTaxAmount 1.90,
-totalGrossAmount 11.90), mirroring the invoice exactly.
+and stores its `external_id`. The credit note mirrors the invoice's tax rate, so a
+net 10.00 EUR credit at 19% VAT comes to 11.90 EUR gross.
 
 ## Consolidated billing
 

@@ -44,7 +44,7 @@ export default defineConfig({
         items: [
           { text: 'Products and prices', link: '/usage/products-and-prices' },
           { text: 'Subscriptions', link: '/usage/subscriptions' },
-          { text: 'Plan changes', link: '/usage/plan-changes' },
+          { text: 'Upgrades and downgrades', link: '/usage/plan-changes' },
           { text: 'Quotes and checkout', link: '/usage/quotes-and-checkout' },
           { text: 'Usage billing', link: '/usage/usage-billing' },
           { text: 'Addons and options', link: '/usage/addons-and-options' },
