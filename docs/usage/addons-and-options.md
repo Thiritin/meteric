@@ -209,6 +209,64 @@ Meteric::chooseOption($item, $ipv4, qty: 8); // 8 IPv4 addresses, priced by tier
 
 `chooseOption(SubscriptionItem $item, ProductOptionValue $value, float $qty = 1, ?CarbonImmutable $at = null)`.
 
+## Displaying options in a form
+
+The catalog and the option models render to JSON-ready arrays, so a checkout,
+upgrade, or downgrade form is built from data, not hardcoded fields.
+
+### Build an order or upgrade form
+
+`Product::optionCatalog(float $qty = 1)` returns one entry per option, each
+priced at `$qty`. JSON encode it straight to the frontend.
+
+```php
+$catalog = $product->optionCatalog();        // values priced at qty 1
+$catalog = $product->optionCatalog(qty: 8);  // price quantity options at 8
+
+return response()->json($catalog);
+```
+
+Each option entry carries `key`, `label`, `type`, `required`, `min`, `max`, and
+`values[]`. Each value carries `value`, `label`, `amount_minor`, `amount`
+(string), `currency`, `interval`, `pricing_model`, `included_qty`, `block_size`,
+`tiers`, and `setup_fee_minor`, enough for the client to recompute the price as
+the quantity changes. `ProductOption::toDisplay($qty)` and
+`ProductOptionValue::toDisplay($qty)` produce the per-option and per-value rows
+if you need them on their own; `ProductOptionValue::amountFor($qty)` returns the
+`Money` for a value at a quantity.
+
+### Show the current selection on a service page
+
+Iterate the item's options and call `toDisplay()` on each, or `amount()` for the
+`Money`. These are the per-period recurring costs.
+
+```php
+foreach ($item->options as $option) {
+    $row = $option->toDisplay();
+    // ['key' => 'slots', 'value' => '32', 'quantity' => 32.0,
+    //  'amount_minor' => 2560, 'amount' => '25.60', 'currency' => 'EUR']
+
+    $money = $option->amount(); // Brick\Money\Money, or null when free
+}
+```
+
+### Upgrade / downgrade preview
+
+Preview the new total with tax before committing, using a
+[quote](/usage/quotes-and-checkout), then apply the change.
+
+```php
+$preview = Meteric::quote()
+    ->tax(new TaxContext(countryCode: 'DE'))
+    ->add($slotPrice, qty: 32)
+    ->build();
+
+// Show $preview->toArray(), then commit:
+Meteric::chooseOption($item, $value, qty: 32);
+// or the imperative path:
+Meteric::setOption($item, 'slots', '32', 'quantity', $slotPrice, qty: 32);
+```
+
 ## Quantity
 
 To change the base quantity of the item itself (not an option), use

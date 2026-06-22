@@ -14,6 +14,7 @@ helper methods you actually call.
 - **Relationships:** `prices()`, `meterDimensions()`, `billable()` (morph).
 - **Helpers:**
   - `priceFor(string $currency, PricePurpose $purpose = Recurring): ?Price`: latest open price for a currency and purpose.
+  - `optionCatalog(float $qty = 1): array`: the configurable-option catalog as JSON-ready rows, values priced at `$qty`. See [Displaying options in a form](/usage/addons-and-options#displaying-options-in-a-form).
   - `isMetered(): bool`: true for `metered` / `hourly`.
   - `downgradePolicy(): DowngradePolicy`: from `config['downgrade']`, defaults to `Defer`.
 
@@ -143,15 +144,15 @@ maps to invoices.
 Mid-cycle item extras.
 
 - **Addon (`meteric_addons`):** `quantity`, `state`, `group_key`, `metadata`; relationships `item()`, `product()`, `price()`.
-- **ItemOption (`meteric_item_options`):** `key`, `type` (`OptionType`), `value`, `quantity`, `min_qty`, `max_qty`; relationships `item()`, `price()`; helper `boolValue(): bool`.
+- **ItemOption (`meteric_item_options`):** `key`, `type` (`OptionType`), `value`, `quantity`, `min_qty`, `max_qty`; relationships `item()`, `price()`; helpers `boolValue(): bool`, `amount(): ?Money` (per-period recurring charge), `toDisplay(): array` (render-ready row for a service page).
 
 ## ProductOption / ProductOptionValue
 
 A product's declared configurable options (the catalog). See
 [Catalog options](/usage/addons-and-options#catalog-options).
 
-- **ProductOption (`meteric_product_options`):** `product_id`, `key`, `label`, `type` (`OptionType`), `required`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `values()`.
-- **ProductOptionValue (`meteric_product_option_values`):** `option_id`, `value`, `label`, `price_id`, `sort`; relationships `option()`, `price()`.
+- **ProductOption (`meteric_product_options`):** `product_id`, `key`, `label`, `type` (`OptionType`), `required`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `values()`; helper `toDisplay(float $qty = 1): array` (option meta plus each value priced at `$qty`).
+- **ProductOptionValue (`meteric_product_option_values`):** `option_id`, `value`, `label`, `price_id`, `sort`; relationships `option()`, `price()`; helpers `amountFor(float $qty = 1): ?Money` (charge at a quantity, null when free), `toDisplay(float $qty = 1): array` (render-ready value row with pricing knobs).
 
 ## Commitment
 
