@@ -271,25 +271,6 @@ CREATE TABLE meteric_item_options (
 );
 ```
 
-### meteric_commitments
-Term/reservation: upfront + committed rate + early-termination rule.
-
-```sql
-CREATE TABLE meteric_commitments (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id        uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
-  term_interval  meteric_interval NOT NULL,
-  term_count     integer NOT NULL CHECK (term_count > 0),
-  upfront_minor  bigint NOT NULL DEFAULT 0,
-  rate_minor     bigint NOT NULL,               -- committed (discounted) rate
-  currency       char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
-  term           tstzrange NOT NULL,
-  early_term     jsonb NOT NULL DEFAULT '{}',   -- { fee_minor | remaining_pct }
-  state          meteric_commitment_state NOT NULL DEFAULT 'active',
-  created_at     timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX meteric_commitments_item_idx ON meteric_commitments (item_id);
-```
 
 ### meteric_allowances
 Per-subscription-item override / tracking of included units (resets per cycle).
@@ -370,7 +351,7 @@ CREATE TABLE meteric_charges (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id      uuid NOT NULL REFERENCES meteric_billing_accounts(id) ON DELETE RESTRICT,
   subscription_id uuid REFERENCES meteric_subscriptions(id) ON DELETE SET NULL,
-  origin_type     text NOT NULL,               -- morph: item | usage | proration | one_off | commitment | setup
+  origin_type     text NOT NULL,               -- morph: item | usage | proration | one_off | setup
   origin_id       text NOT NULL,
   dimension_id    uuid REFERENCES meteric_meter_dimensions(id),
   kind            meteric_line_kind NOT NULL,
@@ -615,10 +596,9 @@ Each table = one model. Helpers keep business logic in the domain, not callers.
 | `Product` | `prices`, `meterDimensions` | `priceFor($currency,$purpose)`, `pricingModel()`, `isMetered()`, `quote()` |
 | `Price` | `product` | `recurrence(): RecurrenceRule`, `isRecurring()`, `setupFee()`, `cap()`, `amountFor($qty)` (rounds rate×qty to minor) |
 | `Subscription` | `items`, `account`, `charges`, `invoices` | `add()`, `changePlan()`, `cancel()`, `pause()/resume()`, `renew()`, `nextRenewalAt()`, `currentPeriod()`, `quoteChange()` |
-| `SubscriptionItem` | `subscription`, `price`, `addons`, `options`, `commitment`, `usageRecords` | `setQuantity()`, `changePrice()`, `addAddon()`, `setOption()`, `recordUsage()`, `prorate($at)`, `accrueDue()`, `coversBilled($range)` |
+| `SubscriptionItem` | `subscription`, `price`, `addons`, `options`, `usageRecords` | `setQuantity()`, `changePrice()`, `addAddon()`, `setOption()`, `recordUsage()`, `prorate($at)`, `accrueDue()`, `coversBilled($range)` |
 | `Addon` | `item`, `price` | `swap($price)`, `prorate($at)` |
 | `ItemOption` | `item`, `price` | `setValue()`, `lineAmount()` |
-| `Commitment` | `item` | `isActive()`, `committedRate()`, `earlyTerminationFee($at)` |
 | `Charge` | `account`, `subscription`, `invoice` | `markInvoiced($invoice)`, `void()`, `isCredit()`, `money(): Money`, `scopePending()` |
 | `Invoice` | `account`, `lines`, `creditNotes`, `payments` | `issueVia($driver)`, `recordPayment()`, `void()`, `creditNote()`, `isOverdue()`, `outstandingMinor()` |
 | `InvoiceLine` | `invoice`, `charge` | `gross(): Money`, `coversLabel()` |
