@@ -16,7 +16,7 @@ use Meteric\Enums\CreditState;
  */
 class CreditNote extends MetericModel
 {
-    protected $table = 'meteric_credit_notes';
+    protected string $baseTable = 'credit_notes';
 
     public $timestamps = false;
 

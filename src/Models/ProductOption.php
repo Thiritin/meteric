@@ -21,7 +21,7 @@ use Meteric\Enums\OptionType;
  */
 class ProductOption extends MetericModel
 {
-    protected $table = 'meteric_product_options';
+    protected string $baseTable = 'product_options';
 
     public $timestamps = false;
 

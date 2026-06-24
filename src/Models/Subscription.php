@@ -29,7 +29,7 @@ use Meteric\Support\Period;
  */
 class Subscription extends MetericModel
 {
-    protected $table = 'meteric_subscriptions';
+    protected string $baseTable = 'subscriptions';
 
     protected $guarded = [];
 

@@ -33,7 +33,7 @@ use Meteric\Support\Period;
  */
 class Charge extends MetericModel
 {
-    protected $table = 'meteric_charges';
+    protected string $baseTable = 'charges';
 
     protected $guarded = [];
 

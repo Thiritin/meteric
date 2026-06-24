@@ -16,9 +16,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('meteric_subscriptions', function (Blueprint $table) {
+        Schema::create(Pg::table('subscriptions'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('account_id')->constrained('meteric_billing_accounts')->restrictOnDelete();
+            $table->foreignUuid('account_id')->constrained(Pg::table('billing_accounts'))->restrictOnDelete();
             $table->string('customer_type');
             $table->string('customer_id');
             $table->char('currency', 3);
@@ -38,15 +38,15 @@ return new class extends Migration
             $table->index(['customer_type', 'customer_id']);
             $table->index('(upper(current_period))', 'meteric_subs_due_idx')->where("state IN ('active','trialing','past_due')");
         });
-        Pg::currencyCheck('meteric_subscriptions');
-        Pg::enumCheck('meteric_subscriptions', 'state', SubscriptionState::class);
-        Pg::check('meteric_subscriptions', 'meteric_subs_anchor_day', 'anchor_day IS NULL OR anchor_day BETWEEN 1 AND 31');
+        Pg::currencyCheck(Pg::table('subscriptions'));
+        Pg::enumCheck(Pg::table('subscriptions'), 'state', SubscriptionState::class);
+        Pg::check(Pg::table('subscriptions'), 'meteric_subs_anchor_day', 'anchor_day IS NULL OR anchor_day BETWEEN 1 AND 31');
 
-        Schema::create('meteric_subscription_items', function (Blueprint $table) {
+        Schema::create(Pg::table('subscription_items'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('subscription_id')->constrained('meteric_subscriptions')->cascadeOnDelete();
-            $table->foreignUuid('product_id')->constrained('meteric_products')->restrictOnDelete();
-            $table->foreignUuid('price_id')->constrained('meteric_prices')->restrictOnDelete();
+            $table->foreignUuid('subscription_id')->constrained(Pg::table('subscriptions'))->cascadeOnDelete();
+            $table->foreignUuid('product_id')->constrained(Pg::table('products'))->restrictOnDelete();
+            $table->foreignUuid('price_id')->constrained(Pg::table('prices'))->restrictOnDelete();
             $table->string('resource_type')->nullable();
             $table->string('resource_id')->nullable();
             $table->string('label')->nullable();              // line title on invoices (e.g. the resource hostname)
@@ -66,15 +66,15 @@ return new class extends Migration
             $table->index(['resource_type', 'resource_id']);
             $table->index('(upper(current_period))', 'meteric_items_due_idx')->where("state = 'active'");
         });
-        Pg::enumCheck('meteric_subscription_items', 'state', ItemState::class);
-        Pg::enumCheck('meteric_subscription_items', 'billing_mode', BillingMode::class, nullable: true);
-        Pg::check('meteric_subscription_items', 'meteric_items_qty_nonneg', 'quantity >= 0');
+        Pg::enumCheck(Pg::table('subscription_items'), 'state', ItemState::class);
+        Pg::enumCheck(Pg::table('subscription_items'), 'billing_mode', BillingMode::class, nullable: true);
+        Pg::check(Pg::table('subscription_items'), 'meteric_items_qty_nonneg', 'quantity >= 0');
 
-        Schema::create('meteric_addons', function (Blueprint $table) {
+        Schema::create(Pg::table('addons'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
-            $table->foreignUuid('product_id')->constrained('meteric_products')->restrictOnDelete();
-            $table->foreignUuid('price_id')->constrained('meteric_prices')->restrictOnDelete();
+            $table->foreignUuid('item_id')->constrained(Pg::table('subscription_items'))->cascadeOnDelete();
+            $table->foreignUuid('product_id')->constrained(Pg::table('products'))->restrictOnDelete();
+            $table->foreignUuid('price_id')->constrained(Pg::table('prices'))->restrictOnDelete();
             $table->string('group_key')->nullable();
             $table->decimal('quantity', 20, 6)->default(1);
             $table->string('state')->default(ItemState::Active->value);
@@ -84,16 +84,16 @@ return new class extends Migration
             // At most one active addon per group per item.
             $table->uniqueIndex(['item_id', 'group_key'])->where("state = 'active' AND group_key IS NOT NULL");
         });
-        Pg::enumCheck('meteric_addons', 'state', ItemState::class);
+        Pg::enumCheck(Pg::table('addons'), 'state', ItemState::class);
 
-        Schema::create('meteric_item_options', function (Blueprint $table) {
+        Schema::create(Pg::table('item_options'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
+            $table->foreignUuid('item_id')->constrained(Pg::table('subscription_items'))->cascadeOnDelete();
             $table->string('key');
             $table->string('type');
             $table->string('value');                          // raw value for provisioning (e.g. 1024)
             $table->string('label')->nullable();              // display value (e.g. "1 GB RAM")
-            $table->foreignUuid('price_id')->nullable()->constrained('meteric_prices')->restrictOnDelete();
+            $table->foreignUuid('price_id')->nullable()->constrained(Pg::table('prices'))->restrictOnDelete();
             $table->decimal('quantity', 20, 6)->default(1);
             $table->decimal('min_qty', 20, 6)->nullable();   // quantity bounds (WHMCS-style)
             $table->decimal('max_qty', 20, 6)->nullable();
@@ -101,12 +101,12 @@ return new class extends Migration
 
             $table->unique(['item_id', 'key']);
         });
-        Pg::enumCheck('meteric_item_options', 'type', OptionType::class);
+        Pg::enumCheck(Pg::table('item_options'), 'type', OptionType::class);
 
-        Schema::create('meteric_allowances', function (Blueprint $table) {
+        Schema::create(Pg::table('allowances'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
-            $table->foreignUuid('dimension_id')->constrained('meteric_meter_dimensions')->cascadeOnDelete();
+            $table->foreignUuid('item_id')->constrained(Pg::table('subscription_items'))->cascadeOnDelete();
+            $table->foreignUuid('dimension_id')->constrained(Pg::table('meter_dimensions'))->cascadeOnDelete();
             $table->decimal('included_qty', 20, 6);
             $table->timestampTzRange('period');
             $table->decimal('consumed_qty', 20, 6)->default(0);
@@ -118,10 +118,10 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('meteric_allowances');
-        Schema::dropIfExists('meteric_item_options');
-        Schema::dropIfExists('meteric_addons');
-        Schema::dropIfExists('meteric_subscription_items');
-        Schema::dropIfExists('meteric_subscriptions');
+        Schema::dropIfExists(Pg::table('allowances'));
+        Schema::dropIfExists(Pg::table('item_options'));
+        Schema::dropIfExists(Pg::table('addons'));
+        Schema::dropIfExists(Pg::table('subscription_items'));
+        Schema::dropIfExists(Pg::table('subscriptions'));
     }
 };

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Discount extends MetericModel
 {
-    protected $table = 'meteric_discounts';
+    protected string $baseTable = 'discounts';
 
     public $timestamps = false;
 

@@ -15,10 +15,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('meteric_usage_records', function (Blueprint $table) {
+        Schema::create(Pg::table('usage_records'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
-            $table->foreignUuid('dimension_id')->constrained('meteric_meter_dimensions')->restrictOnDelete();
+            $table->foreignUuid('item_id')->constrained(Pg::table('subscription_items'))->cascadeOnDelete();
+            $table->foreignUuid('dimension_id')->constrained(Pg::table('meter_dimensions'))->restrictOnDelete();
             $table->decimal('quantity', 20, 6);
             $table->timestampTz('occurred_at');
             $table->timestampTzRange('window')->nullable();
@@ -29,34 +29,35 @@ return new class extends Migration
 
             $table->index(['item_id', 'dimension_id', 'occurred_at'])->where('charge_id IS NULL');
         });
-        Pg::check('meteric_usage_records', 'meteric_usage_qty_nonneg', 'quantity >= 0');
+        Pg::check(Pg::table('usage_records'), 'meteric_usage_qty_nonneg', 'quantity >= 0');
 
         // The double-bill guard. EXCLUDE has no Blueprint equivalent — raw is the
         // only way to express "no two billed windows overlap per item+dimension".
-        Schema::create('meteric_billing_periods', function (Blueprint $table) {
+        Schema::create(Pg::table('billing_periods'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
+            $table->foreignUuid('item_id')->constrained(Pg::table('subscription_items'))->cascadeOnDelete();
             $table->uuid('dimension_id')->nullable();   // null = base recurring window
             $table->timestampTzRange('covers');
             $table->uuid('charge_id')->nullable();
             $table->timestampTz('created_at')->useCurrent();
         });
-        Pg::check('meteric_billing_periods', 'meteric_period_valid', 'lower(covers) < upper(covers)');
-        DB::statement(<<<'SQL'
-        ALTER TABLE meteric_billing_periods ADD CONSTRAINT meteric_no_overlap EXCLUDE USING gist (
+        Pg::check(Pg::table('billing_periods'), 'meteric_period_valid', 'lower(covers) < upper(covers)');
+        $periods = Pg::table('billing_periods');
+        DB::statement(<<<SQL
+        ALTER TABLE {$periods} ADD CONSTRAINT meteric_no_overlap EXCLUDE USING gist (
             item_id WITH =,
             COALESCE(dimension_id, '00000000-0000-0000-0000-000000000000'::uuid) WITH =,
             covers WITH &&
         )
         SQL);
 
-        Schema::create('meteric_charges', function (Blueprint $table) {
+        Schema::create(Pg::table('charges'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('account_id')->constrained('meteric_billing_accounts')->restrictOnDelete();
-            $table->foreignUuid('subscription_id')->nullable()->constrained('meteric_subscriptions')->nullOnDelete();
+            $table->foreignUuid('account_id')->constrained(Pg::table('billing_accounts'))->restrictOnDelete();
+            $table->foreignUuid('subscription_id')->nullable()->constrained(Pg::table('subscriptions'))->nullOnDelete();
             $table->string('origin_type');
             $table->string('origin_id');
-            $table->foreignUuid('dimension_id')->nullable()->constrained('meteric_meter_dimensions');
+            $table->foreignUuid('dimension_id')->nullable()->constrained(Pg::table('meter_dimensions'));
             $table->string('kind');
             $table->string('billing_mode');
             $table->string('state')->default(ChargeState::Pending->value);
@@ -80,16 +81,16 @@ return new class extends Migration
             $table->index(['origin_type', 'origin_id']);
             $table->index('invoice_id');
         });
-        Pg::currencyCheck('meteric_charges');
-        Pg::enumCheck('meteric_charges', 'state', ChargeState::class);
-        Pg::enumCheck('meteric_charges', 'billing_mode', BillingMode::class);
-        Pg::enumCheck('meteric_charges', 'kind', LineKind::class);
+        Pg::currencyCheck(Pg::table('charges'));
+        Pg::enumCheck(Pg::table('charges'), 'state', ChargeState::class);
+        Pg::enumCheck(Pg::table('charges'), 'billing_mode', BillingMode::class);
+        Pg::enumCheck(Pg::table('charges'), 'kind', LineKind::class);
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('meteric_charges');
-        Schema::dropIfExists('meteric_billing_periods');
-        Schema::dropIfExists('meteric_usage_records');
+        Schema::dropIfExists(Pg::table('charges'));
+        Schema::dropIfExists(Pg::table('billing_periods'));
+        Schema::dropIfExists(Pg::table('usage_records'));
     }
 };

@@ -21,7 +21,7 @@ use Meteric\Support\MoneyMath;
  */
 class MeterDimension extends MetericModel
 {
-    protected $table = 'meteric_meter_dimensions';
+    protected string $baseTable = 'meter_dimensions';
 
     public $timestamps = false;
 

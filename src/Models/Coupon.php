@@ -22,7 +22,7 @@ use Meteric\Enums\DiscountType;
  */
 class Coupon extends MetericModel
 {
-    protected $table = 'meteric_coupons';
+    protected string $baseTable = 'coupons';
 
     public $timestamps = false;
 

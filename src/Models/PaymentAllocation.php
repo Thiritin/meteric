@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PaymentAllocation extends MetericModel
 {
-    protected $table = 'meteric_payment_allocations';
+    protected string $baseTable = 'payment_allocations';
 
     public $timestamps = false;
 

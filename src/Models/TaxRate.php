@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class TaxRate extends MetericModel
 {
-    protected $table = 'meteric_tax_rates';
+    protected string $baseTable = 'tax_rates';
 
     protected $guarded = [];
 

@@ -30,7 +30,7 @@ use Meteric\Enums\InvoiceState;
  */
 class Invoice extends MetericModel
 {
-    protected $table = 'meteric_invoices';
+    protected string $baseTable = 'invoices';
 
     protected $guarded = [];
 

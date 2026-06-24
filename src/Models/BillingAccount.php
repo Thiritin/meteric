@@ -19,7 +19,7 @@ use Meteric\Tax\TaxContext;
  */
 class BillingAccount extends MetericModel
 {
-    protected $table = 'meteric_billing_accounts';
+    protected string $baseTable = 'billing_accounts';
 
     protected $guarded = [];
 

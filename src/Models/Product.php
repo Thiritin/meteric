@@ -22,7 +22,7 @@ use Meteric\Enums\PricingModel;
  */
 class Product extends MetericModel
 {
-    protected $table = 'meteric_products';
+    protected string $baseTable = 'products';
 
     protected $guarded = [];
 

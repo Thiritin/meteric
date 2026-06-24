@@ -17,6 +17,15 @@ abstract class MetericModel extends Model
 
     public $timestamps = true;
 
+    /** Table name without the schema prefix; getTable() prepends config('meteric.schema.prefix'). */
+    protected string $baseTable = '';
+
+    /** Build the table name from the configured prefix unless a subclass pins $table explicitly. */
+    public function getTable(): string
+    {
+        return $this->table ?? config('meteric.schema.prefix', 'meteric_').$this->baseTable;
+    }
+
     /** Tables already use real defaults; let DB manage created/updated where triggers exist. */
     protected function casts(): array
     {

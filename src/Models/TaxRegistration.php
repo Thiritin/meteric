@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class TaxRegistration extends MetericModel
 {
-    protected $table = 'meteric_tax_registrations';
+    protected string $baseTable = 'tax_registrations';
 
     protected $guarded = [];
 

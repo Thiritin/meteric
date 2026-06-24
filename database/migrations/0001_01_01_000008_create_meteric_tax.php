@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Meteric\Support\Pg;
 use Tpetry\PostgresqlEnhanced\Schema\Blueprint;
 use Tpetry\PostgresqlEnhanced\Support\Facades\Schema;
 
@@ -12,7 +13,7 @@ return new class extends Migration
     public function up(): void
     {
         // Where the merchant is VAT-registered. Drives WHETHER tax is charged.
-        Schema::create('meteric_tax_registrations', function (Blueprint $table) {
+        Schema::create(Pg::table('tax_registrations'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->char('country', 2);                 // ISO-3166 (or 'EU' marker for OSS)
             $table->string('scheme')->default('standard'); // standard | eu_oss | ch_vat | uk_vat | ...
@@ -27,7 +28,7 @@ return new class extends Migration
 
         // Editable rate table. Drives HOW MUCH. EU rows seeded from ibericode via
         // `meteric:vat-sync`; non-EU (CH, UK, …) added manually (source='manual').
-        Schema::create('meteric_tax_rates', function (Blueprint $table) {
+        Schema::create(Pg::table('tax_rates'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->char('country', 2);
             $table->string('region')->nullable();        // for sub-national (US states) later
@@ -48,7 +49,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('meteric_tax_rates');
-        Schema::dropIfExists('meteric_tax_registrations');
+        Schema::dropIfExists(Pg::table('tax_rates'));
+        Schema::dropIfExists(Pg::table('tax_registrations'));
     }
 };

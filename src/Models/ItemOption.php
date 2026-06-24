@@ -20,7 +20,7 @@ use Meteric\Enums\OptionType;
  */
 class ItemOption extends MetericModel
 {
-    protected $table = 'meteric_item_options';
+    protected string $baseTable = 'item_options';
 
     protected $guarded = [];
 

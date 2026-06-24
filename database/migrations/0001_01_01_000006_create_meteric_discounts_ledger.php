@@ -13,7 +13,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('meteric_coupons', function (Blueprint $table) {
+        Schema::create(Pg::table('coupons'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->string('code')->unique();
             $table->string('type');
@@ -29,11 +29,11 @@ return new class extends Migration
             $table->jsonb('metadata')->default(DB::raw("'{}'::jsonb"));
             $table->timestampTz('created_at')->useCurrent();
         });
-        Pg::enumCheck('meteric_coupons', 'type', DiscountType::class);
+        Pg::enumCheck(Pg::table('coupons'), 'type', DiscountType::class);
 
-        Schema::create('meteric_discounts', function (Blueprint $table) {
+        Schema::create(Pg::table('discounts'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('coupon_id')->nullable()->constrained('meteric_coupons')->nullOnDelete();
+            $table->foreignUuid('coupon_id')->nullable()->constrained(Pg::table('coupons'))->nullOnDelete();
             $table->string('target_type');
             $table->string('target_id');
             $table->integer('remaining_cycles')->nullable();
@@ -42,9 +42,9 @@ return new class extends Migration
             $table->index(['target_type', 'target_id']);
         });
 
-        Schema::create('meteric_ledger', function (Blueprint $table) {
+        Schema::create(Pg::table('ledger'), function (Blueprint $table) {
             $table->identity(always: true)->primary();
-            $table->foreignUuid('account_id')->constrained('meteric_billing_accounts')->restrictOnDelete();
+            $table->foreignUuid('account_id')->constrained(Pg::table('billing_accounts'))->restrictOnDelete();
             $table->uuid('txn_id');                 // groups balanced rows
             $table->string('entry');
             $table->bigInteger('debit_minor')->default(0);
@@ -57,14 +57,14 @@ return new class extends Migration
             $table->index(['account_id', 'posted_at']);
             $table->index('txn_id');
         });
-        Pg::currencyCheck('meteric_ledger');
-        Pg::check('meteric_ledger', 'meteric_ledger_single_side', 'debit_minor = 0 OR credit_minor = 0');
+        Pg::currencyCheck(Pg::table('ledger'));
+        Pg::check(Pg::table('ledger'), 'meteric_ledger_single_side', 'debit_minor = 0 OR credit_minor = 0');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('meteric_ledger');
-        Schema::dropIfExists('meteric_discounts');
-        Schema::dropIfExists('meteric_coupons');
+        Schema::dropIfExists(Pg::table('ledger'));
+        Schema::dropIfExists(Pg::table('discounts'));
+        Schema::dropIfExists(Pg::table('coupons'));
     }
 };

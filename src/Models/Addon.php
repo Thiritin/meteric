@@ -16,7 +16,7 @@ use Meteric\Enums\ItemState;
  */
 class Addon extends MetericModel
 {
-    protected $table = 'meteric_addons';
+    protected string $baseTable = 'addons';
 
     protected $guarded = [];
 

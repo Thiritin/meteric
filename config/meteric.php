@@ -137,6 +137,11 @@ return [
     | Morph key type for host references and Meteric PKs.
     */
     'schema' => [
+        // Applied to every Meteric table name (models + migrations). Set this
+        // ONCE before running migrations; changing it after migrating orphans
+        // the existing tables. '' means no prefix (e.g. plain `subscriptions`).
+        // Constraint and index identifier names keep a fixed `meteric_`
+        // spelling regardless of this value and are not affected by it.
         'prefix' => 'meteric_',
         'morph_key' => env('METERIC_MORPH_KEY', 'uuid'), // uuid | bigint
     ],

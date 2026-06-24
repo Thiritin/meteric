@@ -15,9 +15,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('meteric_invoices', function (Blueprint $table) {
+        Schema::create(Pg::table('invoices'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('account_id')->constrained('meteric_billing_accounts')->restrictOnDelete();
+            $table->foreignUuid('account_id')->constrained(Pg::table('billing_accounts'))->restrictOnDelete();
             $table->string('customer_type');
             $table->string('customer_id');
             $table->string('number')->nullable();
@@ -43,13 +43,13 @@ return new class extends Migration
             $table->uniqueIndex('idempotency_key')->where('idempotency_key IS NOT NULL');
             $table->index(['account_id', 'state']);
         });
-        Pg::currencyCheck('meteric_invoices');
-        Pg::enumCheck('meteric_invoices', 'state', InvoiceState::class);
+        Pg::currencyCheck(Pg::table('invoices'));
+        Pg::enumCheck(Pg::table('invoices'), 'state', InvoiceState::class);
 
-        Schema::create('meteric_invoice_lines', function (Blueprint $table) {
+        Schema::create(Pg::table('invoice_lines'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('invoice_id')->constrained('meteric_invoices')->cascadeOnDelete();
-            $table->foreignUuid('charge_id')->nullable()->constrained('meteric_charges')->nullOnDelete();
+            $table->foreignUuid('invoice_id')->constrained(Pg::table('invoices'))->cascadeOnDelete();
+            $table->foreignUuid('charge_id')->nullable()->constrained(Pg::table('charges'))->nullOnDelete();
             $table->string('kind');
             $table->string('title')->nullable();             // line name (product + resource)
             $table->string('group')->nullable();             // invoice section heading (e.g. Domains, Usage)
@@ -70,12 +70,12 @@ return new class extends Migration
 
             $table->index(['invoice_id', 'sort']);
         });
-        Pg::currencyCheck('meteric_invoice_lines');
-        Pg::enumCheck('meteric_invoice_lines', 'kind', LineKind::class);
+        Pg::currencyCheck(Pg::table('invoice_lines'));
+        Pg::enumCheck(Pg::table('invoice_lines'), 'kind', LineKind::class);
 
-        Schema::create('meteric_credit_notes', function (Blueprint $table) {
+        Schema::create(Pg::table('credit_notes'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('invoice_id')->constrained('meteric_invoices')->restrictOnDelete();
+            $table->foreignUuid('invoice_id')->constrained(Pg::table('invoices'))->restrictOnDelete();
             $table->string('number')->nullable();
             $table->string('driver')->default('database');
             $table->string('external_id')->nullable();
@@ -90,38 +90,38 @@ return new class extends Migration
 
             $table->uniqueIndex('number')->where('number IS NOT NULL');
         });
-        Pg::currencyCheck('meteric_credit_notes');
-        Pg::enumCheck('meteric_credit_notes', 'state', CreditState::class);
+        Pg::currencyCheck(Pg::table('credit_notes'));
+        Pg::enumCheck(Pg::table('credit_notes'), 'state', CreditState::class);
 
-        Schema::create('meteric_payments', function (Blueprint $table) {
+        Schema::create(Pg::table('payments'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('account_id')->constrained('meteric_billing_accounts')->restrictOnDelete();
+            $table->foreignUuid('account_id')->constrained(Pg::table('billing_accounts'))->restrictOnDelete();
             $table->bigInteger('amount_minor');
             $table->char('currency', 3);
             $table->string('reference')->nullable()->unique();
             $table->timestampTz('received_at')->useCurrent();
             $table->jsonb('metadata')->default(DB::raw("'{}'::jsonb"));
         });
-        Pg::currencyCheck('meteric_payments');
-        Pg::check('meteric_payments', 'meteric_payments_amount_pos', 'amount_minor > 0');
+        Pg::currencyCheck(Pg::table('payments'));
+        Pg::check(Pg::table('payments'), 'meteric_payments_amount_pos', 'amount_minor > 0');
 
-        Schema::create('meteric_payment_allocations', function (Blueprint $table) {
+        Schema::create(Pg::table('payment_allocations'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('payment_id')->constrained('meteric_payments')->cascadeOnDelete();
-            $table->foreignUuid('invoice_id')->constrained('meteric_invoices')->restrictOnDelete();
+            $table->foreignUuid('payment_id')->constrained(Pg::table('payments'))->cascadeOnDelete();
+            $table->foreignUuid('invoice_id')->constrained(Pg::table('invoices'))->restrictOnDelete();
             $table->bigInteger('amount_minor');
 
             $table->unique(['payment_id', 'invoice_id']);
         });
-        Pg::check('meteric_payment_allocations', 'meteric_alloc_amount_pos', 'amount_minor > 0');
+        Pg::check(Pg::table('payment_allocations'), 'meteric_alloc_amount_pos', 'amount_minor > 0');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('meteric_payment_allocations');
-        Schema::dropIfExists('meteric_payments');
-        Schema::dropIfExists('meteric_credit_notes');
-        Schema::dropIfExists('meteric_invoice_lines');
-        Schema::dropIfExists('meteric_invoices');
+        Schema::dropIfExists(Pg::table('payment_allocations'));
+        Schema::dropIfExists(Pg::table('payments'));
+        Schema::dropIfExists(Pg::table('credit_notes'));
+        Schema::dropIfExists(Pg::table('invoice_lines'));
+        Schema::dropIfExists(Pg::table('invoices'));
     }
 };

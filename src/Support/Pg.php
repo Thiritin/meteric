@@ -13,6 +13,12 @@ use Illuminate\Support\Facades\DB;
  */
 final class Pg
 {
+    /** Resolve a Meteric table name by applying the configured schema prefix. */
+    public static function table(string $name): string
+    {
+        return config('meteric.schema.prefix', 'meteric_').$name;
+    }
+
     /** Add a CHECK that restricts a string column to a PHP enum's backing values. */
     public static function enumCheck(string $table, string $column, string $enumClass, bool $nullable = false): void
     {

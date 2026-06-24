@@ -28,7 +28,7 @@ use Meteric\Support\Period;
  */
 class InvoiceLine extends MetericModel
 {
-    protected $table = 'meteric_invoice_lines';
+    protected string $baseTable = 'invoice_lines';
 
     public $timestamps = false;
 

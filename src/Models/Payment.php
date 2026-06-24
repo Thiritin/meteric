@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Payment extends MetericModel
 {
-    protected $table = 'meteric_payments';
+    protected string $baseTable = 'payments';
 
     public $timestamps = false;
 

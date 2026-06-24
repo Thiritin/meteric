@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ProductOptionValue extends MetericModel
 {
-    protected $table = 'meteric_product_option_values';
+    protected string $baseTable = 'product_option_values';
 
     public $timestamps = false;
 

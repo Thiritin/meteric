@@ -46,7 +46,7 @@ use Meteric\Enums\FirstPeriodPolicy;
  */
 class Order extends MetericModel
 {
-    protected $table = 'meteric_checkouts';
+    protected string $baseTable = 'checkouts';
 
     protected $guarded = [];
 

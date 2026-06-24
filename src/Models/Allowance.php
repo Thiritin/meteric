@@ -15,7 +15,7 @@ use Meteric\Support\Period;
  */
 class Allowance extends MetericModel
 {
-    protected $table = 'meteric_allowances';
+    protected string $baseTable = 'allowances';
 
     public $timestamps = false;
 

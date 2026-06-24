@@ -15,7 +15,7 @@ use Meteric\Casts\PeriodCast;
  */
 class UsageRecord extends MetericModel
 {
-    protected $table = 'meteric_usage_records';
+    protected string $baseTable = 'usage_records';
 
     public $timestamps = false;
 

@@ -39,7 +39,7 @@ use Meteric\Support\RecurrenceRule;
  */
 class Price extends MetericModel
 {
-    protected $table = 'meteric_prices';
+    protected string $baseTable = 'prices';
 
     protected $guarded = [];
 

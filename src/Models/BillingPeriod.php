@@ -16,7 +16,7 @@ use Meteric\Support\Period;
  */
 class BillingPeriod extends MetericModel
 {
-    protected $table = 'meteric_billing_periods';
+    protected string $baseTable = 'billing_periods';
 
     public $timestamps = false;
 
