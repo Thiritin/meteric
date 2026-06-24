@@ -224,36 +224,37 @@ final class Meteric
     }
 
     /**
-     * Begin a persisted order (a frozen, immutable checkout). Build the cart,
-     * end with ->create() to store a pending Order, then pay/convert it later.
+     * Open a persisted, immutable order (a frozen checkout). Build the cart with
+     * add()/addon()/option(), end with ->create() to store a pending Order, then
+     * pay or confirm it later. No Subscription/Charge/Invoice exists until paid.
      */
-    public function order(?Model $customer = null): CheckoutBuilder
+    public function openCheckout(?Model $customer = null): CheckoutBuilder
     {
         $builder = app(CheckoutBuilder::class);
 
         return $customer ? $builder->for($customer) : $builder;
     }
 
-    /** Convert a pending order into a real subscription (no billing). */
-    public function convertOrder(Order $order, ?CarbonImmutable $at = null): Subscription
+    /** Pay an order in full and materialize its subscription + Paid invoice. */
+    public function payCheckout(Order $order, Money $amount, ?string $ref = null): Order
     {
-        return app(CheckoutManager::class)->convert($order, $at);
+        return app(CheckoutManager::class)->pay($order, $amount, $ref);
     }
 
-    /** Convert + bill an order: issue the frozen charges and record full payment. */
-    public function payOrder(Order $order, ?CarbonImmutable $at = null): ?Invoice
+    /** Convert a zero-total order with no payment (e.g. a fully trialed signup). */
+    public function confirmCheckout(Order $order): Order
     {
-        return app(CheckoutManager::class)->pay($order, $at);
+        return app(CheckoutManager::class)->confirm($order);
     }
 
     /** Cancel a pending order. No-op once terminal. */
-    public function cancelOrder(Order $order, ?CarbonImmutable $at = null): Order
+    public function cancelCheckout(Order $order): Order
     {
-        return app(CheckoutManager::class)->cancel($order, $at);
+        return app(CheckoutManager::class)->cancel($order);
     }
 
     /** Expire pending orders past their expiry. Returns the count. */
-    public function expireOrders(?CarbonImmutable $at = null): int
+    public function expireCheckouts(?CarbonImmutable $at = null): int
     {
         return app(CheckoutManager::class)->expireDue($at);
     }

@@ -9,6 +9,7 @@ use Meteric\Contracts\Clock;
 use Meteric\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Subscription;
+use Meteric\Subscriptions\CheckoutManager;
 
 /**
  * The billing tick. For every subscription whose period has ended it rolls up the
@@ -54,7 +55,7 @@ final class RunBillingCommand extends Command
         }
 
         $overdue = $meteric->markOverdue();
-        $expired = $meteric->expireOrders($at);
+        $expired = app(CheckoutManager::class)->expireDue($at);
 
         $this->info("meteric:run done: {$rolled} usage + {$renewed} renewal charge(s), {$invoiced} invoice(s), {$overdue} newly overdue, {$expired} order(s) expired.");
 

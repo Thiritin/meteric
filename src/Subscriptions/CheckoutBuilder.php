@@ -11,17 +11,18 @@ use Meteric\Contracts\Clock;
 use Meteric\Enums\AnchorMode;
 use Meteric\Enums\CheckoutState;
 use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Events\CheckoutCreated;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Order;
 use Meteric\Models\Price;
 use Meteric\Pricing\CheckoutPricer;
-use Meteric\Tax\TaxContext;
 
 /**
- * Fluent checkout creation. Collects a cart (base items + their addons/options),
- * prices and freezes it through the CheckoutPricer, then persists a single Order
- * row with the frozen `contents`. Nothing is billed yet — the Order is a pending
- * intent that ->pay() or ->convert() later turns into a real subscription.
+ * Fluent checkout creation. Mirrors SubscriptionBuilder, but instead of starting
+ * a subscription it freezes the cart into a single pending Order row: contents +
+ * computed minor amounts + a token. add() opens a new item; addon() and option()
+ * attach to the item most recently added. No Subscription/Charge/Invoice exists
+ * until the order is paid.
  */
 final class CheckoutBuilder
 {
@@ -41,26 +42,21 @@ final class CheckoutBuilder
 
     private ?CarbonImmutable $at = null;
 
-    private ?TaxContext $taxContext = null;
-
     private ?string $idempotencyKey = null;
 
-    private ?int $ttlMinutes = null;
+    private ?int $ttlMinutes;
 
-    /** @var array<string,mixed> */
-    private array $metadata = [];
-
-    /** @var list<array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float}>}> */
-    private array $cart = [];
+    /** @var list<array<string,mixed>> */
+    private array $items = [];
 
     public function __construct(
         private Clock $clock,
         private CheckoutPricer $pricer,
         string $defaultCurrency = 'EUR',
-        ?int $defaultTtlMinutes = null,
+        ?int $ttlMinutes = null,
     ) {
         $this->currency = $defaultCurrency;
-        $this->ttlMinutes = $defaultTtlMinutes;
+        $this->ttlMinutes = $ttlMinutes;
     }
 
     public function account(BillingAccount $account): self
@@ -114,13 +110,6 @@ final class CheckoutBuilder
         return $this;
     }
 
-    public function tax(TaxContext $context): self
-    {
-        $this->taxContext = $context;
-
-        return $this;
-    }
-
     public function idempotencyKey(string $key): self
     {
         $this->idempotencyKey = $key;
@@ -128,7 +117,7 @@ final class CheckoutBuilder
         return $this;
     }
 
-    /** Minutes until a pending order expires (the sweep cancels it). Null = no expiry. */
+    /** Minutes until a pending order expires. Null leaves the configured default. */
     public function expiresIn(?int $minutes): self
     {
         $this->ttlMinutes = $minutes;
@@ -136,63 +125,72 @@ final class CheckoutBuilder
         return $this;
     }
 
-    /** @param array<string,mixed> $metadata */
-    public function metadata(array $metadata): self
+    public function add(Price $price, float $qty = 1, ?Model $resource = null, ?string $label = null, ?string $group = null): self
     {
-        $this->metadata = $metadata;
-
-        return $this;
-    }
-
-    /**
-     * Add a base line to the cart, with optional addons and options.
-     *
-     * @param  list<array{price:Price,group:?string,qty:float}>  $addons
-     * @param  list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float}>  $options
-     */
-    public function add(Price $price, float $qty = 1, ?Model $resource = null, ?string $label = null, ?string $group = null, array $addons = [], array $options = []): self
-    {
-        $this->cart[] = [
+        $this->items[] = [
             'price' => $price,
             'qty' => $qty,
             'resource' => $resource,
             'label' => $label,
             'group' => $group,
-            'addons' => $addons,
-            'options' => $options,
+            'addons' => [],
+            'options' => [],
         ];
 
         return $this;
     }
 
-    /** Price, freeze, and persist the pending Order. */
+    /** Attach an addon to the item most recently added. */
+    public function addon(Price $price, ?string $group = null, float $qty = 1): self
+    {
+        $this->items[$this->currentKey()]['addons'][] = ['price' => $price, 'group' => $group, 'qty' => $qty];
+
+        return $this;
+    }
+
+    /** Attach a configurable option to the item most recently added (value + label both frozen). */
+    public function option(string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?float $min = null, ?float $max = null, ?string $label = null): self
+    {
+        $this->items[$this->currentKey()]['options'][] = [
+            'key' => $key,
+            'value' => $value,
+            'type' => $type,
+            'price' => $price,
+            'qty' => $qty,
+            'min' => $min,
+            'max' => $max,
+            'label' => $label,
+        ];
+
+        return $this;
+    }
+
     public function create(): Order
     {
+        if ($this->items === []) {
+            throw new \LogicException('An order needs at least one item.');
+        }
+
         $at = $this->at ?? $this->clock->now();
         $account = $this->account ?? $this->resolveAccount();
         $currency = $this->currency ?? $account->currency;
 
-        if ($this->idempotencyKey !== null) {
-            $existing = Order::query()->where('idempotency_key', $this->idempotencyKey)->first();
-            if ($existing !== null) {
-                return $existing;
-            }
-        }
-
-        $taxContext = $this->taxContext ?? $account->taxContext();
-
-        $frozen = $this->pricer->price(
-            $this->cart,
-            $currency,
-            $at,
-            $this->anchorMode,
-            $this->anchorDay,
-            $this->firstPeriod,
-            $this->trialDays,
-            $taxContext,
+        $priced = $this->pricer->price(
+            cart: $this->items,
+            currency: $currency,
+            at: $at,
+            anchorMode: $this->anchorMode,
+            anchorDay: $this->anchorDay,
+            firstPeriod: $this->firstPeriod,
+            trialDays: $this->trialDays,
+            taxContext: $account->taxContext(),
         );
 
-        return Order::create([
+        if ($priced->totalMinor < 0) {
+            throw new \InvalidArgumentException('An order total cannot be negative.');
+        }
+
+        $order = Order::create([
             'account_id' => $account->id,
             'customer_type' => $this->customer?->getMorphClass() ?? $account->owner_type,
             'customer_id' => $this->customer?->getKey() ?? $account->owner_id,
@@ -202,23 +200,35 @@ final class CheckoutBuilder
             'anchor_day' => $this->anchorDay,
             'first_period' => $this->firstPeriod,
             'trial_days' => $this->trialDays,
-            'subtotal_minor' => $frozen->subtotalMinor,
-            'tax_minor' => $frozen->taxMinor,
-            'total_minor' => $frozen->totalMinor,
-            'recurring_total_minor' => $frozen->recurringTotalMinor,
-            'contents' => $frozen->contents,
-            'quote_snapshot' => $frozen->quoteSnapshot,
+            'subtotal_minor' => $priced->subtotalMinor,
+            'tax_minor' => $priced->taxMinor,
+            'total_minor' => $priced->totalMinor,
+            'recurring_total_minor' => $priced->recurringTotalMinor,
+            'contents' => $priced->contents,
+            'quote_snapshot' => $priced->quoteSnapshot,
             'token' => Str::random(40),
             'idempotency_key' => $this->idempotencyKey,
-            'expires_at' => $this->ttlMinutes !== null ? $at->addMinutes($this->ttlMinutes) : null,
-            'metadata' => $this->metadata,
+            'expires_at' => $this->ttlMinutes !== null && $this->ttlMinutes > 0 ? $at->addMinutes($this->ttlMinutes) : null,
         ]);
+
+        CheckoutCreated::dispatch($order);
+
+        return $order;
+    }
+
+    private function currentKey(): int
+    {
+        if ($this->items === []) {
+            throw new \LogicException('Call add() before attaching addons or options.');
+        }
+
+        return array_key_last($this->items);
     }
 
     private function resolveAccount(): BillingAccount
     {
         if ($this->customer === null) {
-            throw new \LogicException('checkout() needs an account() or for(customer).');
+            throw new \LogicException('openCheckout() needs an account() or for(customer).');
         }
 
         return BillingAccount::firstOrCreate(

@@ -20,6 +20,8 @@ use Meteric\Enums\FirstPeriodPolicy;
  *
  * @property string $id
  * @property string $account_id
+ * @property string $customer_type
+ * @property string $customer_id
  * @property string $currency
  * @property CheckoutState $state
  * @property AnchorMode $anchor_mode
@@ -94,29 +96,19 @@ class Order extends MetericModel
         return $this->belongsTo(Subscription::class, 'subscription_id');
     }
 
-    /**
-     * The frozen cart as typed entries (one per intended subscription item).
-     *
-     * @return list<OrderItem>
-     */
-    public function lines(): array
-    {
-        return array_map(static fn (array $row) => new OrderItem($row), $this->contents ?? []);
-    }
-
-    /** Gross total owed at checkout. */
+    /** Gross total owed at checkout (subtotal + tax). */
     public function total(): Money
     {
         return Money::ofMinor($this->total_minor, $this->currency);
     }
 
-    public function isPaid(): bool
-    {
-        return $this->paid_at !== null;
-    }
-
     public function isPending(): bool
     {
         return $this->state === CheckoutState::Pending;
+    }
+
+    public function isConverted(): bool
+    {
+        return $this->state === CheckoutState::Converted;
     }
 }

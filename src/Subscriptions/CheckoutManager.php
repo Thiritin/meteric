@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Meteric\Subscriptions;
 
+use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -14,132 +15,83 @@ use Meteric\Enums\CheckoutState;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\SubscriptionState;
-use Meteric\Events\OrderCanceled;
-use Meteric\Events\OrderConverted;
-use Meteric\Events\OrderExpired;
+use Meteric\Events\CheckoutCanceled;
+use Meteric\Events\CheckoutExpired;
+use Meteric\Events\CheckoutPaid;
+use Meteric\Events\SubscriptionStarted;
 use Meteric\Meteric;
 use Meteric\Models\Addon;
-use Meteric\Models\BillingAccount;
-use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
 use Meteric\Models\Invoice;
 use Meteric\Models\ItemOption;
 use Meteric\Models\Order;
-use Meteric\Models\OrderItem;
+use Meteric\Models\Payment;
 use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Support\Period;
 
 /**
- * Settles a pending Order: convert it into a real Subscription with frozen
- * pending Charges, pay it (invoice + record payment), or cancel/expire it.
- *
- * Conversion replays the order's frozen `contents`: each entry's `amount_minor`
- * + `kind` are taken as-is (immutable), and only the service period is recomputed
- * at the actual payment date so the window is correct. A referenced price that no
- * longer exists is a hard error — the order cannot be honoured.
+ * Settles a persisted order. Payment is the only thing that materializes a real
+ * Subscription (+ items/addons/options) and a Paid invoice; the charges it
+ * accrues use the FROZEN amounts captured at open time, so a catalog price
+ * change mid-flight never moves the order's figures. Conversion is idempotent
+ * (row lock + state guard), so a double payment yields exactly one subscription.
  */
 final class CheckoutManager
 {
-    public function __construct(private Clock $clock) {}
+    public function __construct(private Clock $clock, private PeriodPlanner $planner) {}
 
     /**
-     * Convert a pending order into a Subscription with its frozen pending charges.
-     * Idempotent: a converted order returns its existing subscription.
+     * Pay an order in full (gross total) and convert it. Paying an order that has
+     * already converted is a no-op (returns it unchanged), so a retried payment
+     * never double-bills. A canceled or expired order is rejected.
      */
-    public function convert(Order $order, ?CarbonImmutable $at = null): Subscription
+    public function pay(Order $order, Money $amount, ?string $ref = null, ?CarbonImmutable $at = null): Order
     {
-        $at ??= $this->clock->now();
-
-        if (! $order->state->canConvert()) {
-            if ($order->subscription_id !== null) {
-                return Subscription::findOrFail($order->subscription_id);
-            }
-            throw new \LogicException("Order {$order->id} is {$order->state->value} and cannot convert.");
+        if ($order->isConverted()) {
+            return $order;
+        }
+        if (! $order->isPending()) {
+            throw new \LogicException("Order {$order->id} is {$order->state->value} and cannot be paid.");
         }
 
-        return DB::transaction(function () use ($order, $at): Subscription {
-            $trialEnd = $order->trial_days > 0 ? $at->addDays($order->trial_days) : null;
-            $signup = $trialEnd ?? $at;
-
-            $sub = Subscription::create([
-                'account_id' => $order->account_id,
-                'customer_type' => $order->customer_type,
-                'customer_id' => $order->customer_id,
-                'currency' => $order->currency,
-                'state' => $trialEnd ? SubscriptionState::Trialing : SubscriptionState::Active,
-                'anchor_mode' => $order->anchor_mode,
-                'anchor_day' => $order->anchor_day,
-                'first_period' => $order->first_period,
-                'trial_end' => $trialEnd,
-            ]);
-
-            $ends = [];
-            foreach ($order->lines() as $line) {
-                $ends[] = $this->materialize($order, $sub, $line, $at, $signup, (bool) $trialEnd);
-            }
-
-            $end = $ends === [] ? $at->addSecond() : min($ends);
-            $sub->forceFill(['current_period' => new Period($at, $end)])->save();
-
-            $order->forceFill([
-                'state' => CheckoutState::Converted,
-                'subscription_id' => $sub->id,
-                'converted_at' => $at,
-            ])->save();
-
-            OrderConverted::dispatch($order->refresh(), $sub);
-
-            return $sub->refresh();
-        });
-    }
-
-    /**
-     * Convert and bill in one step: materialize the subscription, issue the frozen
-     * pending charges onto an invoice, and record full payment. Returns the paid
-     * invoice. Use this when you have collected the money (gateway success).
-     */
-    public function pay(Order $order, ?CarbonImmutable $at = null): ?Invoice
-    {
-        $at ??= $this->clock->now();
-        $this->convert($order, $at);
-        $order->refresh();
-
-        $account = BillingAccount::findOrFail($order->account_id);
-        $invoice = app(Meteric::class)->invoicePending($account, $order->currency);
-
-        if ($invoice !== null) {
-            app(Meteric::class)->recordPayment($invoice, $invoice->total(), 'order:'.$order->id);
-            $order->forceFill(['invoice_id' => $invoice->id, 'paid_at' => $at])->save();
-        } else {
-            // Free / fully-trial order: nothing to bill, but it is paid (settled).
-            $order->forceFill(['paid_at' => $at])->save();
+        $expected = $amount->getMinorAmount()->toInt();
+        if ($expected !== $order->total_minor || $amount->getCurrency()->getCurrencyCode() !== $order->currency) {
+            throw new \InvalidArgumentException('Payment must equal the order gross total in its currency.');
         }
 
-        return $invoice;
+        return $this->convert($order, $amount, $ref, $at);
     }
 
-    /** Cancel a pending order (buyer abandoned / merchant voided). No-op if terminal. */
+    /** Convert a zero-total order with no payment (e.g. a fully trialed signup). */
+    public function confirm(Order $order, ?CarbonImmutable $at = null): Order
+    {
+        if (! $order->isPending()) {
+            throw new \LogicException('Only a pending order can be confirmed.');
+        }
+
+        return $this->convert($order, null, null, $at);
+    }
+
+    /** Cancel a pending order. No-op once terminal. */
     public function cancel(Order $order, ?CarbonImmutable $at = null): Order
     {
-        $at ??= $this->clock->now();
-
-        if (! $order->state->canConvert()) {
+        if ($order->state->isTerminal()) {
             return $order;
         }
 
-        $order->forceFill(['state' => CheckoutState::Canceled, 'canceled_at' => $at])->save();
-        OrderCanceled::dispatch($order);
+        $order->forceFill([
+            'state' => CheckoutState::Canceled,
+            'canceled_at' => $at ?? $this->clock->now(),
+        ])->save();
+
+        CheckoutCanceled::dispatch($order);
 
         return $order;
     }
 
-    /**
-     * Expire pending orders past their expires_at. Idempotent — the partial index
-     * only matches pending rows, so a re-run skips already-expired orders.
-     * Returns the count expired.
-     */
+    /** Expire every pending order past its expiry. Returns the count. Idempotent. */
     public function expireDue(?CarbonImmutable $at = null): int
     {
         $at ??= $this->clock->now();
@@ -149,9 +101,10 @@ final class CheckoutManager
             ->where('state', CheckoutState::Pending->value)
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', $at)
+            ->cursor()
             ->each(function (Order $order) use ($at, &$count): void {
                 $order->forceFill(['state' => CheckoutState::Expired, 'canceled_at' => $at])->save();
-                OrderExpired::dispatch($order);
+                CheckoutExpired::dispatch($order);
                 $count++;
             });
 
@@ -159,25 +112,103 @@ final class CheckoutManager
     }
 
     /**
-     * Materialize one frozen content line into a SubscriptionItem (+ its addons,
-     * options, and pending charges). Returns the item's period end (renewal moment).
+     * Materialize the order: one Subscription, its items/addons/options, and the
+     * frozen pending charges, then invoice and (optionally) record payment. The
+     * whole thing runs under a row lock with a state guard so it is idempotent.
      */
-    private function materialize(Order $order, Subscription $sub, OrderItem $line, CarbonImmutable $at, CarbonImmutable $signup, bool $trialing): CarbonImmutable
+    private function convert(Order $order, ?Money $amount, ?string $ref, ?CarbonImmutable $at): Order
     {
-        $price = $this->resolvePrice($line->priceId());
+        $paying = $amount !== null && $amount->isPositive();
 
-        // Recompute the service period at the actual payment date; amount stays frozen.
+        $result = DB::transaction(function () use ($order, $amount, $ref, $at, $paying): array {
+            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+
+            // Idempotency guard: already converted -> return unchanged.
+            if (! $locked->isPending() || $locked->subscription_id !== null) {
+                return [$locked, null, null, null];
+            }
+
+            $when = $at ?? $this->clock->now();
+            $trialEnd = $locked->trial_days > 0 ? $when->addDays($locked->trial_days) : null;
+            $signup = $trialEnd ?? $when;
+
+            $sub = Subscription::create([
+                'account_id' => $locked->account_id,
+                'customer_type' => $locked->customer_type,
+                'customer_id' => $locked->customer_id,
+                'currency' => $locked->currency,
+                'state' => $trialEnd ? SubscriptionState::Trialing : SubscriptionState::Active,
+                'anchor_mode' => $locked->anchor_mode,
+                'anchor_day' => $locked->anchor_day,
+                'first_period' => $locked->first_period,
+                'trial_end' => $trialEnd,
+            ]);
+            $sub->setRelation('account', $locked->account);
+
+            $ends = [];
+            foreach ($locked->contents as $content) {
+                $ends[] = $this->materializeItem($sub, $locked, $content, $signup);
+            }
+
+            if ($ends !== []) {
+                $sub->forceFill(['current_period' => new Period($when, min($ends))])->save();
+            }
+
+            $invoice = app(Meteric::class)->invoicePending($sub->account, $locked->currency);
+
+            $payment = null;
+            if ($paying && $invoice !== null) {
+                $payment = app(Meteric::class)->recordPayment($invoice, $amount, $ref);
+            }
+
+            $locked->forceFill([
+                'state' => CheckoutState::Converted,
+                'subscription_id' => $sub->id,
+                'invoice_id' => $invoice?->id,
+                'paid_at' => $paying ? $when : null,
+                'converted_at' => $when,
+            ])->save();
+
+            return [$locked, $sub, $invoice, $payment];
+        });
+
+        /** @var array{0:Order,1:?Subscription,2:?Invoice,3:?Payment} $result */
+        [$converted, $sub, $invoice, $payment] = $result;
+
+        if ($sub instanceof Subscription) {
+            CheckoutPaid::dispatch($converted, $invoice, $payment);
+            SubscriptionStarted::dispatch($converted, $sub, $invoice);
+        }
+
+        return $converted;
+    }
+
+    /**
+     * Build one subscription item plus its addons and options from a frozen cart
+     * entry, accruing a pending Charge per piece using the captured amounts. The
+     * period is recomputed at conversion time so the service window is fresh, but
+     * the money is the frozen money. Returns the item's period end.
+     *
+     * @param  array<string,mixed>  $content
+     */
+    private function materializeItem(Subscription $sub, Order $order, array $content, CarbonImmutable $signup): CarbonImmutable
+    {
+        $price = Price::find($content['price_id']);
+        if ($price === null) {
+            throw new \RuntimeException("Order price {$content['price_id']} no longer resolves.");
+        }
+
         $covers = $this->itemPeriod($price, $order, $signup);
 
         $item = SubscriptionItem::create([
             'subscription_id' => $sub->id,
-            'product_id' => $line->productId(),
+            'product_id' => $content['product_id'],
             'price_id' => $price->id,
-            'resource_type' => $line->resourceType(),
-            'resource_id' => $line->resourceId(),
-            'label' => $line->label(),
-            'group' => $line->group(),
-            'quantity' => $line->quantity(),
+            'resource_type' => $content['resource_type'] ?? null,
+            'resource_id' => $content['resource_id'] ?? null,
+            'label' => $content['label'] ?? null,
+            'group' => $content['group'] ?? null,
+            'quantity' => $content['quantity'],
             'state' => ItemState::Active,
             'activated_at' => $signup,
             'current_period' => $covers,
@@ -185,116 +216,77 @@ final class CheckoutManager
         $item->setRelation('subscription', $sub);
         $item->setRelation('price', $price);
 
-        // Base due-now charge (frozen amount). Skipped for trial / zero / usage.
-        if (! $trialing && $line->amountMinor() !== 0) {
-            $this->charge($sub, $item, 'subscription_item', $item->id, $line->kind(), $line->amountMinor(), $item->lineTitle(), $covers);
+        $kind = LineKind::from($content['kind']);
+        $this->charge($sub, $item, 'subscription_item', $item->id, $kind, (int) $content['amount_minor'],
+            $item->lineTitle(), $covers, (float) $content['quantity']);
+
+        foreach ($content['addons'] ?? [] as $addon) {
+            $addonModel = Addon::create([
+                'item_id' => $item->id,
+                'product_id' => $addon['product_id'],
+                'price_id' => $addon['price_id'],
+                'group_key' => $addon['group_key'] ?? null,
+                'quantity' => $addon['quantity'],
+                'state' => ItemState::Active,
+            ]);
+
+            $this->charge($sub, $item, 'addon', $addonModel->id, LineKind::Addon, (int) $addon['amount_minor'],
+                $item->lineTitle(), $covers, (float) $addon['quantity']);
         }
 
-        // Reserve the first window so a renewal sweep doesn't re-bill it.
-        if ($price->isRecurring() && $covers !== null && ! $trialing) {
-            $this->reserve($item, $covers);
+        foreach ($content['options'] ?? [] as $opt) {
+            $option = ItemOption::create([
+                'item_id' => $item->id,
+                'key' => $opt['key'],
+                'type' => $opt['type'],
+                'value' => $opt['value'],
+                'label' => $opt['label'] ?? null,
+                'price_id' => $opt['price_id'] ?? null,
+                'quantity' => $opt['quantity'],
+                'min_qty' => $opt['min_qty'] ?? null,
+                'max_qty' => $opt['max_qty'] ?? null,
+            ]);
+
+            $this->charge($sub, $item, 'item_option', $option->id, LineKind::Option, (int) $opt['amount_minor'],
+                ucfirst((string) $opt['key']), $covers, (float) $opt['quantity']);
+
+            if ((int) ($opt['setup_minor'] ?? 0) > 0) {
+                $this->charge($sub, $item, 'item_option', $option->id, LineKind::Setup, (int) $opt['setup_minor'],
+                    ucfirst((string) $opt['key']).' setup', null, 1);
+            }
         }
 
-        foreach ($line->addons() as $addon) {
-            $this->materializeAddon($sub, $item, $addon, $covers, $trialing);
-        }
-
-        foreach ($line->options() as $option) {
-            $this->materializeOption($sub, $item, $option, $covers, $trialing);
-        }
-
-        return $covers?->end ?? $signup->addSecond();
+        return $covers->end;
     }
 
-    /** @param array<string,mixed> $addon */
-    private function materializeAddon(Subscription $sub, SubscriptionItem $item, array $addon, ?Period $covers, bool $trialing): void
+    /** Recompute the first service window at conversion time (period only, not money). */
+    private function itemPeriod(Price $price, Order $order, CarbonImmutable $signup): Period
     {
-        $price = $this->resolvePrice((string) $addon['price_id']);
-
-        $row = Addon::create([
-            'item_id' => $item->id,
-            'product_id' => $addon['product_id'],
-            'price_id' => $price->id,
-            'group_key' => $addon['group_key'] ?? null,
-            'quantity' => (float) ($addon['quantity'] ?? 1),
-            'state' => ItemState::Active,
-        ]);
-
-        $amount = (int) ($addon['amount_minor'] ?? 0);
-        if (! $trialing && $amount !== 0) {
-            $desc = $price->isRelative() ? $price->percentLabel().'% of '.($item->product->name ?? 'plan') : ($price->product->name ?? 'Addon');
-            $this->charge($sub, $item, 'addon', $row->id, LineKind::Addon, $amount, $desc, $covers);
-        }
-    }
-
-    /** @param array<string,mixed> $option */
-    private function materializeOption(Subscription $sub, SubscriptionItem $item, array $option, ?Period $covers, bool $trialing): void
-    {
-        $price = isset($option['price_id']) && $option['price_id'] !== null ? $this->resolvePrice((string) $option['price_id']) : null;
-
-        $row = ItemOption::create([
-            'item_id' => $item->id,
-            'key' => $option['key'],
-            'type' => $option['type'],
-            'value' => $option['value'],
-            'price_id' => $price?->id,
-            'quantity' => (float) ($option['quantity'] ?? 1),
-            'min_qty' => $option['min_qty'] ?? null,
-            'max_qty' => $option['max_qty'] ?? null,
-        ]);
-
-        // Setup fee always bills now (even on trial); the recurring part defers on trial.
-        $setup = (int) ($option['setup_minor'] ?? 0);
-        if ($setup !== 0) {
-            $this->charge($sub, $item, 'item_option', $row->id, LineKind::Setup, $setup, ucfirst((string) $option['key']).' setup', null);
-        }
-
-        $amount = (int) ($option['amount_minor'] ?? 0);
-        if (! $trialing && $amount !== 0) {
-            $this->charge($sub, $item, 'item_option', $row->id, LineKind::Option, $amount, ucfirst((string) $option['key']), $covers);
-        }
-    }
-
-    /** The recurring item's first-period window, recomputed at the payment date. */
-    private function itemPeriod(Price $price, Order $order, CarbonImmutable $signup): ?Period
-    {
-        if ($price->pricing_model->isUsageBased()) {
-            return null;
-        }
         if (! $price->isRecurring()) {
             return new Period($signup, $signup->addSecond());
         }
 
-        return app(PeriodPlanner::class)
+        return $this->planner
             ->plan($signup, $price->recurrence(), $order->anchor_mode, $order->anchor_day, $order->first_period)
             ->ongoing;
     }
 
-    private function resolvePrice(string $priceId): Price
-    {
-        $price = Price::find($priceId);
-        if ($price === null) {
-            throw new \RuntimeException("Order references price {$priceId} which no longer exists; cannot convert.");
+    /** Create a pending Charge using a frozen minor amount (zero amounts are skipped). */
+    private function charge(
+        Subscription $sub,
+        SubscriptionItem $item,
+        string $originType,
+        string $originId,
+        LineKind $kind,
+        int $amountMinor,
+        string $description,
+        ?Period $covers,
+        float $quantity,
+    ): void {
+        if ($amountMinor === 0) {
+            return;
         }
 
-        return $price;
-    }
-
-    private function reserve(SubscriptionItem $item, Period $period): void
-    {
-        $overlaps = BillingPeriod::query()
-            ->where('item_id', $item->id)
-            ->whereNull('dimension_id')
-            ->whereRaw('covers && ?::tstzrange', [$period->toRange()])
-            ->exists();
-
-        if (! $overlaps) {
-            BillingPeriod::create(['item_id' => $item->id, 'covers' => $period]);
-        }
-    }
-
-    private function charge(Subscription $sub, SubscriptionItem $item, string $originType, string $originId, LineKind $kind, int $amountMinor, string $desc, ?Period $covers): void
-    {
         Charge::create([
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
@@ -305,9 +297,8 @@ final class CheckoutManager
             'state' => ChargeState::Pending,
             'title' => $item->lineTitle(),
             'group' => $item->group,
-            'description' => $desc,
-            'quantity' => $item->quantity,
-            'unit' => $item->price->interval?->value,
+            'description' => $description,
+            'quantity' => $quantity,
             'unit_minor' => $amountMinor,
             'amount_minor' => $amountMinor,
             'currency' => $sub->currency,

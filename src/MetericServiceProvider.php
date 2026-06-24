@@ -139,6 +139,7 @@ final class MetericServiceProvider extends ServiceProvider
 
         $this->app->singleton(CheckoutManager::class, fn ($app) => new CheckoutManager(
             clock: $app->make(Clock::class),
+            planner: $app->make(PeriodPlanner::class),
         ));
 
         // Fresh builder per order (stateful).
@@ -146,7 +147,7 @@ final class MetericServiceProvider extends ServiceProvider
             clock: $app->make(Clock::class),
             pricer: $app->make(CheckoutPricer::class),
             defaultCurrency: $app['config']['meteric.currency'] ?? 'EUR',
-            defaultTtlMinutes: $app['config']['meteric.checkout.ttl_minutes'] ?? null,
+            ttlMinutes: $app['config']['meteric.checkout.ttl_minutes'] ?? null,
         ));
     }
 

@@ -40,7 +40,7 @@ final class CheckoutPricer
     ) {}
 
     /**
-     * @param  list<array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float}>}>  $cart
+     * @param  list<array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}>}>  $cart
      */
     public function price(
         array $cart,
@@ -73,12 +73,12 @@ final class CheckoutPricer
             $estimated = $estimated || $usage;
 
             $addons = [];
-            foreach ($row['addons'] ?? [] as $addon) {
+            foreach ($row['addons'] as $addon) {
                 $addons[] = $this->priceAddon($addon, $price->amountFor($qty), $trialing, $zero);
             }
 
             $options = [];
-            foreach ($row['options'] ?? [] as $option) {
+            foreach ($row['options'] as $option) {
                 $options[] = $this->priceOption($option, $trialing, $zero);
             }
 
@@ -222,8 +222,8 @@ final class CheckoutPricer
      * Frozen option line: the recurring amount for the first period plus a
      * one-time setup fee (charged once, on convert).
      *
-     * @param  array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float}  $option
-     * @return array{key:string,value:string,type:string,price_id:?string,quantity:float,min_qty:?float,max_qty:?float,amount_minor:int,setup_minor:int}
+     * @param  array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}  $option
+     * @return array{key:string,value:string,label:?string,type:string,price_id:?string,quantity:float,min_qty:?float,max_qty:?float,amount_minor:int,setup_minor:int}
      */
     private function priceOption(array $option, bool $trialing, Money $zero): array
     {
@@ -237,6 +237,7 @@ final class CheckoutPricer
         return [
             'key' => $option['key'],
             'value' => $option['value'],
+            'label' => $option['label'] ?? null,
             'type' => $option['type'],
             'price_id' => $price?->id,
             'quantity' => $qty,
