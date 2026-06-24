@@ -12,11 +12,13 @@ helper methods you actually call.
 
 - **Columns:** `type`, `slug`, `name`, `pricing_model`, `is_proratable`, `config` (array).
 - **Relationships:** `prices()`, `meterDimensions()`, `billable()` (morph).
+- **Config:** the keys the package reads are validated on write. `config['downgrade']` must be a valid `DowngradePolicy` value and `config['cancel_notice_days']` a non-negative integer, or the assignment throws `InvalidArgumentException`. Other keys (your own host settings) pass through untouched.
 - **Helpers:**
   - `priceFor(string $currency, PricePurpose $purpose = Recurring): ?Price`: latest open price for a currency and purpose.
   - `optionCatalog(float $qty = 1): array`: the configurable-option catalog as JSON-ready rows, values priced at `$qty`. See [Displaying options in a form](/usage/addons-and-options#displaying-options-in-a-form).
   - `isMetered(): bool`: true for `metered` / `hourly`.
   - `downgradePolicy(): DowngradePolicy`: from `config['downgrade']`, defaults to `Defer`.
+  - `cancelNoticeDays(): int`: notice required before a contract ends, from `config['cancel_notice_days']`, defaults to `0`.
 
 ## Price
 

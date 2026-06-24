@@ -30,9 +30,17 @@ Switch an item's plan. Direction is detected from the price. `$upgrade` picks th
 upgrade policy, `$downgrade` the downgrade policy. See
 [Plan changes](/usage/plan-changes).
 
-#### `cancel(Subscription $sub, string $at = 'period_end', ?CarbonImmutable $when = null): Subscription`
+#### `cancel(Subscription $sub, string|CarbonImmutable $at = 'period_end', ?CarbonImmutable $when = null, array $meta = []): Subscription`
 
-Cancel at `'period_end'` (default) or `'now'`. No automatic refund.
+Cancel at `'period_end'` (default), `'now'`, or a future term boundary. No
+automatic refund. `$meta` stores cancellation data (a reason, a survey answer) on
+the subscription metadata under `cancellation`. See
+[Subscriptions](/usage/subscriptions#cancel).
+
+#### `cancellationOptions(Subscription $sub, int $count = 3): array`
+
+The next `$count` term boundaries that still satisfy the product's notice window,
+as a `list<CarbonImmutable>`. Render these as a "cancel at end of period N" choice.
 
 ## Items: addons, options, quantity
 

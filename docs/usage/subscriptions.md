@@ -166,6 +166,19 @@ leave the subscription billable until that boundary. Renewal stops accruing on o
 after `cancel_at`. The `meteric:run` tick enacts the cancel once the boundary
 passes (state `Canceled`, fires `SubscriptionCanceled`).
 
+### Cancellation reason
+
+Pass `meta` to attach data to the cancel, a reason or a survey answer. It is
+stored on the subscription metadata under `cancellation` and survives the
+scheduled enactment, so the reason is still there when `meteric:run` flips the
+state.
+
+```php
+Meteric::cancel($subscription, 'period_end', meta: ['reason' => 'moving away']);
+
+$subscription->metadata['cancellation']; // ['reason' => 'moving away']
+```
+
 ### Notice window
 
 A product can require notice before a contract ends with the `cancel_notice_days`

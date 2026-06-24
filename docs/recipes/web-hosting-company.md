@@ -258,31 +258,23 @@ Meteric::recordPayment($invoice, $invoice->total(), 'pi_123');
 
 ## The monthly renewal loop
 
-`renew()` accrues the next cycle for every due item on a subscription. It is
-idempotent: the billing-period guard stops a window from billing twice, so it is
-safe on a schedule. Find due subscriptions with the `dueForRenewal` scope, renew
-each, then invoice the account.
+`meteric:run` closes due cycles. For each subscription whose period has ended it
+rolls up elapsed usage, renews the next month, and invoices the account, then
+enacts scheduled cancellations, flags overdue invoices, and expires stale orders.
+Every step is idempotent, so schedule it on a short interval.
 
 ```php
 // routes/console.php
 use Illuminate\Support\Facades\Schedule;
-use Meteric\Facades\Meteric;
-use Meteric\Models\Subscription;
-use Carbon\CarbonImmutable;
 
-Schedule::call(function () {
-    $now = CarbonImmutable::now();
-
-    Subscription::dueForRenewal($now)->with('account')->each(function ($sub) use ($now) {
-        Meteric::renew($sub, $now);             // accrue the next month for due items
-        Meteric::invoicePending($sub->account); // turn the pending charges into an invoice
-    });
-})->hourly();
+Schedule::command('meteric:run')->everyFiveMinutes();
 ```
 
-`renew()` returns the charges it created (empty when nothing was due). Addons and
-options ride on the item's cycle, so they renew with it. A deferred downgrade
-queued on an item is applied at the period boundary during renewal.
+The underlying renewal step is `Meteric::renew($sub, $at)`, which accrues the next
+cycle for one subscription's due items and returns the charges it created (empty
+when nothing was due). Addons and options ride on the item's cycle, so they renew
+with it. A deferred downgrade queued on an item is applied at the period boundary
+during renewal.
 
 ## Upgrade Starter to Pro (prorated)
 
@@ -327,9 +319,10 @@ Pass no policy and Meteric uses the product's `config['downgrade']`.
 
 ## Suspend on overdue
 
-Schedule `meteric:mark-overdue`. It flags issued, unpaid invoices past `due_at`,
-moves their subscriptions to `past_due`, and fires `InvoiceOverdue` and
-`SubscriptionPastDue`.
+`meteric:run` flags issued, unpaid invoices past `due_at`, moves their
+subscriptions to `past_due`, and fires `InvoiceOverdue` and `SubscriptionPastDue`,
+so the five-minute tick already catches overdue invoices. Run `meteric:mark-overdue`
+on its own when you want the overdue scan without the rest of the tick.
 
 ```php
 // routes/console.php

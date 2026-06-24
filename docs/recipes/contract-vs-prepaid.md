@@ -23,7 +23,7 @@ use Meteric\Enums\DowngradePolicy;
 
 $product->update([
     'config' => [
-        'downgrade_policy' => DowngradePolicy::Discard->value,
+        'downgrade' => DowngradePolicy::Discard->value,
         'cancel_notice_days' => 0,
     ],
 ]);
@@ -70,7 +70,7 @@ use Meteric\Enums\DowngradePolicy;
 
 $product->update([
     'config' => [
-        'downgrade_policy' => DowngradePolicy::Defer->value,
+        'downgrade' => DowngradePolicy::Defer->value,
         'cancel_notice_days' => 30,
     ],
 ]);

@@ -79,27 +79,23 @@ Meteric::recordPayment($invoice, Money::of('10.00', 'EUR'), 'pi_123');
 
 The invoice moves to `partially_paid` or `paid` based on the running total.
 
-## 5. Renew on a schedule
+## 5. Run the billing tick
 
-Renewal accrues the next cycle for due items. Run it from your scheduler.
+One command closes due cycles. `meteric:run` rolls up elapsed usage, renews each
+due subscription, invoices the affected accounts, enacts scheduled cancellations,
+flags overdue invoices, and expires stale orders. Every step is idempotent, so
+schedule it on a short interval.
 
 ```php
 use Illuminate\Support\Facades\Schedule;
-use Meteric\Models\Subscription;
-use Meteric\Facades\Meteric;
-use Carbon\CarbonImmutable;
 
-Schedule::call(function () {
-    $at = CarbonImmutable::now();
-
-    Subscription::dueForRenewal($at)->each(function (Subscription $sub) use ($at) {
-        Meteric::renew($sub, $at);          // accrue next cycle (idempotent)
-        Meteric::invoicePending($sub->account); // bill what accrued
-    });
-})->hourly();
+Schedule::command('meteric:run')->everyFiveMinutes();
 ```
 
-`renew()` is idempotent: the billing-period guard means a re-run over the same
-window does nothing. From here, see [Subscriptions](/usage/subscriptions) for
-trials and anchoring, and [Invoicing](/usage/invoicing) for the charge-vs-invoice
-guarantee in detail.
+The command acts only when a cycle has closed, so a frequent schedule keeps
+billing prompt without redundant work. The underlying step is
+`Meteric::renew($sub, $at)`, which accrues the next cycle for one subscription
+and is idempotent on its own (the billing-period guard means a re-run over the
+same window does nothing). From here, see [Subscriptions](/usage/subscriptions)
+for trials and anchoring, and [Invoicing](/usage/invoicing) for the
+charge-vs-invoice guarantee in detail.

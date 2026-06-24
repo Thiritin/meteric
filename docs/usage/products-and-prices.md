@@ -24,8 +24,24 @@ $product = Product::create([
 `hourly`, `one_off`. `metered` and `hourly` are usage-based, `isMetered()`
 returns true for those.
 
-The `config` array holds product-level settings. `config['downgrade']` sets the
-default [downgrade policy](/usage/plan-changes); it falls back to `defer`.
+### Product config
+
+The `config` array holds product-level settings. Two keys are read by the
+package:
+
+- `config['downgrade']` sets the default [downgrade policy](/usage/plan-changes); it falls back to `defer`. Read it with `downgradePolicy()`.
+- `config['cancel_notice_days']` is the notice required before a contract ends, in days; it falls back to `0`. Read it with `cancelNoticeDays()`. See [cancellation](/usage/subscriptions#notice-window).
+
+Both keys are validated on write. `config['downgrade']` must be a valid
+`DowngradePolicy` value (`defer`, `discard`, `credit`, `refund`) and
+`config['cancel_notice_days']` a non-negative integer, or the assignment throws
+`InvalidArgumentException`. Any other key, a provisioner name or another host
+setting of your own, passes through untouched.
+
+```php
+$product->config = ['downgrade' => 'nope'];  // throws InvalidArgumentException
+$product->config = ['provisioner' => 'virtfusion', 'cancel_notice_days' => 30]; // fine
+```
 
 ## Prices
 
