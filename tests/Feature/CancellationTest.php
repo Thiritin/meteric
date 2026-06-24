@@ -81,6 +81,18 @@ it('cancels to a specific later boundary and bills up to it', function () {
         ->and(Meteric::processDueCancellations(CarbonImmutable::parse('2026-09-01Z')))->toBe(1);
 });
 
+it('stores cancellation metadata and keeps it through enactment', function () {
+    $sub = cncSub(cncAccount(), cncPlan());
+
+    Meteric::cancel($sub, 'period_end', meta: ['reason' => 'moving away', 'survey' => 'price']);
+    expect($sub->fresh()->metadata['cancellation']['reason'])->toBe('moving away');
+
+    // The metadata survives the scheduled enactment.
+    Meteric::processDueCancellations(CarbonImmutable::parse('2026-07-01Z'));
+    expect($sub->fresh()->metadata['cancellation']['reason'])->toBe('moving away')
+        ->and($sub->fresh()->state)->toBe(SubscriptionState::Canceled);
+});
+
 it('enforces a contract notice window', function () {
     $sub = cncSub(cncAccount(), cncPlan(1000, noticeDays: 14));
 

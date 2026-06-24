@@ -345,14 +345,18 @@ final class SubscriptionManager
      * cancellations are enacted by processDueCancellations() (run via meteric:run);
      * billing stops at the boundary. No automatic refund.
      */
-    public function cancel(Subscription $sub, string|CarbonImmutable $at = 'period_end', ?CarbonImmutable $when = null): Subscription
+    /**
+     * @param  array<string,mixed>  $meta  optional cancellation data (e.g. a reason), stored on the subscription metadata
+     */
+    public function cancel(Subscription $sub, string|CarbonImmutable $at = 'period_end', ?CarbonImmutable $when = null, array $meta = []): Subscription
     {
         $when ??= $this->clock->now();
+        $metadata = $this->withCancellationMeta($sub, $meta);
 
         if ($at === 'now') {
-            $sub = DB::transaction(function () use ($sub, $when): Subscription {
+            $sub = DB::transaction(function () use ($sub, $when, $metadata): Subscription {
                 $sub->items()->update(['state' => ItemState::Canceled->value, 'ends_at' => $when]);
-                $sub->forceFill(['state' => SubscriptionState::Canceled, 'canceled_at' => $when])->save();
+                $sub->forceFill(['state' => SubscriptionState::Canceled, 'canceled_at' => $when, 'metadata' => $metadata])->save();
 
                 return $sub->refresh();
             });
@@ -371,9 +375,23 @@ final class SubscriptionManager
             );
         }
 
-        $sub->forceFill(['cancel_at' => $target])->save();
+        $sub->forceFill(['cancel_at' => $target, 'metadata' => $metadata])->save();
 
         return $sub;
+    }
+
+    /**
+     * @param  array<string,mixed>  $meta
+     * @return array<string,mixed>
+     */
+    private function withCancellationMeta(Subscription $sub, array $meta): array
+    {
+        $metadata = $sub->metadata ?? [];
+        if ($meta !== []) {
+            $metadata['cancellation'] = $meta;
+        }
+
+        return $metadata;
     }
 
     /** Days of notice required to cancel: the strictest across the active items' products. */

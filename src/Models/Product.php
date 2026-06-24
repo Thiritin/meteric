@@ -6,6 +6,7 @@ namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Meteric\Casts\ProductConfigCast;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
@@ -31,7 +32,7 @@ class Product extends MetericModel
             'pricing_model' => PricingModel::class,
             'is_proratable' => 'boolean',
             'active' => 'boolean',
-            'config' => 'array',
+            'config' => ProductConfigCast::class,
             'metadata' => 'array',
         ];
     }
