@@ -24,6 +24,8 @@ use Meteric\Support\Period;
  * @property FirstPeriodPolicy $first_period
  * @property ?Period $current_period
  * @property ?CarbonImmutable $trial_end
+ * @property ?CarbonImmutable $cancel_at
+ * @property ?CarbonImmutable $canceled_at
  */
 class Subscription extends MetericModel
 {

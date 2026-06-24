@@ -54,10 +54,11 @@ final class RunBillingCommand extends Command
             }
         }
 
+        $canceled = $meteric->processDueCancellations($at);
         $overdue = $meteric->markOverdue();
         $expired = app(CheckoutManager::class)->expireDue($at);
 
-        $this->info("meteric:run done: {$rolled} usage + {$renewed} renewal charge(s), {$invoiced} invoice(s), {$overdue} newly overdue, {$expired} order(s) expired.");
+        $this->info("meteric:run done: {$rolled} usage + {$renewed} renewal charge(s), {$invoiced} invoice(s), {$canceled} canceled, {$overdue} newly overdue, {$expired} order(s) expired.");
 
         return self::SUCCESS;
     }

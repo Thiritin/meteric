@@ -271,10 +271,22 @@ final class Meteric
         return app(SubscriptionManager::class)->changePlan($item, $newPrice, $downgrade, $upgrade, $at);
     }
 
-    /** Cancel a subscription: 'period_end' or 'now'. */
-    public function cancel(Subscription $sub, string $at = 'period_end', ?CarbonImmutable $when = null): Subscription
+    /** Cancel a subscription: 'now', 'period_end', or a specific boundary date. */
+    public function cancel(Subscription $sub, string|CarbonImmutable $at = 'period_end', ?CarbonImmutable $when = null): Subscription
     {
         return app(SubscriptionManager::class)->cancel($sub, $at, $when);
+    }
+
+    /** The next cancellable term boundaries that satisfy the notice window. */
+    public function cancellationOptions(Subscription $sub, int $count = 3): array
+    {
+        return app(SubscriptionManager::class)->cancellationOptions($sub, $count);
+    }
+
+    /** Enact scheduled cancellations whose boundary has passed. Run via meteric:run. */
+    public function processDueCancellations(?CarbonImmutable $at = null): int
+    {
+        return app(SubscriptionManager::class)->processDueCancellations($at);
     }
 
     /** Suspend billing (state → paused). renew() accrues nothing while paused. */

@@ -159,8 +159,15 @@ final class SubscriptionManager
             return $created;
         }
 
+        $cancelAt = $item->subscription->cancel_at;
+
         // Roll forward through any elapsed periods.
         while ($item->current_period->end <= $at) {
+            // A scheduled cancellation stops billing at its boundary: do not
+            // accrue a period that starts on or after cancel_at.
+            if ($cancelAt !== null && $item->current_period->end >= $cancelAt) {
+                break;
+            }
             $this->applyPendingChange($item);
             $next = $item->price->recurrence()->period($item->current_period->end);
             $plan = new BillingPlan([new PlannedPeriod($next, LineKind::Recurring)], $next);
@@ -330,27 +337,111 @@ final class SubscriptionManager
         });
     }
 
-    /** Cancel `now` (immediate) or at `period_end`. No automatic refund (deferred). */
-    public function cancel(Subscription $sub, string $at = 'period_end', ?CarbonImmutable $when = null): Subscription
+    /**
+     * Cancel a subscription. $at is `now` (immediate), `period_end` (the current
+     * cycle's end), or a specific CarbonImmutable boundary date (e.g. a later term
+     * end). Scheduled cancellations honour the product's notice window: cancelling
+     * to a boundary that is within `cancel_notice_days` of now throws. Scheduled
+     * cancellations are enacted by processDueCancellations() (run via meteric:run);
+     * billing stops at the boundary. No automatic refund.
+     */
+    public function cancel(Subscription $sub, string|CarbonImmutable $at = 'period_end', ?CarbonImmutable $when = null): Subscription
     {
         $when ??= $this->clock->now();
 
-        if ($at === 'period_end') {
-            $sub->forceFill(['cancel_at' => $sub->current_period?->end ?? $when])->save();
+        if ($at === 'now') {
+            $sub = DB::transaction(function () use ($sub, $when): Subscription {
+                $sub->items()->update(['state' => ItemState::Canceled->value, 'ends_at' => $when]);
+                $sub->forceFill(['state' => SubscriptionState::Canceled, 'canceled_at' => $when])->save();
+
+                return $sub->refresh();
+            });
+
+            SubscriptionCanceled::dispatch($sub);
 
             return $sub;
         }
 
-        $sub = DB::transaction(function () use ($sub, $when): Subscription {
-            $sub->items()->update(['state' => ItemState::Canceled->value, 'ends_at' => $when]);
-            $sub->forceFill(['state' => SubscriptionState::Canceled, 'canceled_at' => $when])->save();
+        $target = $at instanceof CarbonImmutable ? $at : ($sub->current_period?->end ?? $when);
 
-            return $sub->refresh();
-        });
+        $notice = $this->noticeDays($sub);
+        if ($notice > 0 && $when->greaterThan($target->subDays($notice))) {
+            throw new \InvalidArgumentException(
+                "Cancelling at {$target->toDateString()} needs {$notice} days notice; the cutoff was {$target->subDays($notice)->toDateString()}."
+            );
+        }
 
-        SubscriptionCanceled::dispatch($sub);
+        $sub->forceFill(['cancel_at' => $target])->save();
 
         return $sub;
+    }
+
+    /** Days of notice required to cancel: the strictest across the active items' products. */
+    public function noticeDays(Subscription $sub): int
+    {
+        return (int) $sub->items()->where('state', ItemState::Active->value)->with('product')->get()
+            ->map(fn (SubscriptionItem $i) => $i->product?->cancelNoticeDays() ?? 0)
+            ->max();
+    }
+
+    /**
+     * The next cancellable term boundaries (for a "cancel at end of period N"
+     * dropdown). Returns up to $count future period ends that still satisfy the
+     * notice window. UI renders them; the system enforces them.
+     *
+     * @return list<CarbonImmutable>
+     */
+    public function cancellationOptions(Subscription $sub, int $count = 3): array
+    {
+        $period = $sub->current_period;
+        $item = $sub->items()->where('state', ItemState::Active->value)->get()
+            ->first(fn (SubscriptionItem $i) => $i->price->isRecurring());
+        if ($period === null || $item === null) {
+            return [];
+        }
+
+        $rule = $item->price->recurrence();
+        $notice = $this->noticeDays($sub);
+        $now = $this->clock->now();
+
+        $out = [];
+        $boundary = $period->end;
+        for ($i = 0; count($out) < $count && $i < $count * 6; $i++) {
+            $cutoff = $notice > 0 ? $boundary->subDays($notice) : $boundary;
+            if ($now->lessThanOrEqualTo($cutoff)) {
+                $out[] = $boundary;
+            }
+            $boundary = $rule->period($boundary)->end;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Enact scheduled cancellations whose cancel_at has passed: cancel the
+     * subscription at that boundary and fire SubscriptionCanceled. Idempotent
+     * (only billable subscriptions are touched). Run via meteric:run.
+     */
+    public function processDueCancellations(?CarbonImmutable $at = null): int
+    {
+        $at ??= $this->clock->now();
+        $count = 0;
+
+        Subscription::query()
+            ->whereNotNull('cancel_at')
+            ->where('cancel_at', '<=', $at)
+            ->whereIn('state', [SubscriptionState::Active->value, SubscriptionState::Trialing->value, SubscriptionState::PastDue->value])
+            ->each(function (Subscription $sub) use (&$count): void {
+                $end = $sub->cancel_at;
+                DB::transaction(function () use ($sub, $end): void {
+                    $sub->items()->update(['state' => ItemState::Canceled->value, 'ends_at' => $end]);
+                    $sub->forceFill(['state' => SubscriptionState::Canceled, 'canceled_at' => $end])->save();
+                });
+                SubscriptionCanceled::dispatch($sub->refresh());
+                $count++;
+            });
+
+        return $count;
     }
 
     private function prorationCharge(SubscriptionItem $item, Subscription $sub, LineKind $kind, Money $amount, string $desc): void

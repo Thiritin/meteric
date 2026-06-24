@@ -94,4 +94,10 @@ class Product extends MetericModel
         return DowngradePolicy::tryFrom($this->config['downgrade'] ?? '')
             ?? DowngradePolicy::Defer;
     }
+
+    /** Notice required to cancel a contract: days before the term boundary (config 'cancel_notice_days'); 0 = cancel any time. */
+    public function cancelNoticeDays(): int
+    {
+        return max(0, (int) ($this->config['cancel_notice_days'] ?? 0));
+    }
 }
