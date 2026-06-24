@@ -211,6 +211,30 @@ it('summarises a selected option for a service page', function () {
         ->and($display['currency'])->toBe('EUR');
 });
 
+it('stores a raw value and a display label on the picked option', function () {
+    $acc = optAccount();
+    $base = optBasePrice();
+    $sub = optSub($acc, $base);
+    $item = $sub->items()->first();
+
+    $option = ProductOption::create([
+        'product_id' => $base->product_id, 'key' => 'ram', 'label' => 'Memory',
+        'type' => OptionType::Choice->value,
+    ]);
+    $value = ProductOptionValue::create([
+        'option_id' => $option->id, 'value' => '1024', 'label' => '1 GB RAM',
+        'price_id' => optVolumePrice($base->product_id)->id,
+    ]);
+
+    $picked = Meteric::chooseOption($item, $value, 1, CarbonImmutable::parse('2026-06-01Z'));
+
+    // Raw value drives provisioning; label is for display. Both snapshot onto the item.
+    expect($picked->value)->toBe('1024')
+        ->and($picked->label)->toBe('1 GB RAM')
+        ->and($picked->toDisplay()['value'])->toBe('1024')
+        ->and($picked->toDisplay()['label'])->toBe('1 GB RAM');
+});
+
 it('re-bills an addon every renewal', function () {
     $acc = optAccount();
     $base = optBasePrice();

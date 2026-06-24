@@ -13,6 +13,7 @@ use Meteric\Enums\OptionType;
  * @property ?string $price_id
  * @property OptionType $type
  * @property string $value
+ * @property ?string $label
  * @property float $quantity
  * @property ?float $min_qty
  * @property ?float $max_qty
@@ -68,6 +69,7 @@ class ItemOption extends MetericModel
         return [
             'key' => $this->key,
             'value' => $this->value,
+            'label' => $this->label ?? $this->value,
             'quantity' => $this->quantity,
             'amount_minor' => $amount?->getMinorAmount()->toInt() ?? 0,
             'amount' => $amount !== null ? (string) $amount->getAmount() : '0',

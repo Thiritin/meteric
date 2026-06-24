@@ -269,9 +269,9 @@ final class Meteric
     }
 
     /** Set a configurable option (e.g. slots) on an item, prorating the delta. */
-    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null, ?float $min = null, ?float $max = null): ItemOption
+    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null, ?float $min = null, ?float $max = null, ?string $label = null): ItemOption
     {
-        return app(ItemManager::class)->setOption($item, $key, $value, $type, $price, $qty, $at, $min, $max);
+        return app(ItemManager::class)->setOption($item, $key, $value, $type, $price, $qty, $at, $min, $max, $label);
     }
 
     /** Change an item's base quantity, prorating the difference. */

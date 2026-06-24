@@ -91,7 +91,8 @@ return new class extends Migration
             $table->foreignUuid('item_id')->constrained('meteric_subscription_items')->cascadeOnDelete();
             $table->string('key');
             $table->string('type');
-            $table->string('value');
+            $table->string('value');                          // raw value for provisioning (e.g. 1024)
+            $table->string('label')->nullable();              // display value (e.g. "1 GB RAM")
             $table->foreignUuid('price_id')->nullable()->constrained('meteric_prices')->restrictOnDelete();
             $table->decimal('quantity', 20, 6)->default(1);
             $table->decimal('min_qty', 20, 6)->nullable();   // quantity bounds (WHMCS-style)

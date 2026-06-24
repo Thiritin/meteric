@@ -97,7 +97,7 @@ final class ItemManager
      * Quantity options honour optional min/max bounds. A one-time setup fee on the
      * price is charged once, when the option is first added.
      */
-    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null, ?float $min = null, ?float $max = null): ItemOption
+    public function setOption(SubscriptionItem $item, string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?CarbonImmutable $at = null, ?float $min = null, ?float $max = null, ?string $label = null): ItemOption
     {
         $at ??= $this->clock->now();
 
@@ -108,13 +108,13 @@ final class ItemManager
             throw new \InvalidArgumentException("Option {$key} quantity {$qty} is above the maximum {$max}.");
         }
 
-        return DB::transaction(function () use ($item, $key, $value, $type, $price, $qty, $at, $min, $max): ItemOption {
+        return DB::transaction(function () use ($item, $key, $value, $type, $price, $qty, $at, $min, $max, $label): ItemOption {
             $existing = $item->options()->where('key', $key)->first();
             $oldQty = (float) ($existing->quantity ?? 0);
 
             $option = ItemOption::updateOrCreate(
                 ['item_id' => $item->id, 'key' => $key],
-                ['type' => $type, 'value' => $value, 'price_id' => $price?->id, 'quantity' => $qty, 'min_qty' => $min, 'max_qty' => $max],
+                ['type' => $type, 'value' => $value, 'label' => $label, 'price_id' => $price?->id, 'quantity' => $qty, 'min_qty' => $min, 'max_qty' => $max],
             );
 
             if ($price !== null) {
@@ -147,7 +147,7 @@ final class ItemManager
 
         return $this->setOption(
             $item, $option->key, $value->value, $option->type->value,
-            $value->price, $qty, $at, $option->min_qty, $option->max_qty,
+            $value->price, $qty, $at, $option->min_qty, $option->max_qty, $value->label ?? $value->value,
         );
     }
 

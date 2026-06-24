@@ -28,7 +28,7 @@ use Meteric\Models\Payment;
  * @method static \Meteric\Models\CreditNote creditNote(Invoice $invoice, Money $amount, ?string $reason = null)
  * @method static \Meteric\Models\Addon addAddon(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $price, ?string $group = null, float $qty = 1, ?\Carbon\CarbonImmutable $at = null)
  * @method static void removeAddon(\Meteric\Models\Addon $addon, ?\Carbon\CarbonImmutable $at = null)
- * @method static \Meteric\Models\ItemOption setOption(\Meteric\Models\SubscriptionItem $item, string $key, string $value, string $type, ?\Meteric\Models\Price $price = null, float $qty = 1, ?\Carbon\CarbonImmutable $at = null, ?float $min = null, ?float $max = null)
+ * @method static \Meteric\Models\ItemOption setOption(\Meteric\Models\SubscriptionItem $item, string $key, string $value, string $type, ?\Meteric\Models\Price $price = null, float $qty = 1, ?\Carbon\CarbonImmutable $at = null, ?float $min = null, ?float $max = null, ?string $label = null)
  * @method static \Meteric\Models\SubscriptionItem setQuantity(\Meteric\Models\SubscriptionItem $item, float $qty, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\ItemOption chooseOption(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\ProductOptionValue $value, float $qty = 1, ?\Carbon\CarbonImmutable $at = null)
  * @method static ?\Meteric\Support\Period billingCycle(\Meteric\Models\SubscriptionItem $item)
