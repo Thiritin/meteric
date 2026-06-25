@@ -100,7 +100,7 @@ it('tags base, option, and addon charges with the owning item id as line_group',
         ->toBe(['addon', 'option', 'recurring']);
 });
 
-it('itemizes one line per charge by default, sharing the line_group', function () {
+it('builds a parent product line with its extras as sub-lines, sharing the line_group', function () {
     [$acc, $item, $july] = lgProductWithExtras();
 
     $invoice = Meteric::invoicePending($acc);
@@ -109,65 +109,48 @@ it('itemizes one line per charge by default, sharing the line_group', function (
         ->and($invoice->lines->pluck('line_group')->unique()->all())->toBe([$item->id])
         ->and($invoice->subtotal_minor)->toBe(1800);   // 1000 base + 600 option (300x2) + 200 addon
 
-    expect($july->pluck('state')->unique()->all())->toBe([ChargeState::Pending]);
+    // The base charge is the parent; option + addon nest under it as sub-lines.
+    $parent = $invoice->lines->whereNull('parent_id')->first();
+    $children = $invoice->lines->whereNotNull('parent_id')->values();
+
+    expect($parent->kind)->toBe(LineKind::Recurring)
+        ->and($parent->amount_minor)->toBe(1000)               // parent carries its own amount only
+        ->and($children)->toHaveCount(2)
+        ->and($children->pluck('parent_id')->unique()->all())->toBe([$parent->id])
+        ->and($children->pluck('kind')->map->value->sort()->values()->all())->toBe(['addon', 'option'])
+        ->and((int) $children->sum('amount_minor'))->toBe(800);   // option 600 + addon 200
+
+    expect(Charge::whereIn('id', $july->pluck('id'))->pluck('state')->unique()->all())->toBe([ChargeState::Invoiced]);
 });
 
-it('consolidates a product and its extras into one line, totals unchanged', function () {
-    config(['meteric.invoice.line_mode' => 'consolidated']);
-
+it('sums every line, parent and sub-line, into the invoice total', function () {
     [$acc, $item, $july] = lgProductWithExtras();
 
-    // Itemized totals for the same charges, computed independently.
     $expectedSubtotal = (int) $july->sum('amount_minor');
 
     $invoice = Meteric::invoicePending($acc);
 
-    expect($invoice->lines)->toHaveCount(1);
-
-    $line = $invoice->lines->first();
-
-    expect($line->line_group)->toBe($item->id)
-        ->and($line->kind)->toBe(LineKind::Recurring)         // the base line is the parent
-        ->and($line->amount_minor)->toBe(1800)                // 1000 base + 600 option (300x2) + 200 addon
-        ->and($line->amount_minor)->toBe($expectedSubtotal)
-        ->and($line->description)->toContain('Slots')         // option folded in
-        ->and($line->description)->toContain('Backups');      // addon folded in
-
-    // Structured sub-items for templates.
-    $items = $line->metadata['items'] ?? [];
-    expect($items)->toHaveCount(2)
-        ->and(collect($items)->pluck('kind')->sort()->values()->all())->toBe(['addon', 'option'])
-        ->and((int) collect($items)->sum('amount_minor'))->toBe(800);   // option 600 + addon 200
-
-    // The invoice math equals the itemized math: subtotal = sum of charges, and
-    // tax is recomputed on the summed net so subtotal + tax = total still holds.
+    // Subtotal sums the parent and all sub-lines; subtotal + tax = total holds.
     expect($invoice->subtotal_minor)->toBe($expectedSubtotal)
+        ->and((int) $invoice->lines->sum('amount_minor'))->toBe($expectedSubtotal)
         ->and($invoice->total_minor)->toBe($invoice->subtotal_minor + $invoice->tax_minor);
 
-    // Every charge in the group still flips to invoiced, even the ones with no line.
+    // Every charge in the group flips to invoiced.
     expect(Charge::whereIn('id', $july->pluck('id'))->where('state', ChargeState::Invoiced->value)->count())->toBe(3);
 });
 
-it('consolidated subtotal/tax/total equal the itemized invoice for the same charges', function () {
-    // Itemized run.
-    [$acc1] = lgProductWithExtras();
-    $itemized = Meteric::invoicePending($acc1);
+it('keeps per-line tax so the summed line tax equals the invoice tax', function () {
+    [$acc, , $july] = lgProductWithExtras();
 
-    // Consolidated run with an independent but identical product.
-    config(['meteric.invoice.line_mode' => 'consolidated']);
-    [$acc2] = lgProductWithExtras();
-    $consolidated = Meteric::invoicePending($acc2);
+    $invoice = Meteric::invoicePending($acc);
 
-    expect($consolidated->subtotal_minor)->toBe($itemized->subtotal_minor)
-        ->and($consolidated->tax_minor)->toBe($itemized->tax_minor)
-        ->and($consolidated->total_minor)->toBe($itemized->total_minor)
-        ->and($itemized->lines)->toHaveCount(3)
-        ->and($consolidated->lines)->toHaveCount(1);
+    // Each line carries its own tax; summing them must equal the invoice tax
+    // (re-derived rather than assumed equal to a single summed-net computation).
+    expect((int) $invoice->lines->sum('tax_minor'))->toBe($invoice->tax_minor)
+        ->and($invoice->total_minor)->toBe($invoice->subtotal_minor + $invoice->tax_minor);
 });
 
-it('keeps an account-level charge with no item as its own line when consolidated', function () {
-    config(['meteric.invoice.line_mode' => 'consolidated']);
-
+it('keeps an account-level charge with no item as its own standalone line', function () {
     $acc = lgAccount();
     Charge::create([
         'account_id' => $acc->id,

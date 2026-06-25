@@ -12,11 +12,26 @@ upgrade, a usage rollup, an addon. It has nothing to do with documents yet.
 `invoicePending()` collects an account's pending charges in one currency, builds
 a draft, and hands it to the bound invoice driver. Then:
 
-- If the driver's `issue()` **succeeds**, the charges flip from `pending` to
-  `invoiced` inside a transaction, attached to the new invoice.
+- If the driver's `issue()` **succeeds**, the driver writes one invoice line per
+  charge and flips each from `pending` to `invoiced` inside a transaction. The
+  link between a charge and an invoice is the line: `invoice_lines.charge_id`.
 - If `issue()` **throws**, accounting API down, network timeout, nothing flips.
   The charges stay `pending`. The exception is re-thrown so you see it, and the
   next run picks the same charges up.
+
+### Charge state
+
+A charge moves through four states, maintained by the line that references it:
+
+- `pending`: owed, not yet on any live invoice. The billable pool.
+- `invoiced`: a line references it on a non-void invoice.
+- `settled`: that invoice is paid in full.
+- `void`: discarded. A charge can also be soft-deleted to drop it entirely.
+
+Voiding the invoice returns each referenced charge to `pending`, unless it still
+has a line on another non-void invoice, or it is settled or soft-deleted. This is
+the never-lose-a-charge half of the guarantee: cancelling a wrong document
+re-bills its work.
 
 ```php
 use Meteric\Facades\Meteric;
@@ -96,33 +111,31 @@ foreach ($draft->charges->groupBy('line_group') as $group) {
 }
 ```
 
-A charge with a null `line_group` is its own line. Render the result itemized
-(one line per charge), nested (sub-items under the parent), or consolidated (one
-line per product) as the target system supports.
+A charge with a null `line_group` is its own line.
 
-### Built-in consolidated mode
+### Sub-lines
 
-The `database` and `lexoffice` drivers do this for you. Set the line mode:
+The `database` and `lexoffice` drivers build this hierarchy as the invoice's
+document model. Each charge gets its own `InvoiceLine`. Within a `line_group`,
+the base charge becomes the parent line and the options and addons become child
+lines that nest under it through `parent_id`:
 
 ```php
-// config/meteric.php
-'invoice' => [
-    'line_mode' => 'consolidated', // itemized (default) | consolidated
-],
+$parent = $invoice->lines->whereNull('parent_id')->first();
+
+foreach ($parent->children as $sub) {
+    // $sub->parent_id === $parent->id
+}
 ```
 
-`itemized` writes one invoice line per charge. `consolidated` writes one line
-per `line_group`: the base charge sets the title, unit, quantity, and period;
-the options and addons fold into the line. Their amounts sum into the line total,
-their labels and amounts append to the line description, and a structured copy
-lands in `metadata['items']` (each entry has `kind`, `title`, `description`,
-`amount_minor`) so a template renders the sub-items without parsing text.
+Every line carries its own `amount_minor` and its own per-line tax. A parent's
+amount is its own line only; the children carry theirs. The invoice subtotal,
+tax, and total sum every row, parent and child. Because tax resolves per line and
+not on a summed net, a mixed-rate group can differ by a cent from a single
+summed-net computation; the per-line sums are authoritative.
 
-Tax is recomputed on the summed net, so the invoice subtotal, tax, and total
-match the itemized invoice for the same charges. Every charge still flips to
-`invoiced`, including the options and addons that no longer have their own line.
-The `lexoffice` driver wraps the `database` driver, so it emits one Lexware
-Office line item per product with the sub-items in that line's description.
+A charge with a null `line_group` becomes a standalone parent line with no
+children. Every charge in a group flips to `invoiced` when its line is written.
 
 ## Lexware Office (lexoffice)
 
@@ -165,9 +178,12 @@ instead.
 Lines map to lexoffice line items: the line title becomes `name`, the multi-line
 description stays the description, `quantity` and `unit` (as `unitName`) carry
 over, and amounts post net with a `taxRatePercentage` so lexoffice computes the
-gross. A line `group` becomes a `type:"text"` separator (a heading row), and the
-billed cycle posts as a `serviceperiod` spanning the invoice with an inclusive
-end date.
+gross. The sub-line hierarchy flattens: each parent posts as a custom item, then
+its children follow as their own custom items with an indented `- {title}` name,
+each carrying its own net and tax. The net of every posted line sums to the
+invoice subtotal. A parent line `group` becomes a `type:"text"` separator (a
+heading row), and the billed cycle posts as a `serviceperiod` spanning the
+invoice with an inclusive end date.
 
 ## Payments
 
@@ -223,10 +239,12 @@ exists; correct a paid or finalized invoice with a credit note instead.
 Meteric::voidInvoice($invoice);
 ```
 
-The charges stay attached to the now-void invoice. They are a record of what the
-voided document billed. To re-bill them, move them onto a fresh draft with
-[`transferCharges`](#draft-invoices-and-charge-transfer); to drop them, void the
-charges yourself.
+Voiding returns each charge the invoice billed to `pending`, so the next
+`invoicePending` re-bills it. A charge stays put if it still has a line on
+another non-void invoice (a re-issued copy), or if it is settled or soft-deleted.
+To re-bill onto a corrected document, copy the invoice first so the charges keep
+a live line, then void the original. See
+[Re-issue with a corrected header](#re-issue-with-a-corrected-header).
 
 Voiding routes through the driver, so the Lexware Office driver voids a draft
 that never reached the API and refuses a finalized one (use a credit note).
@@ -236,36 +254,53 @@ POSTs a real credit-note document to lexoffice (`POST /v1/credit-notes?finalize=
 and stores its `external_id`. The credit note mirrors the invoice's tax rate, so a
 net 10.00 EUR credit at 19% VAT comes to 11.90 EUR gross.
 
-### Draft invoices and charge transfer
+### Draft invoices
 
 `invoicePending` issues immediately. To review or edit an invoice before it goes
-out, open a draft instead:
+out, open a draft instead. A draft is editable; an open invoice is frozen by
+database triggers.
+
+Two entry points open a draft:
 
 ```php
-$draft = Meteric::draftInvoice($account);
+$draft = Meteric::draftInvoice($account);    // from pending charges
+$draft = Meteric::createInvoice($account);   // empty, edit by hand
 ```
 
 `draftInvoice(BillingAccount $account, ?string $currency = null): Invoice` pulls
-the account's pending charges, attaches them, and builds the lines. The charges
-flip to `invoiced` so they leave the pending pool: a later `invoicePending` skips
-them. The draft has no number, no due date, and fires no `InvoiceIssued`. With
+the account's pending charges, builds the lines, and flips each charge to
+`invoiced` so it leaves the pending pool: a later `invoicePending` skips it. With
 nothing pending you get an empty draft with zero totals.
 
-A draft's charges are its line items. Lines always rebuild from the charges
-attached to the invoice, so editing a draft means moving charges in or out, not
-editing lines directly.
+`createInvoice(BillingAccount $account, ?string $currency = null): Invoice` opens
+an empty draft with no charges behind it. Build it line by line.
+
+Neither sets a number or due date or fires `InvoiceIssued`.
+
+### Editing a draft
+
+Add and remove lines on a draft directly. Each edit recomputes the draft totals.
 
 ```php
-Meteric::transferCharges($from, $to);   // move $from's charges onto draft $to
-Meteric::transferCharges($from, null);  // detach them back to pending
+use Brick\Money\Money;
+
+$line = Meteric::addLine($draft, 'Consulting', Money::ofMinor(50000, 'EUR'), 'October');
+Meteric::addSubLine($line, 'Travel', Money::ofMinor(15000, 'EUR'));
+Meteric::removeLine($line);   // cascades its sub-lines
 ```
 
-`transferCharges(Invoice $from, ?Invoice $to): void` reassigns every charge on
-`$from`. `$to` must be a draft, or `null` to return the charges to pending (the
-next `invoicePending` bills them again). `$from` must be a draft or a void
-invoice; an open or paid invoice throws, so void it first. Both drafts rebuild
-their lines and totals from the charges they now hold. A void `$from` keeps its
-historical lines as the frozen record of what it billed.
+- `addLine(Invoice $invoice, string $title, Money $amount, ?string $description = null, ?string $group = null, LineKind $kind = LineKind::OneOff): InvoiceLine`
+  adds a top-level line with no charge behind it. Tax resolves from the account's
+  context.
+- `addSubLine(InvoiceLine $parent, string $title, Money $amount, ?string $description = null, LineKind $kind = LineKind::Option): InvoiceLine`
+  nests a child under an existing line. The child counts toward the totals on its
+  own.
+- `removeLine(InvoiceLine $line): void` deletes a line and cascades its
+  sub-lines. If the line was a charge's last live line, the charge returns to
+  `pending`.
+
+All three require a draft and throw otherwise. They edit the lines directly, so
+they do not rebuild from charges and never wipe a manual line.
 
 Send a draft with `finalizeInvoice`:
 
@@ -274,8 +309,8 @@ $invoice = Meteric::finalizeInvoice($draft);
 ```
 
 `finalizeInvoice(Invoice $draft): Invoice` requires a draft. It sends the draft's
-current lines through the driver (no rebuild from charges), sets the due date
-from `meteric.invoice.net_days`, flips the invoice to `open`, and fires
+current lines through the driver, sets the due date from
+`meteric.invoice.net_days`, flips the invoice to `open`, and fires
 `InvoiceIssued`. Payment and overdue tracking apply from here, so `recordPayment`
 and `markOverdue` work on the finalized invoice. A driver failure leaves the
 draft untouched.
@@ -283,18 +318,19 @@ draft untouched.
 #### Re-issue with a corrected header
 
 When a document is wrong but the charges are right (a wrong billing address, say),
-void the original and carry its charges onto a corrected copy:
+copy the invoice, void the original, and finalize the copy:
 
 ```php
-$copy = Meteric::copyInvoice($source);   // empty draft, clones the header
+$copy = Meteric::copyInvoice($source);
 Meteric::voidInvoice($source);
-Meteric::transferCharges($source, $copy);
 $fixed = Meteric::finalizeInvoice($copy);
 ```
 
-`copyInvoice(Invoice $source): Invoice` returns an empty draft cloning the
-source's account, customer, currency, and metadata. No charges or lines come
-across; `transferCharges` carries them.
+`copyInvoice(Invoice $source): Invoice` clones the header into a fresh draft and
+clones every line, including the `parent_id` sub-line hierarchy, keeping each
+line's `charge_id`. No charge is duplicated and no charge state changes. Because
+the copy's lines reference the same charges, voiding the source leaves those
+charges `invoiced` (they still have a live line on the copy).
 
 ## Consolidated billing
 

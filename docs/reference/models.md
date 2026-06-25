@@ -77,12 +77,15 @@ can have a parent for consolidated billing.
 
 `meteric_charges`: money owed. The source of truth.
 
-- **Columns:** `account_id`, `subscription_id`, `invoice_id`, `state`, `billing_mode`, `kind`, `amount_minor`, `currency`, `covers` (Period), `quantity`, `unit_rate`.
-- **Casts:** `amount` is `Money`.
-- **Relationships:** `account()`, `subscription()`, `invoice()`.
+- **Columns:** `account_id`, `subscription_id`, `state`, `billing_mode`, `kind`, `line_group`, `amount_minor`, `currency`, `covers` (Period), `quantity`, `unit_rate`, `deleted_at`.
+- **Casts:** `amount` is `Money`. Soft-deletes (`deleted_at`).
+- **Relationships:** `account()`, `subscription()`. The invoice link lives on `invoice_lines.charge_id`, not on the charge.
+- **State:** `pending` (billable) -> `invoiced` (has a line on a non-void invoice) -> `settled` (that invoice is paid) -> `void` (discarded).
 - **Helpers:**
   - `money(): Money`, `isCredit(): bool` (negative amount).
-  - `markInvoiced(Invoice $invoice): void`: flip `pending` → `invoiced`.
+  - `markInvoiced(): void`: flip to `invoiced`.
+  - `markSettled(): void`: flip `invoiced` -> `settled`.
+  - `revertToPending(): void`: return to `pending` (no-op on a settled or trashed charge).
   - `void(): void`.
   - `scopePending($q)`: pending charges only.
 
@@ -91,7 +94,9 @@ can have a parent for consolidated billing.
 `meteric_invoices`: an immutable billing document.
 
 - **Columns:** `account_id`, `number`, `driver`, `state`, `currency`, `subtotal_minor`, `tax_minor`, `total_minor`, `paid_minor`, `due_at`, `paid_at`.
-- **Relationships:** `account()`, `lines()`, `charges()`, `creditNotes()`, `payments()`.
+- **State:** `draft` (editable) -> `open` -> `paid` / `partially_paid` / `void`.
+- **Relationships:** `account()`, `lines()`, `creditNotes()`, `payments()`.
+- **Derived:** `charges(): Collection` and `subscriptions(): Collection` resolve through the lines (`invoice_lines.charge_id`).
 - **Helpers:**
   - `total(): Money`, `outstanding(): Money`.
   - `isPaid(): bool`, `isOverdue(): bool`.
@@ -100,8 +105,9 @@ can have a parent for consolidated billing.
 
 `meteric_invoice_lines`: one line of an invoice, with its own service period.
 
-- **Columns:** `kind`, `description` (line title), `unit` (quantity unit: month, hours, GB), `quantity`, `unit_minor`, `unit_rate`, `amount_minor`, `tax_rate`, `tax_minor`, `currency`, `covers` (Period), `metadata`, `sort`.
-- **Relationships:** `invoice()`, `charge()`.
+- **Columns:** `invoice_id`, `charge_id` (null for manual lines), `parent_id` (self-FK for a sub-line), `kind`, `title`, `group`, `line_group`, `description`, `unit`, `quantity`, `unit_minor`, `unit_rate`, `amount_minor`, `tax_rate`, `tax_minor`, `currency`, `covers` (Period), `metadata`, `sort`.
+- **Relationships:** `invoice()`, `charge()`, `parent()`, `children()` (sub-lines, ordered by `sort`).
+- **Hierarchy:** a parent line's `amount_minor` is its own only; child lines carry theirs. Invoice totals sum every row.
 - **Helpers:**
   - `gross(): Money`: amount + tax.
   - `coversLabel(string $format = 'Y-m-d'): ?string`: the service period as text, e.g. `2026-06-01 to 2026-06-30`.

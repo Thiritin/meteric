@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Meteric\Invoicing\Drivers;
 
-use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +19,8 @@ use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
+use Meteric\Tax\TaxContext;
+use Meteric\Tax\TaxResult;
 
 /**
  * Canonical local invoice sink. Always available — the default driver. Builds
@@ -43,13 +44,10 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
                 'idempotency_key' => $draft->idempotencyKey,
             ]);
 
-            // Attach the draft's charges so rebuildLines reads them as the source.
-            foreach ($draft->charges as $charge) {
-                $charge->forceFill(['invoice_id' => $invoice->id])->save();
-            }
-
-            $invoice->setRelation('charges', $draft->charges->values());
-            $this->rebuildLines($invoice);
+            // The draft carries the charges to bill; rebuildLines reads them,
+            // builds the lines, and flips each charge to invoiced.
+            $invoice->setRelation('pendingCharges', $draft->charges->values());
+            $this->rebuildLines($invoice, $draft->charges->values());
 
             // Financials are set while still draft, then frozen by flipping to open.
             $invoice->forceFill([
@@ -66,12 +64,16 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     }
 
     /**
-     * Rebuild a Draft invoice's lines from its currently attached charges.
-     * Deletes the existing lines, rebuilds them (itemized or consolidated per
-     * config('meteric.invoice.line_mode')), and recomputes the invoice totals.
-     * Only valid while the invoice is Draft (the trigger freezes issued lines).
+     * Rebuild a Draft invoice's lines from a set of charges. Deletes the existing
+     * lines, then writes one document line per charge: charges sharing a non-null
+     * line_group fold into a parent product line with its options/addons as nested
+     * sub-lines (parent_id). Each line carries its own net + tax; the invoice
+     * totals sum every line. Flips each billed charge to invoiced. Only valid
+     * while the invoice is Draft (a trigger freezes issued lines).
+     *
+     * @param  Collection<int,Charge>  $charges
      */
-    public function rebuildLines(Invoice $invoice): void
+    public function rebuildLines(Invoice $invoice, Collection $charges): void
     {
         if ($invoice->state !== InvoiceState::Draft) {
             throw new \LogicException('Cannot rebuild lines of a non-draft invoice.');
@@ -82,44 +84,27 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
 
         $invoice->lines()->delete();
 
-        $charges = $invoice->charges()->orderBy('created_at')->get();
-
         $subtotal = Money::ofMinor(0, $currency);
         $taxTotal = Money::ofMinor(0, $currency);
         $sort = 0;
 
-        $consolidated = config('meteric.invoice.line_mode') === 'consolidated';
-
-        foreach ($this->lineGroups($charges, $consolidated) as $group) {
+        foreach ($this->lineGroups($charges) as $group) {
             $base = $this->baseCharge($group);
-            $net = Money::ofMinor((int) $group->sum('amount_minor'), $currency);
-            $taxResult = $this->tax->resolve($net, $taxContext);
 
-            InvoiceLine::create([
-                'invoice_id' => $invoice->id,
-                'charge_id' => $base->id,
-                'kind' => $base->kind,
-                'title' => $base->title,
-                'group' => $base->group,
-                'line_group' => $base->line_group,
-                'description' => $consolidated ? $this->consolidatedDescription($base, $group) : $base->description,
-                'quantity' => $base->quantity,
-                'unit' => $base->unit,
-                'unit_minor' => $consolidated && $group->count() > 1 ? null : $base->unit_minor,
-                'unit_rate' => $consolidated && $group->count() > 1 ? null : $base->unit_rate,
-                'amount_minor' => $net->getMinorAmount()->toInt(),
-                'tax_rate' => $taxResult->rate,
-                'tax_minor' => $taxResult->amount->getMinorAmount()->toInt(),
-                'tax_label' => $taxResult->label,
-                'currency' => $currency,
-                'covers' => $base->covers,
-                'dimension_id' => $base->dimension_id,
-                'metadata' => $consolidated ? $this->consolidatedMetadata($base, $group) : $base->metadata,
-                'sort' => $sort++,
-            ]);
+            $parent = $this->writeLine($invoice, $base, $taxContext, $currency, null, $sort);
+            $sort += 100;
+            $subtotal = $subtotal->plus($parent->amount);
+            $taxTotal = $taxTotal->plus(Money::ofMinor($parent->tax_minor, $currency));
 
-            $subtotal = $subtotal->plus($net);
-            $taxTotal = $taxTotal->plus($taxResult->amount);
+            $childSort = $sort - 99;
+            foreach ($group as $charge) {
+                if ($charge->id === $base->id) {
+                    continue;
+                }
+                $child = $this->writeLine($invoice, $charge, $taxContext, $currency, $parent->id, $childSort++);
+                $subtotal = $subtotal->plus($child->amount);
+                $taxTotal = $taxTotal->plus(Money::ofMinor($child->tax_minor, $currency));
+            }
         }
 
         $total = $subtotal->plus($taxTotal);
@@ -129,6 +114,44 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             'tax_minor' => $taxTotal->getMinorAmount()->toInt(),
             'total_minor' => $total->getMinorAmount()->toInt(),
         ])->save();
+    }
+
+    /**
+     * Write one invoice line from a charge (its own net + per-line tax) and flip
+     * the charge to invoiced. $parentId nests it as a sub-line.
+     */
+    private function writeLine(Invoice $invoice, Charge $charge, TaxContext $taxContext, string $currency, ?string $parentId, int $sort): InvoiceLine
+    {
+        $net = $charge->money();
+        $taxResult = $this->tax->resolve($net, $taxContext);
+
+        $line = InvoiceLine::create([
+            'invoice_id' => $invoice->id,
+            'charge_id' => $charge->id,
+            'parent_id' => $parentId,
+            'kind' => $charge->kind,
+            'title' => $charge->title,
+            'group' => $charge->group,
+            'line_group' => $charge->line_group,
+            'description' => $charge->description,
+            'quantity' => $charge->quantity,
+            'unit' => $charge->unit,
+            'unit_minor' => $charge->unit_minor,
+            'unit_rate' => $charge->unit_rate,
+            'amount_minor' => $net->getMinorAmount()->toInt(),
+            'tax_rate' => $taxResult->rate,
+            'tax_minor' => $taxResult->amount->getMinorAmount()->toInt(),
+            'tax_label' => $taxResult->label,
+            'currency' => $currency,
+            'covers' => $charge->covers,
+            'dimension_id' => $charge->dimension_id,
+            'metadata' => $charge->metadata,
+            'sort' => $sort,
+        ]);
+
+        $charge->markInvoiced();
+
+        return $line;
     }
 
     /**
@@ -152,20 +175,16 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     }
 
     /**
-     * Split the draft charges into line groups. Itemized: one group per charge.
-     * Consolidated: charges sharing a non-null line_group fold into one group
-     * (a product with its options/addons); charges with a null line_group each
-     * stay their own group. Order is preserved from the draft.
+     * Split the charges into line groups. Charges sharing a non-null line_group
+     * fold into one group (a product with its options/addons => a parent line
+     * with sub-lines); charges with a null line_group each stay their own group
+     * (a standalone parent, no children). Order is preserved.
      *
      * @param  Collection<int,Charge>  $charges
      * @return list<Collection<int,Charge>>
      */
-    private function lineGroups(Collection $charges, bool $consolidated): array
+    private function lineGroups(Collection $charges): array
     {
-        if (! $consolidated) {
-            return $charges->map(fn (Charge $c): Collection => collect([$c]))->all();
-        }
-
         /** @var list<Collection<int,Charge>> $groups */
         $groups = [];
         /** @var array<string,int> $index */
@@ -199,71 +218,10 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             ?? $group->first();
     }
 
-    /**
-     * The base description followed by each sub-item as its own line (title or
-     * description plus the formatted amount), so a plain-text invoice shows the
-     * folded options/addons under the product line.
-     *
-     * @param  Collection<int,Charge>  $group
-     */
-    private function consolidatedDescription(Charge $base, Collection $group): ?string
+    /** Resolve tax on a net amount in the invoice account's tax context. */
+    public function resolveTax(Invoice $invoice, Money $net): TaxResult
     {
-        $lines = [];
-        if ($base->description !== null && $base->description !== '') {
-            $lines[] = $base->description;
-        }
-
-        foreach ($group as $charge) {
-            if ($charge->id === $base->id) {
-                continue;
-            }
-            $label = $charge->description ?? $charge->title ?? $charge->kind->value;
-            $lines[] = sprintf('%s: %s', $label, $this->formatMoney($charge->money()));
-        }
-
-        return $lines === [] ? null : implode("\n", $lines);
-    }
-
-    /**
-     * A locale-free "CUR 12.34" rendering of a sub-item amount for the folded
-     * description. No intl dependency: scale the major amount to 2 decimals.
-     */
-    private function formatMoney(Money $money): string
-    {
-        $amount = $money->getAmount()->toScale(2, RoundingMode::HALF_UP)->__toString();
-
-        return $money->getCurrency()->getCurrencyCode().' '.$amount;
-    }
-
-    /**
-     * The base metadata merged with a structured `items` array of the sub-items
-     * (kind, title, description, amount_minor), so a template can render them
-     * without parsing the description text.
-     *
-     * @param  Collection<int,Charge>  $group
-     * @return array<string,mixed>
-     */
-    private function consolidatedMetadata(Charge $base, Collection $group): array
-    {
-        $items = [];
-        foreach ($group as $charge) {
-            if ($charge->id === $base->id) {
-                continue;
-            }
-            $items[] = [
-                'kind' => $charge->kind->value,
-                'title' => $charge->title,
-                'description' => $charge->description,
-                'amount_minor' => $charge->amount_minor,
-            ];
-        }
-
-        $metadata = $base->metadata ?? [];
-        if ($items !== []) {
-            $metadata['items'] = $items;
-        }
-
-        return $metadata;
+        return $this->tax->resolve($net, $invoice->account->taxContext());
     }
 
     public function void(IssuedInvoice $invoice): void

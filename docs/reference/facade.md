@@ -121,7 +121,43 @@ your gateway does. See [Credit notes and refunds](/usage/invoicing#credit-notes-
 #### `voidInvoice(Invoice $invoice): Invoice`
 
 Void an unpaid invoice. Refuses once any payment exists; correct a paid or
-finalized invoice with a credit note instead.
+finalized invoice with a credit note instead. Returns each referenced charge to
+`pending` unless it still has a line on another non-void invoice, or is settled
+or soft-deleted.
+
+#### `draftInvoice(BillingAccount $account, ?string $currency = null): Invoice`
+
+Open an editable draft from the account's pending charges. Builds the lines and
+flips each charge to `invoiced`. No number, due date, or `InvoiceIssued`.
+
+#### `createInvoice(BillingAccount $account, ?string $currency = null): Invoice`
+
+Open an empty editable draft with no charges. Build it with `addLine` /
+`addSubLine`.
+
+#### `addLine(Invoice $invoice, string $title, Money $amount, ?string $description = null, ?string $group = null, LineKind $kind = LineKind::OneOff): InvoiceLine`
+
+Add a top-level line (no charge) to a draft. Recomputes totals. Throws on a
+non-draft.
+
+#### `addSubLine(InvoiceLine $parent, string $title, Money $amount, ?string $description = null, LineKind $kind = LineKind::Option): InvoiceLine`
+
+Add a sub-line nested under `$parent` on a draft. Recomputes totals.
+
+#### `removeLine(InvoiceLine $line): void`
+
+Remove a line from a draft (cascades its sub-lines). Returns the charge to
+`pending` when the removed line was its last live line.
+
+#### `copyInvoice(Invoice $source): Invoice`
+
+Clone an invoice's header and lines (with the `parent_id` hierarchy) into a fresh
+draft, keeping each line's `charge_id`. No charge is duplicated.
+
+#### `finalizeInvoice(Invoice $draft): Invoice`
+
+Send a draft's current lines through the driver, set the due date, flip to
+`open`, and fire `InvoiceIssued`. Throws on a non-draft.
 
 #### `driver(): InvoiceDriver`
 

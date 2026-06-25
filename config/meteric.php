@@ -111,12 +111,6 @@ return [
         // Days after issue an invoice is due. meteric:mark-overdue uses this.
         'net_days' => (int) env('METERIC_INVOICE_NET_DAYS', 14),
 
-        // How the DB/lexoffice driver renders a product's charges.
-        // itemized     = one line per charge (default; base, options, addons separate).
-        // consolidated = one line per product (line_group), with options/addons
-        //                folded into the line description + metadata['items'].
-        'line_mode' => env('METERIC_INVOICE_LINE_MODE', 'itemized'), // itemized | consolidated
-
         // Lexware Office (lexoffice) driver settings.
         'lexoffice' => [
             'api_token' => env('METERIC_LEXOFFICE_TOKEN'),

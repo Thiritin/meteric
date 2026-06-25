@@ -184,26 +184,38 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
     }
 
     /**
-     * Build the lexoffice line items. Lines that carry a `group` are clustered
-     * into sections, each preceded by a `type:text` separator (the heading), so
-     * invoices with many resources or usage lines stay readable. Ungrouped lines
-     * lead, in their original order; with no groups the output is flat.
+     * Build the lexoffice line items. The sub-line hierarchy is flattened: each
+     * parent line emits as a custom item, then its children follow as their own
+     * custom items with an indented "- {title}" name, each carrying its own net +
+     * tax. The net of every emitted line sums to the invoice subtotal. Parent
+     * lines that carry a `group` are clustered into sections, each preceded by a
+     * `type:text` heading; ungrouped lines lead in their original order.
      *
      * @return list<array<string,mixed>>
      */
     private function lineItems(Invoice $invoice): array
     {
-        $lines = $invoice->lines->sortBy('sort')->values();
+        $all = $invoice->lines->sortBy('sort')->values();
+        $children = $all->filter(fn (InvoiceLine $l): bool => $l->parent_id !== null)->groupBy('parent_id');
+        $parents = $all->filter(fn (InvoiceLine $l): bool => $l->parent_id === null)->values();
 
         $ungrouped = [];
         /** @var array<string,list<array<string,mixed>>> $groups */
         $groups = [];
-        foreach ($lines as $line) {
-            $item = $this->lineItem($line, $invoice->currency);
-            if ($line->group === null || $line->group === '') {
-                $ungrouped[] = $item;
-            } else {
-                $groups[$line->group][] = $item;
+        foreach ($parents as $parent) {
+            $bucket = ($parent->group === null || $parent->group === '') ? null : $parent->group;
+
+            $emit = function (array $item) use (&$ungrouped, &$groups, $bucket): void {
+                if ($bucket === null) {
+                    $ungrouped[] = $item;
+                } else {
+                    $groups[$bucket][] = $item;
+                }
+            };
+
+            $emit($this->lineItem($parent, $invoice->currency));
+            foreach ($children->get($parent->id, collect())->sortBy('sort') as $child) {
+                $emit($this->lineItem($child, $invoice->currency, indent: true));
             }
         }
 
@@ -246,11 +258,13 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
     /**
      * @return array<string,mixed>
      */
-    private function lineItem(InvoiceLine $line, string $currency): array
+    private function lineItem(InvoiceLine $line, string $currency, bool $indent = false): array
     {
+        $name = (string) ($line->title ?? $line->description ?? '');
+
         return [
             'type' => 'custom',
-            'name' => (string) ($line->title ?? $line->description ?? ''),
+            'name' => $indent ? '- '.$name : $name,
             'description' => (string) ($line->description ?? ''),
             'quantity' => (float) $line->quantity,
             'unitName' => $line->unit,

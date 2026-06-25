@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Meteric\Casts\MoneyCast;
 use Meteric\Casts\PeriodCast;
 use Meteric\Enums\BillingMode;
@@ -34,6 +35,8 @@ use Meteric\Support\Period;
  */
 class Charge extends MetericModel
 {
+    use SoftDeletes;
+
     protected string $baseTable = 'charges';
 
     protected $guarded = [];
@@ -42,6 +45,7 @@ class Charge extends MetericModel
     {
         return [
             'state' => ChargeState::class,
+            'deleted_at' => 'immutable_datetime',
             'billing_mode' => BillingMode::class,
             'kind' => LineKind::class,
             'quantity' => 'float',
@@ -67,12 +71,6 @@ class Charge extends MetericModel
         return $this->belongsTo(Subscription::class, 'subscription_id');
     }
 
-    /** @return BelongsTo<Invoice, $this> */
-    public function invoice(): BelongsTo
-    {
-        return $this->belongsTo(Invoice::class, 'invoice_id');
-    }
-
     public function money(): Money
     {
         return Money::ofMinor($this->amount_minor, $this->currency);
@@ -83,13 +81,36 @@ class Charge extends MetericModel
         return $this->amount_minor < 0;
     }
 
-    /** Flip pending → invoiced atomically once a driver confirmed the invoice. */
-    public function markInvoiced(Invoice $invoice): void
+    /**
+     * Flip to invoiced: a line now references this charge on a non-void invoice.
+     * The charge<->invoice link lives on invoice_lines.charge_id, not here.
+     */
+    public function markInvoiced(): void
     {
-        $this->update([
-            'state' => ChargeState::Invoiced,
-            'invoice_id' => $invoice->id,
-        ]);
+        $this->update(['state' => ChargeState::Invoiced]);
+    }
+
+    /** Flip invoiced → settled once the invoice carrying this charge is paid. */
+    public function markSettled(): void
+    {
+        if ($this->state === ChargeState::Settled) {
+            return;
+        }
+
+        $this->update(['state' => ChargeState::Settled]);
+    }
+
+    /**
+     * Return a charge to the billable pool when its last live line is removed
+     * (void or draft line deletion). A settled or discarded charge never reverts.
+     */
+    public function revertToPending(): void
+    {
+        if ($this->trashed() || $this->state === ChargeState::Settled) {
+            return;
+        }
+
+        $this->update(['state' => ChargeState::Pending]);
     }
 
     public function void(): void

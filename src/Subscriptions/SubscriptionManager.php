@@ -30,6 +30,7 @@ use Meteric\Events\SubscriptionResumed;
 use Meteric\Meteric;
 use Meteric\Models\Charge;
 use Meteric\Models\Invoice;
+use Meteric\Models\InvoiceLine;
 use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
@@ -267,22 +268,25 @@ final class SubscriptionManager
         });
     }
 
-    /** The issued invoice that billed this item's current period, if any. */
+    /** The live (non-void) invoice that billed this item's current period, if any. */
     private function periodInvoice(SubscriptionItem $item): ?Invoice
     {
         if ($item->current_period === null) {
             return null;
         }
 
-        $invoiceId = Charge::query()
+        $chargeIds = Charge::query()
             ->where('origin_type', 'subscription_item')
             ->where('origin_id', $item->id)
-            ->whereNotNull('invoice_id')
             ->whereRaw('covers && ?::tstzrange', [$item->current_period->toRange()])
             ->latest('created_at')
-            ->value('invoice_id');
+            ->pluck('id');
 
-        return $invoiceId !== null ? Invoice::find($invoiceId) : null;
+        return Invoice::query()
+            ->whereIn('id', InvoiceLine::query()->whereIn('charge_id', $chargeIds)->select('invoice_id'))
+            ->where('state', '<>', InvoiceState::Void->value)
+            ->latest('created_at')
+            ->first();
     }
 
     /** Queue the swap for the next renewal boundary; no money moves mid-cycle. */

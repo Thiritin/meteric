@@ -72,15 +72,14 @@ return new class extends Migration
             $table->bigInteger('amount_minor');                  // rounded billable amount (integer minor)
             $table->char('currency', 3);
             $table->timestampTzRange('covers')->nullable();      // service period billed
-            $table->uuid('invoice_id')->nullable();
             $table->string('idempotency_key')->unique();
             $table->jsonb('metadata')->default(DB::raw("'{}'::jsonb"));
             $table->integer('version')->default(0);
             $table->timestampsTz();
+            $table->timestampTz('deleted_at')->nullable();       // soft delete: discard a charge without losing the record
 
-            $table->index(['account_id', 'currency'])->where("state = 'pending'");  // invoicing run hot path
+            $table->index(['account_id', 'currency'])->where("state = 'pending' AND deleted_at IS NULL");  // invoicing run hot path
             $table->index(['origin_type', 'origin_id']);
-            $table->index('invoice_id');
             $table->index('line_group');
         });
         Pg::currencyCheck(Pg::table('charges'));

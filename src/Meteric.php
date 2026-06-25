@@ -10,9 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Meteric\Contracts\InvoiceDriver;
-use Meteric\Enums\ChargeState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceState;
+use Meteric\Enums\LineKind;
 use Meteric\Enums\UpgradePolicy;
 use Meteric\Events\CreditNoteIssued;
 use Meteric\Events\InvoiceIssued;
@@ -28,6 +28,7 @@ use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
+use Meteric\Models\InvoiceLine;
 use Meteric\Models\ItemOption;
 use Meteric\Models\Order;
 use Meteric\Models\Payment;
@@ -109,15 +110,8 @@ final class Meteric
         );
 
         // Driver call is the failure boundary. If it throws, nothing below runs.
+        // The driver builds the lines and flips each billed charge to invoiced.
         $issued = $this->driver->issue($draft);
-
-        // Confirmed success → flip charges atomically.
-        DB::transaction(function () use ($charges, $issued): void {
-            $invoice = Invoice::findOrFail($issued->invoiceId);
-            foreach ($charges as $charge) {
-                $charge->markInvoiced($invoice);
-            }
-        });
 
         $invoice = Invoice::findOrFail($issued->invoiceId);
         if ($invoice->due_at === null) {
@@ -151,8 +145,10 @@ final class Meteric
      * void a draft/remote record or refuse (lexoffice forbids voiding a finalized
      * document).
      *
-     * The charges stay attached to the now-void invoice. Move them with
-     * transferCharges (e.g. onto a fresh draft for a wrong-address re-issue).
+     * Each charge this invoice's lines referenced returns to the billable pool
+     * (pending) unless it still has a line on another non-void invoice, or it was
+     * discarded (soft-deleted) or already settled. This is the never-lose-a-charge
+     * half of the guarantee: voiding a wrong invoice re-bills its work.
      */
     public function voidInvoice(Invoice $invoice): Invoice
     {
@@ -164,96 +160,240 @@ final class Meteric
         // nothing below runs and the invoice is left untouched.
         $this->driver->void(new IssuedInvoice($invoice->id, $invoice->number, $invoice->external_id, $invoice->external_url));
 
-        $invoice->forceFill(['state' => InvoiceState::Void])->save();
+        DB::transaction(function () use ($invoice): void {
+            // Release the batch key so the same charge set can be re-billed onto
+            // a fresh invoice once these charges revert to pending.
+            $invoice->forceFill(['state' => InvoiceState::Void, 'idempotency_key' => null])->save();
+
+            $chargeIds = $invoice->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
+            foreach (Charge::withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
+                if (! $this->chargeHasLiveLine($charge)) {
+                    $charge->revertToPending();
+                }
+            }
+        });
 
         InvoiceVoided::dispatch($invoice->refresh());
 
         return $invoice;
     }
 
+    /** Does this charge still have a line on a non-void invoice? */
+    private function chargeHasLiveLine(Charge $charge): bool
+    {
+        return InvoiceLine::query()
+            ->where('charge_id', $charge->id)
+            ->whereHas('invoice', fn ($q) => $q->where('state', '<>', InvoiceState::Void->value))
+            ->exists();
+    }
+
     /**
-     * Open an editable Draft invoice for an account: pulls the account's pending
-     * charges (one currency), attaches them, and builds the lines. The charges
-     * become `invoiced` so they leave the pending pool, but no document is sent
-     * and no due date or InvoiceIssued event is set. An account with nothing
-     * pending yields an empty draft with zero totals. Finalize it later with
-     * finalizeInvoice.
+     * Open an empty editable Draft invoice for an account: a header with no
+     * charges, no lines, and zero totals. Add lines by hand with addLine /
+     * addSubLine, then finalize with finalizeInvoice.
+     */
+    public function createInvoice(BillingAccount $account, ?string $currency = null): Invoice
+    {
+        return Invoice::create([
+            'account_id' => $account->id,
+            'customer_type' => $account->owner_type,
+            'customer_id' => $account->owner_id,
+            'driver' => config('meteric.invoice.driver', 'database'),
+            'state' => InvoiceState::Draft,
+            'currency' => $currency ?? $account->currency,
+        ]);
+    }
+
+    /**
+     * Open an editable Draft invoice for an account from its pending charges
+     * (one currency): pulls them, builds the lines, and flips each to invoiced so
+     * it leaves the pending pool. No document is sent and no due date or
+     * InvoiceIssued event is set. An account with nothing pending yields an empty
+     * draft with zero totals. Finalize it later with finalizeInvoice.
      */
     public function draftInvoice(BillingAccount $account, ?string $currency = null): Invoice
     {
         $currency ??= $account->currency;
 
         return DB::transaction(function () use ($account, $currency): Invoice {
-            $invoice = Invoice::create([
-                'account_id' => $account->id,
-                'customer_type' => $account->owner_type,
-                'customer_id' => $account->owner_id,
-                'driver' => config('meteric.invoice.driver', 'database'),
-                'state' => InvoiceState::Draft,
-                'currency' => $currency,
-            ]);
+            $invoice = $this->createInvoice($account, $currency);
 
             $charges = $this->pendingCharges([$account->id], $currency);
-            foreach ($charges as $charge) {
-                $charge->markInvoiced($invoice);
-            }
-
-            $this->rebuildLines($invoice);
+            $this->rebuildLines($invoice, $charges);
 
             return $invoice->refresh();
         });
     }
 
     /**
-     * Clone an invoice's header into a new empty Draft (account, customer,
-     * currency, and a copy of its metadata). No charges and no lines come over.
-     * Carry the charges with transferCharges, then void the source.
+     * Re-issue an invoice: clone its header and lines into a fresh Draft. The
+     * lines (and their sub-line hierarchy) come over keeping their charge_id, so
+     * the same charges are billed; no charge is duplicated and no charge state
+     * changes. The canonical wrong-address re-issue is
+     * copyInvoice($source) -> voidInvoice($source) -> finalizeInvoice($copy).
      */
     public function copyInvoice(Invoice $source): Invoice
     {
-        return Invoice::create([
-            'account_id' => $source->account_id,
-            'customer_type' => $source->customer_type,
-            'customer_id' => $source->customer_id,
-            'driver' => $source->driver,
-            'state' => InvoiceState::Draft,
-            'currency' => $source->currency,
-            'metadata' => $source->metadata,
+        return DB::transaction(function () use ($source): Invoice {
+            $copy = Invoice::create(array_filter([
+                'account_id' => $source->account_id,
+                'customer_type' => $source->customer_type,
+                'customer_id' => $source->customer_id,
+                'driver' => $source->driver,
+                'state' => InvoiceState::Draft,
+                'currency' => $source->currency,
+                'metadata' => $source->metadata,
+            ], fn ($v): bool => $v !== null));
+
+            // Two-pass clone so a child never references a not-yet-cloned parent:
+            // parents first (recording old id -> new id), then children remapped.
+            $map = [];
+            $lines = $source->lines()->orderBy('sort')->get();
+
+            foreach ($lines->whereNull('parent_id') as $line) {
+                $map[$line->id] = $this->cloneLine($line, $copy->id, null)->id;
+            }
+            foreach ($lines->whereNotNull('parent_id') as $line) {
+                $this->cloneLine($line, $copy->id, $map[$line->parent_id] ?? null);
+            }
+
+            $this->recomputeTotals($copy);
+
+            return $copy->refresh();
+        });
+    }
+
+    /** Clone one invoice line onto $invoiceId under $parentId, keeping charge_id. */
+    private function cloneLine(InvoiceLine $line, string $invoiceId, ?string $parentId): InvoiceLine
+    {
+        return InvoiceLine::create([
+            'invoice_id' => $invoiceId,
+            'charge_id' => $line->charge_id,
+            'parent_id' => $parentId,
+            'kind' => $line->kind,
+            'title' => $line->title,
+            'group' => $line->group,
+            'line_group' => $line->line_group,
+            'description' => $line->description,
+            'quantity' => $line->quantity,
+            'unit' => $line->unit,
+            'unit_minor' => $line->unit_minor,
+            'unit_rate' => $line->unit_rate,
+            'amount_minor' => $line->amount_minor,
+            'tax_rate' => $line->tax_rate,
+            'tax_minor' => $line->tax_minor,
+            'tax_label' => $line->tax_label,
+            'currency' => $line->currency,
+            'covers' => $line->covers,
+            'dimension_id' => $line->dimension_id,
+            'metadata' => $line->metadata,
+            'sort' => $line->sort,
         ]);
     }
 
     /**
-     * Move $from's charges onto $to, then rebuild the affected drafts' lines.
-     * $to must be a Draft (or null to detach the charges back to pending). $from
-     * must be a Draft or Void invoice: void an issued invoice before moving its
-     * charges. A Void $from keeps its historical lines (a frozen record); a Draft
-     * $from is rebuilt to reflect the charges it lost.
+     * Add a manual top-level line to a Draft invoice (no charge behind it). The
+     * line's tax is resolved from the account's context. Recomputes the totals.
      */
-    public function transferCharges(Invoice $from, ?Invoice $to): void
+    public function addLine(Invoice $invoice, string $title, Money $amount, ?string $description = null, ?string $group = null, LineKind $kind = LineKind::OneOff): InvoiceLine
     {
-        if ($to !== null && $to->state !== InvoiceState::Draft) {
-            throw new \LogicException('Charges can only move onto a draft invoice.');
+        if ($invoice->state !== InvoiceState::Draft) {
+            throw new \LogicException('Can only add lines to a draft invoice.');
         }
 
-        if ($from->state !== InvoiceState::Draft && $from->state !== InvoiceState::Void) {
-            throw new \LogicException('Void the invoice before moving its charges.');
-        }
+        return DB::transaction(function () use ($invoice, $title, $amount, $description, $group, $kind): InvoiceLine {
+            $line = $this->writeManualLine($invoice, null, $title, $amount, $description, $group, $kind);
+            $this->recomputeTotals($invoice);
 
-        DB::transaction(function () use ($from, $to): void {
-            foreach ($from->charges()->get() as $charge) {
-                $to !== null
-                    ? $charge->forceFill(['invoice_id' => $to->id, 'state' => ChargeState::Invoiced])->save()
-                    : $charge->forceFill(['invoice_id' => null, 'state' => ChargeState::Pending])->save();
-            }
-
-            if ($to !== null) {
-                $this->rebuildLines($to);
-            }
-
-            if ($from->state === InvoiceState::Draft) {
-                $this->rebuildLines($from);
-            }
+            return $line;
         });
+    }
+
+    /**
+     * Add a manual sub-line nested under an existing line on a Draft invoice.
+     * Recomputes the totals (every line, parent and child, counts toward them).
+     */
+    public function addSubLine(InvoiceLine $parent, string $title, Money $amount, ?string $description = null, LineKind $kind = LineKind::Option): InvoiceLine
+    {
+        $invoice = $parent->invoice;
+        if ($invoice->state !== InvoiceState::Draft) {
+            throw new \LogicException('Can only add lines to a draft invoice.');
+        }
+
+        return DB::transaction(function () use ($invoice, $parent, $title, $amount, $description, $kind): InvoiceLine {
+            $line = $this->writeManualLine($invoice, $parent->id, $title, $amount, $description, $parent->group, $kind);
+            $this->recomputeTotals($invoice);
+
+            return $line;
+        });
+    }
+
+    /**
+     * Remove a line from a Draft invoice (its sub-lines cascade away). If the line
+     * was the charge's last live line, the charge returns to the billable pool.
+     * Recomputes the totals.
+     */
+    public function removeLine(InvoiceLine $line): void
+    {
+        $invoice = $line->invoice;
+        if ($invoice->state !== InvoiceState::Draft) {
+            throw new \LogicException('Can only remove lines from a draft invoice.');
+        }
+
+        DB::transaction(function () use ($invoice, $line): void {
+            $chargeIds = collect([$line->charge_id])
+                ->merge($line->children()->pluck('charge_id'))
+                ->filter()
+                ->unique();
+
+            $line->delete();   // cascades sub-lines
+
+            foreach (Charge::withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
+                if (! $this->chargeHasLiveLine($charge)) {
+                    $charge->revertToPending();
+                }
+            }
+
+            $this->recomputeTotals($invoice);
+        });
+    }
+
+    /** Persist one manual line (no charge) with account-context tax. */
+    private function writeManualLine(Invoice $invoice, ?string $parentId, string $title, Money $amount, ?string $description, ?string $group, LineKind $kind): InvoiceLine
+    {
+        $taxResult = app(DatabaseInvoiceDriver::class)->resolveTax($invoice, $amount);
+
+        $next = (int) ($invoice->lines()->max('sort') ?? -1) + 1;
+
+        return InvoiceLine::create([
+            'invoice_id' => $invoice->id,
+            'charge_id' => null,
+            'parent_id' => $parentId,
+            'kind' => $kind,
+            'title' => $title,
+            'group' => $group,
+            'description' => $description,
+            'quantity' => 1,
+            'amount_minor' => $amount->getMinorAmount()->toInt(),
+            'tax_rate' => $taxResult->rate,
+            'tax_minor' => $taxResult->amount->getMinorAmount()->toInt(),
+            'tax_label' => $taxResult->label,
+            'currency' => $invoice->currency,
+            'sort' => $next,
+        ]);
+    }
+
+    /** Recompute a draft's totals from its current lines (manual edits). */
+    private function recomputeTotals(Invoice $invoice): void
+    {
+        $subtotal = (int) $invoice->lines()->sum('amount_minor');
+        $tax = (int) $invoice->lines()->sum('tax_minor');
+
+        $invoice->forceFill([
+            'subtotal_minor' => $subtotal,
+            'tax_minor' => $tax,
+            'total_minor' => $subtotal + $tax,
+        ])->save();
     }
 
     /**
@@ -284,10 +424,15 @@ final class Meteric
         return $invoice;
     }
 
-    /** Rebuild a draft invoice's lines from its attached charges (via the database driver). */
-    private function rebuildLines(Invoice $invoice): void
+    /**
+     * Build a draft invoice's lines from a set of charges (via the database
+     * driver), flipping each billed charge to invoiced.
+     *
+     * @param  Collection<int,Charge>  $charges
+     */
+    private function rebuildLines(Invoice $invoice, Collection $charges): void
     {
-        app(DatabaseInvoiceDriver::class)->rebuildLines($invoice);
+        app(DatabaseInvoiceDriver::class)->rebuildLines($invoice, $charges);
     }
 
     /**
@@ -322,11 +467,21 @@ final class Meteric
             ]);
 
             $paid = $invoice->paid_minor + $amount->getMinorAmount()->toInt();
+            $fullyPaid = $paid >= $invoice->total_minor;
             $invoice->forceFill([
                 'paid_minor' => $paid,
-                'state' => $paid >= $invoice->total_minor ? InvoiceState::Paid : InvoiceState::PartiallyPaid,
-                'paid_at' => $paid >= $invoice->total_minor ? now() : $invoice->paid_at,
+                'state' => $fullyPaid ? InvoiceState::Paid : InvoiceState::PartiallyPaid,
+                'paid_at' => $fullyPaid ? now() : $invoice->paid_at,
             ])->save();
+
+            // A fully paid invoice settles the charges it billed. A partial
+            // payment leaves them invoiced.
+            if ($fullyPaid) {
+                $chargeIds = $invoice->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
+                foreach (Charge::whereIn('id', $chargeIds)->get() as $charge) {
+                    $charge->markSettled();
+                }
+            }
 
             return $payment;
         });

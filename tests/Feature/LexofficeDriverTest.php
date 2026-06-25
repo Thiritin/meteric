@@ -259,10 +259,8 @@ it('finalizes a draft invoice by posting its current lines to lexoffice', functi
         'account_id' => $account->id, 'customer_type' => 'user', 'customer_id' => '1',
         'driver' => 'lexoffice', 'state' => InvoiceState::Draft, 'currency' => 'EUR',
     ]);
-    Charge::where('account_id', $account->id)->each(
-        fn (Charge $c) => $c->forceFill(['invoice_id' => $invoice->id, 'state' => ChargeState::Invoiced])->save()
-    );
-    app(DatabaseInvoiceDriver::class)->rebuildLines($invoice);
+    $charges = Charge::where('account_id', $account->id)->get();
+    app(DatabaseInvoiceDriver::class)->rebuildLines($invoice, $charges);
 
     $issued = lexDriver()->finalize($invoice->fresh());
 
@@ -314,9 +312,7 @@ it('refuses to void a finalized lexoffice invoice and points at credit notes', f
     expect(fn () => $driver->void($issued))->toThrow(LogicException::class);
 });
 
-it('emits one lexoffice line per product with sub-items in its description (consolidated)', function () {
-    config(['meteric.invoice.line_mode' => 'consolidated']);
-
+it('flattens a product and its sub-lines into indented lexoffice line items', function () {
     Http::fake([
         'api.lexoffice.io/v1/invoices*' => Http::response(lexInvoiceResponse(), 201),
     ]);
@@ -327,18 +323,23 @@ it('emits one lexoffice line per product with sub-items in its description (cons
     $base = lexCharge($account, 1000, 'VPS XL', 'Hosting plan');
     $base->forceFill(['line_group' => $group, 'kind' => LineKind::Recurring])->save();
 
-    $option = lexCharge($account, 300, 'VPS XL', 'Extra slots');
+    $option = lexCharge($account, 300, 'Extra slots', 'Configurable option');
     $option->forceFill(['line_group' => $group, 'kind' => LineKind::Option])->save();
 
     lexDriver()->issue(lexDraft($account));
 
     Http::assertSent(function ($request) {
         $body = $request->data();
+        $items = $body['lineItems'];
 
-        return count($body['lineItems']) === 1
-            && $body['lineItems'][0]['name'] === 'VPS XL'
-            && str_contains($body['lineItems'][0]['description'], 'Hosting plan')
-            && str_contains($body['lineItems'][0]['description'], 'Extra slots')
-            && abs($body['lineItems'][0]['unitPrice']['netAmount'] - 13.0) < 0.001;   // 10.00 + 3.00
+        // Parent line then its child as its own indented custom item.
+        $netSum = array_sum(array_map(fn ($i) => $i['unitPrice']['netAmount'], $items));
+
+        return count($items) === 2
+            && $items[0]['name'] === 'VPS XL'
+            && abs($items[0]['unitPrice']['netAmount'] - 10.0) < 0.001
+            && $items[1]['name'] === '- Extra slots'
+            && abs($items[1]['unitPrice']['netAmount'] - 3.0) < 0.001
+            && abs($netSum - 13.0) < 0.001;   // sub-line nets sum to the subtotal
     });
 });

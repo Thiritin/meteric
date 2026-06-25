@@ -50,6 +50,7 @@ return new class extends Migration
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->foreignUuid('invoice_id')->constrained(Pg::table('invoices'))->cascadeOnDelete();
             $table->foreignUuid('charge_id')->nullable()->constrained(Pg::table('charges'))->nullOnDelete();
+            $table->uuid('parent_id')->nullable();           // self-FK: a child sub-line nests under its parent product line
             $table->string('kind');
             $table->string('title')->nullable();             // line name (product + resource)
             $table->string('group')->nullable();             // invoice section heading (e.g. Domains, Usage)
@@ -70,6 +71,11 @@ return new class extends Migration
             $table->jsonb('metadata')->default(DB::raw("'{}'::jsonb"));
 
             $table->index(['invoice_id', 'sort']);
+            $table->index('parent_id');
+        });
+        // Self-FK added after creation so the primary key exists to reference.
+        Schema::table(Pg::table('invoice_lines'), function (Blueprint $table) {
+            $table->foreign('parent_id')->references('id')->on(Pg::table('invoice_lines'))->cascadeOnDelete();
         });
         Pg::currencyCheck(Pg::table('invoice_lines'));
         Pg::enumCheck(Pg::table('invoice_lines'), 'kind', LineKind::class);

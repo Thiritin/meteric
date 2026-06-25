@@ -363,19 +363,20 @@ CREATE TABLE meteric_charges (
   amount_minor    bigint NOT NULL,             -- signed (negative = credit)
   currency        char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   covers          tstzrange,                   -- service period billed
-  invoice_id      uuid,                        -- set on successful issue
   idempotency_key text NOT NULL,
   metadata        jsonb NOT NULL DEFAULT '{}',
   version         integer NOT NULL DEFAULT 0,
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now(),
+  deleted_at      timestamptz,                 -- soft delete: discard without losing the record
   UNIQUE (idempotency_key)
 );
--- The invoicing run's hot path — only pending rows:
+-- The invoicing run's hot path — only live pending rows. The charge<->invoice
+-- link lives on meteric_invoice_lines.charge_id, not here.
 CREATE INDEX meteric_charges_pending_idx ON meteric_charges (account_id, currency)
-  WHERE state = 'pending';
+  WHERE state = 'pending' AND deleted_at IS NULL;
 CREATE INDEX meteric_charges_origin_idx  ON meteric_charges (origin_type, origin_id);
-CREATE INDEX meteric_charges_invoice_idx ON meteric_charges (invoice_id);
+CREATE INDEX meteric_charges_line_group_idx ON meteric_charges (line_group);
 CREATE TRIGGER meteric_charges_touch BEFORE UPDATE ON meteric_charges
   FOR EACH ROW EXECUTE FUNCTION meteric_touch_updated_at();
 ```
@@ -421,20 +422,23 @@ CREATE TRIGGER meteric_invoices_touch BEFORE UPDATE ON meteric_invoices
 ```
 
 ### meteric_invoice_lines
-Immutable snapshot. Carries its own `covers` window (prepaid vs arrears differ).
+Immutable snapshot and the document unit. Carries its own `covers` window
+(prepaid vs arrears differ). `charge_id` links it to the charge it bills (null for
+a manual line); `parent_id` nests a sub-line under its parent product line.
 
 ```sql
 CREATE TABLE meteric_invoice_lines (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   invoice_id    uuid NOT NULL REFERENCES meteric_invoices(id) ON DELETE CASCADE,
   charge_id     uuid REFERENCES meteric_charges(id) ON DELETE SET NULL,
+  parent_id     uuid REFERENCES meteric_invoice_lines(id) ON DELETE CASCADE,  -- sub-line
   kind          meteric_line_kind NOT NULL,
   description   text NOT NULL,
   quantity      numeric(20,6) NOT NULL DEFAULT 1,
   unit_minor    bigint NOT NULL,
-  amount_minor  bigint NOT NULL,               -- net, signed
+  amount_minor  bigint NOT NULL,               -- net, signed; own amount only (children carry theirs)
   tax_rate      numeric(6,4) NOT NULL DEFAULT 0,   -- e.g. 0.1900
-  tax_minor     bigint NOT NULL DEFAULT 0,
+  tax_minor     bigint NOT NULL DEFAULT 0,      -- per-line tax
   tax_label     text,                          -- 'USt 19%' | 'Reverse charge'
   currency      char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   covers        tstzrange,                     -- service period this line bills
@@ -443,6 +447,7 @@ CREATE TABLE meteric_invoice_lines (
   metadata      jsonb NOT NULL DEFAULT '{}'
 );
 CREATE INDEX meteric_lines_invoice_idx ON meteric_invoice_lines (invoice_id, sort);
+CREATE INDEX meteric_lines_parent_idx  ON meteric_invoice_lines (parent_id);
 ```
 
 ### meteric_credit_notes (+ lines mirror invoice lines)

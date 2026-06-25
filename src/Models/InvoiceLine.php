@@ -6,12 +6,17 @@ namespace Meteric\Models;
 
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Meteric\Casts\MoneyCast;
 use Meteric\Casts\PeriodCast;
 use Meteric\Enums\LineKind;
 use Meteric\Support\Period;
 
 /**
+ * @property string $id
+ * @property string $invoice_id
+ * @property ?string $charge_id
+ * @property ?string $parent_id
  * @property LineKind $kind
  * @property ?string $title
  * @property ?string $group
@@ -19,12 +24,17 @@ use Meteric\Support\Period;
  * @property ?string $description
  * @property ?string $unit
  * @property float $quantity
+ * @property ?int $unit_minor
+ * @property ?string $unit_rate
  * @property Money $amount
  * @property int $amount_minor
  * @property float $tax_rate
  * @property int $tax_minor
+ * @property ?string $tax_label
  * @property string $currency
  * @property ?Period $covers
+ * @property ?string $dimension_id
+ * @property int $sort
  * @property array $metadata
  */
 class InvoiceLine extends MetericModel
@@ -62,6 +72,22 @@ class InvoiceLine extends MetericModel
     public function charge(): BelongsTo
     {
         return $this->belongsTo(Charge::class, 'charge_id');
+    }
+
+    /** @return BelongsTo<InvoiceLine, $this> */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    /**
+     * The sub-lines nested under this line (a product's options/addons).
+     *
+     * @return HasMany<InvoiceLine, $this>
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('sort');
     }
 
     public function gross(): Money

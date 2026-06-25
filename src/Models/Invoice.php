@@ -66,10 +66,17 @@ class Invoice extends MetericModel
         return $this->hasMany(InvoiceLine::class, 'invoice_id');
     }
 
-    /** @return HasMany<Charge, $this> */
-    public function charges(): HasMany
+    /**
+     * The charges this invoice bills, derived through its lines (a charge is
+     * linked only via invoice_lines.charge_id). Manual lines carry no charge.
+     *
+     * @return Collection<int, Charge>
+     */
+    public function charges(): Collection
     {
-        return $this->hasMany(Charge::class, 'invoice_id');
+        $ids = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
+
+        return Charge::query()->whereIn('id', $ids)->get();
     }
 
     /** @return HasMany<CreditNote, $this> */
@@ -92,7 +99,8 @@ class Invoice extends MetericModel
      */
     public function subscriptions(): Collection
     {
-        $ids = $this->charges()->whereNotNull('subscription_id')->distinct()->pluck('subscription_id');
+        $chargeIds = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
+        $ids = Charge::query()->whereIn('id', $chargeIds)->whereNotNull('subscription_id')->distinct()->pluck('subscription_id');
 
         return Subscription::query()->whereIn('id', $ids)->get();
     }
