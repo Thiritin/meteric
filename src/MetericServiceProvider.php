@@ -45,6 +45,10 @@ final class MetericServiceProvider extends ServiceProvider
 
         $this->app->singleton(Vies::class, fn ($app) => new Vies(
             baseUrl: $app['config']['meteric.tax.vies_base_url'] ?? 'https://ec.europa.eu/taxation_customs/vies/rest-api',
+            requester: array_filter([
+                'countryCode' => $app['config']['meteric.tax.vies_requester.country_code'] ?? null,
+                'vatNumber' => $app['config']['meteric.tax.vies_requester.vat_number'] ?? null,
+            ], fn ($v): bool => $v !== null && $v !== ''),
         ));
 
         // Tax resolver — selected by config('meteric.tax.driver').

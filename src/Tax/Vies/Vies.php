@@ -14,16 +14,20 @@ use Illuminate\Support\Facades\Http;
  */
 final class Vies
 {
+    /** @param  array<string,string>  $requester  default requester (countryCode, vatNumber) from config */
     public function __construct(
         private string $baseUrl = 'https://ec.europa.eu/taxation_customs/vies/rest-api',
+        private array $requester = [],
     ) {}
 
     /**
      * @param  array<string,string>  $trader  name, companyType, street, postalCode, city
-     * @param  array<string,string>  $requester  countryCode, vatNumber (your own VAT id, for the consultation number)
+     * @param  array<string,string>  $requester  your own VAT id (countryCode, vatNumber) for the consultation number; falls back to config
      */
     public function check(string $countryCode, string $vatNumber, array $trader = [], array $requester = []): ViesResult
     {
+        $requester = array_merge($this->requester, $requester);
+
         $body = array_filter([
             'countryCode' => $countryCode,
             'vatNumber' => $vatNumber,

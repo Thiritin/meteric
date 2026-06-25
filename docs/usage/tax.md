@@ -91,6 +91,9 @@ $result->consultationNumber;  // VIES request identifier, for your audit record
 ```
 
 Trader fields are optional: omit them to get a plain valid/invalid result. The
+`requester` defaults to `config('meteric.tax.vies_requester')`
+(`METERIC_VIES_REQUESTER_COUNTRY` / `METERIC_VIES_REQUESTER_VAT`), so you set your
+own VAT id once and omit it per call; a per-call `requester` overrides it. The
 endpoint is `config('meteric.tax.vies_base_url')` (the EU VIES REST API by
 default). Tax computation does not depend on this call; it is for the warning and
 the record.

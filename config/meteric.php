@@ -82,6 +82,13 @@ return [
         // trader name/address match flags. Override only for a proxy or a mock.
         'vies_base_url' => env('METERIC_VIES_URL', 'https://ec.europa.eu/taxation_customs/vies/rest-api'),
 
+        // Your own VAT id, sent with a qualified VIES check so VIES returns a
+        // consultation number (an audit receipt). A per-call requester overrides.
+        'vies_requester' => [
+            'country_code' => env('METERIC_VIES_REQUESTER_COUNTRY'),
+            'vat_number' => env('METERIC_VIES_REQUESTER_VAT'),
+        ],
+
         // ibericode driver settings
         'ibericode' => [
             // Writable path for the auto-refreshed rates cache.
