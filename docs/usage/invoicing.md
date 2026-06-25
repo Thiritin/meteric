@@ -25,6 +25,11 @@ from `meteric.invoice.net_days` (default 14). To bill a payer plus all its child
 accounts onto one itemized invoice, use `invoiceConsolidated` (see
 [Consolidated billing](#consolidated-billing)).
 
+The scheduled `meteric:run` tick already does this: after renewing due
+subscriptions it calls `invoicePending` for each affected account, so recurring
+billing needs no manual call. Reach for `invoicePending` yourself only to bill an
+account off-cycle.
+
 ### From pending charges, edited first
 
 To review or adjust before sending, open a draft instead of issuing:
