@@ -97,6 +97,11 @@ Start a read-only quote for checkout rendering. Nothing is persisted. See
 
 ## Invoicing and payments
 
+#### `charge(BillingAccount $account, Money $amount, string $title, ?string $group = null, ?string $description = null, LineKind $kind = LineKind::OneOff): Charge`
+
+Add a one-off custom charge to an account; it accrues as `pending` and the next
+billing run bills it. For a standalone document now, use `createInvoice`.
+
 #### `invoicePending(BillingAccount $account, ?string $currency = null): ?Invoice`
 
 Collect an account's pending charges in one currency and issue them via the

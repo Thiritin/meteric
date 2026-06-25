@@ -8,62 +8,46 @@ invoice line by line.
 
 ## Creating invoices
 
-### From pending charges
+Two ways to get an invoice: let the billing run make it, or build one yourself.
 
-`invoicePending` collects an account's pending charges in one currency, builds the
-lines, issues the document through the bound driver, and returns the `Invoice`:
+### Automatically (the billing run)
 
-```php
-use Meteric\Facades\Meteric;
+The scheduled `meteric:run` tick invoices an account's pending charges after
+renewing its subscriptions, so recurring billing needs no manual call.
 
-$invoice = Meteric::invoicePending($account);
-// null when nothing was pending; otherwise the issued Invoice.
-```
-
-It flips each billed charge from `pending` to `invoiced` and sets the due date
-from `meteric.invoice.net_days` (default 14). To bill a payer plus all its child
-accounts onto one itemized invoice, use `invoiceConsolidated` (see
-[Consolidated billing](#consolidated-billing)).
-
-The scheduled `meteric:run` tick already does this: after renewing due
-subscriptions it calls `invoicePending` for each affected account, so recurring
-billing needs no manual call. Reach for `invoicePending` yourself only to bill an
-account off-cycle.
-
-### From pending charges, edited first
-
-To review or adjust before sending, open a draft instead of issuing:
-
-```php
-$draft = Meteric::draftInvoice($account);    // lines built from pending charges
-// edit the draft...
-$invoice = Meteric::finalizeInvoice($draft); // send it
-```
-
-`draftInvoice(BillingAccount $account, ?string $currency = null): Invoice` pulls
-the account's pending charges, builds the lines, and flips each charge to
-`invoiced` so it leaves the pending pool: a later `invoicePending` skips it. With
-nothing pending you get an empty draft with zero totals. Edit it with
-[addLine / removeLine](#editing-a-draft), then finalize.
-
-### An empty invoice you fill yourself
-
-`createInvoice` opens a draft with no charges behind it. Build it by hand:
+To bill a one-off this way, add a custom charge to the account. It sits `pending`,
+and the account's next invoice (next run) includes it:
 
 ```php
 use Brick\Money\Money;
+use Meteric\Facades\Meteric;
 
+Meteric::charge($account, Money::ofMinor(5000, 'EUR'), 'Setup fee', group: 'Services');
+// pending; the account's next invoice bills it.
+```
+
+`charge(BillingAccount $account, Money $amount, string $title, ?string $group = null, ?string $description = null, LineKind $kind = LineKind::OneOff): Charge`
+creates the charge in `pending`. Off-cycle, `Meteric::invoicePending($account)`
+issues an account's pending charges immediately.
+
+### Manually (build it now)
+
+For a standalone invoice you control, open an empty draft, add lines, then finalize:
+
+```php
 $draft = Meteric::createInvoice($account);
-
-$line = Meteric::addLine($draft, 'Consulting', Money::ofMinor(50000, 'EUR'), 'October');
+$line  = Meteric::addLine($draft, 'Consulting', Money::ofMinor(50000, 'EUR'), 'October');
 Meteric::addSubLine($line, 'Travel', Money::ofMinor(15000, 'EUR'));
-
 $invoice = Meteric::finalizeInvoice($draft);
 ```
 
-`createInvoice(BillingAccount $account, ?string $currency = null): Invoice` sets no
-charges, lines, or totals. Each edit recomputes the draft totals. See
-[Editing a draft](#editing-a-draft) for the line methods.
+`createInvoice(BillingAccount $account, ?string $currency = null): Invoice` opens a
+draft with no charges, lines, or totals. Each edit recomputes the totals. See
+[Editing a draft](#editing-a-draft) for the line-method signatures.
+
+To start from the account's pending charges but review or adjust before sending,
+`Meteric::draftInvoice($account)` builds a draft from pending charges. Edit it,
+then `finalizeInvoice`.
 
 ### Copy and re-issue
 
