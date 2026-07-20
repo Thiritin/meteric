@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\BillingMode;
@@ -86,6 +87,33 @@ final class Meteric
     }
 
     /**
+     * Invoice every currency that has pending charges for the account, not just
+     * the account's default. A subscription or usage dimension can carry its own
+     * currency, so billing only the default currency would strand the rest as
+     * permanently pending. Returns the issued invoices (one per currency).
+     *
+     * @return list<Invoice>
+     */
+    public function invoiceAllPending(BillingAccount $account): array
+    {
+        $currencies = Charge::query()
+            ->pending()
+            ->where('account_id', $account->id)
+            ->distinct()
+            ->pluck('currency');
+
+        $invoices = [];
+        foreach ($currencies as $currency) {
+            $invoice = $this->invoicePending($account, $currency);
+            if ($invoice !== null) {
+                $invoices[] = $invoice;
+            }
+        }
+
+        return $invoices;
+    }
+
+    /**
      * Consolidated invoice: bill the payer's own + all child accounts' pending
      * charges onto a single invoice (AWS org / reseller). Itemized per account.
      */
@@ -134,8 +162,15 @@ final class Meteric
         // An invoice is never negative. If pending credits outweigh the charges,
         // hold everything: the credit lines stay pending and reduce a later
         // invoice once new charges land. A refund (money back) is a credit note,
-        // not a negative invoice.
+        // not a negative invoice. Log it so a net-credit account is not silently
+        // stuck with no invoice and no refund.
         if ((int) $charges->sum('amount_minor') < 0) {
+            Log::warning('meteric: account net-credit holds invoicing; no invoice issued', [
+                'account_id' => $account->id,
+                'currency' => $currency,
+                'net_minor' => (int) $charges->sum('amount_minor'),
+            ]);
+
             return null;
         }
 

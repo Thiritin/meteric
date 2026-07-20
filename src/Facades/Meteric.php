@@ -14,6 +14,7 @@ use Meteric\Models\Payment;
 /**
  * @method static \Meteric\Models\Charge charge(BillingAccount $account, Money $amount, string $title, ?string $group = null, ?string $description = null, \Meteric\Enums\LineKind $kind = \Meteric\Enums\LineKind::OneOff)
  * @method static ?Invoice invoicePending(BillingAccount $account, ?string $currency = null)
+ * @method static list<Invoice> invoiceAllPending(BillingAccount $account)
  * @method static ?Invoice invoiceConsolidated(BillingAccount $payer, ?string $currency = null)
  * @method static Payment recordPayment(Invoice $invoice, Money $amount, ?string $reference = null)
  * @method static \Meteric\Quoting\QuoteBuilder quote()

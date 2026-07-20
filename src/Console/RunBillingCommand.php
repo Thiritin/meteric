@@ -49,8 +49,8 @@ final class RunBillingCommand extends Command
         $invoiced = 0;
         foreach ($accountIds as $id) {
             $account = BillingAccount::find($id);
-            if ($account !== null && $meteric->invoicePending($account) !== null) {
-                $invoiced++;
+            if ($account !== null) {
+                $invoiced += count($meteric->invoiceAllPending($account));
             }
         }
 
