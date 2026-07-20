@@ -55,7 +55,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
 
         $body = $this->invoiceBody($invoice);
 
-        $response = $this->client()->post('/v1/invoices?finalize=true', $body);
+        $response = $this->client($invoice->id)->post('/v1/invoices?finalize=true', $body);
         $data = $this->ok($response, 'invoice');
 
         $externalId = (string) $data['id'];
@@ -94,7 +94,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
 
         $body = $this->invoiceBody($invoice);
 
-        $response = $this->client()->post('/v1/invoices?finalize=true', $body);
+        $response = $this->client($invoice->id)->post('/v1/invoices?finalize=true', $body);
         $data = $this->ok($response, 'invoice');
 
         $externalId = (string) $data['id'];
@@ -122,7 +122,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
 
         $body = $this->creditNoteBody($note, $draft);
 
-        $response = $this->client()->post('/v1/credit-notes?finalize=true', $body);
+        $response = $this->client($note->id)->post('/v1/credit-notes?finalize=true', $body);
         $data = $this->ok($response, 'credit-note');
 
         $externalId = (string) $data['id'];
@@ -328,11 +328,27 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         return (float) $money->getAmount()->toScale(2, RoundingMode::HALF_UP)->__toString();
     }
 
-    private function client(): PendingRequest
+    /**
+     * A configured lexoffice client. Passing an idempotency key makes a POST
+     * safe to retry: if the first attempt reached lexoffice but the response was
+     * lost, the retry returns the original document instead of creating a
+     * second finalized (legally numbered) invoice. Use a value stable across
+     * resyncs of the same local record (the invoice/credit-note id).
+     */
+    private function client(?string $idempotencyKey = null): PendingRequest
     {
-        return Http::withToken($this->apiToken)
+        $request = Http::withToken($this->apiToken)
             ->acceptJson()
-            ->baseUrl($this->baseUrl);
+            ->baseUrl($this->baseUrl)
+            ->connectTimeout(10)
+            ->timeout(30)
+            ->retry(3, 500, throw: false);
+
+        if ($idempotencyKey !== null) {
+            $request->withHeaders(['Idempotency-Key' => $idempotencyKey]);
+        }
+
+        return $request;
     }
 
     /**
