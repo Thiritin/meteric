@@ -83,7 +83,21 @@ final class UsageRollup
 
                 $used = $this->aggregate($records->pluck('quantity')->all(), $dimension->aggregation);
                 if (! $this->reserve($item, $dimension->id, $period)) {
-                    continue; // window already billed for this dimension
+                    // Window already billed for this dimension. Attach these
+                    // late-arriving records to the existing window charge so they
+                    // leave the unbilled pool instead of being re-scanned forever;
+                    // the closed window is never billed twice.
+                    $existing = Charge::query()
+                        ->where('origin_id', $item->id)
+                        ->where('dimension_id', $dimension->id)
+                        ->where('kind', LineKind::Usage->value)
+                        ->whereRaw('covers && ?::tstzrange', [$period->toRange()])
+                        ->first();
+                    if ($existing !== null) {
+                        UsageRecord::whereIn('id', $records->pluck('id'))->update(['charge_id' => $existing->id]);
+                    }
+
+                    continue;
                 }
 
                 $amount = $dimension->amountFor($used);
@@ -113,7 +127,10 @@ final class UsageRollup
                         'overage' => $dimension->overage($used),
                         'block_size' => $dimension->block_size,
                     ],
-                    'idempotency_key' => 'usage_'.Str::uuid()->toString(),
+                    // Deterministic key: a retry of the same window+dimension
+                    // collides on the unique index instead of billing a second
+                    // charge, backing up the billing-period guard.
+                    'idempotency_key' => 'usage_'.substr(hash('sha256', $item->id.$dimension->id.$period->toRange()), 0, 34),
                 ]);
 
                 UsageRecord::whereIn('id', $records->pluck('id'))->update(['charge_id' => $charge->id]);
