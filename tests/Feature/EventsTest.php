@@ -109,9 +109,10 @@ it('issues a credit note against an invoice (the refund record)', function () {
     $invoice = Meteric::invoicePending($acc);
     Meteric::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'EUR'), 'pi_cn');
 
-    $note = Meteric::creditNote($invoice, Money::ofMinor($invoice->total_minor, 'EUR'), 'customer refund');
+    // The credit amount is the net being reversed; the note adds the VAT itself.
+    $note = Meteric::creditNote($invoice, Money::ofMinor($invoice->subtotal_minor, 'EUR'), 'customer refund');
 
-    expect($note->amount_minor)->toBe($invoice->total_minor)
+    expect($note->amount_minor)->toBe($invoice->subtotal_minor)
         ->and($note->invoice_id)->toBe($invoice->id)
         ->and($invoice->fresh()->creditNotes)->toHaveCount(1);
     Event::assertDispatched(CreditNoteIssued::class);

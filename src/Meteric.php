@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\ChargeState;
+use Meteric\Enums\CreditState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\LineKind;
@@ -255,6 +256,28 @@ final class Meteric
      */
     public function creditNote(Invoice $invoice, Money $amount, ?string $reason = null): CreditNote
     {
+        $net = $amount->getMinorAmount()->toInt();
+        if ($net <= 0) {
+            throw new \InvalidArgumentException('Credit note amount must be positive.');
+        }
+        if ($amount->getCurrency()->getCurrencyCode() !== $invoice->currency) {
+            throw new \InvalidArgumentException("Credit currency {$amount->getCurrency()->getCurrencyCode()} does not match invoice currency {$invoice->currency}.");
+        }
+
+        // A cumulative guard: the net credited across all notes for an invoice can
+        // never exceed the invoice's net. Without it an invoice can be credited
+        // repeatedly and refunded past what was billed.
+        $alreadyCredited = (int) Models::query(CreditNote::class)
+            ->where('invoice_id', $invoice->id)
+            ->where('state', '!=', CreditState::Void->value)
+            ->sum('amount_minor');
+        if ($alreadyCredited + $net > $invoice->subtotal_minor) {
+            $remaining = max(0, $invoice->subtotal_minor - $alreadyCredited);
+            throw new \InvalidArgumentException(
+                "Credit of {$net} exceeds the invoice's remaining creditable net of {$remaining} (net {$invoice->subtotal_minor}, already credited {$alreadyCredited})."
+            );
+        }
+
         $issued = new IssuedInvoice($invoice->id, $invoice->number, $invoice->external_id, $invoice->external_url);
         $result = $this->driver->creditNote($issued, new CreditNoteDraft($amount, $reason));
         $note = Models::query(CreditNote::class)->findOrFail($result->creditNoteId);

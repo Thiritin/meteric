@@ -83,6 +83,25 @@ it('numbers invoices sequentially per year and never reuses a number', function 
         ->and(Invoice::where('number', $second->number)->count())->toBe(1);
 });
 
+it('refuses to credit more than the invoice net across multiple notes', function () {
+    $account = guardAccount();
+    guardCharge($account, 1000);              // net 1000
+    $invoice = Meteric::invoicePending($account);
+
+    Meteric::creditNote($invoice, Money::ofMinor(600, 'EUR'), 'partial');
+
+    // 600 already credited; a further 600 would exceed the 1000 net.
+    expect(fn () => Meteric::creditNote($invoice, Money::ofMinor(600, 'EUR'), 'again'))
+        ->toThrow(InvalidArgumentException::class);
+
+    // The remaining 400 is allowed.
+    $ok = Meteric::creditNote($invoice, Money::ofMinor(400, 'EUR'), 'rest');
+    expect($ok->amount_minor)->toBe(400);
+
+    expect(fn () => Meteric::creditNote($invoice, Money::ofMinor(1, 'EUR'), 'over'))
+        ->toThrow(InvalidArgumentException::class);
+});
+
 it('stamps a due date on every issued invoice so it can go overdue', function () {
     config(['meteric.invoice.net_days' => 7]);
     $account = guardAccount();
