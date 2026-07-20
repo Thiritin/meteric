@@ -95,6 +95,32 @@ it('stamps a due date on every issued invoice so it can go overdue', function ()
         ->toBe($invoice->issued_at->copy()->addDays(7)->toDateString());
 });
 
+it('invoices every currency with pending charges, not just the account default', function () {
+    $account = guardAccount('EUR');
+    guardCharge($account, 1000, 'EUR');
+    guardCharge($account, 2000, 'USD');
+
+    $invoices = Meteric::invoiceAllPending($account);
+
+    expect($invoices)->toHaveCount(2)
+        ->and(collect($invoices)->pluck('currency')->sort()->values()->all())->toBe(['EUR', 'USD'])
+        ->and(Charge::where('account_id', $account->id)->pending()->count())->toBe(0);
+});
+
+it('credits tax at the invoice blended rate, proportional to the credited net', function () {
+    $account = guardAccount();
+    guardCharge($account, 1000);           // 19% -> subtotal 1000, tax 190
+    $invoice = Meteric::invoicePending($account);
+
+    expect($invoice->tax_minor)->toBe(190);
+
+    // Credit half the net: tax reverses proportionally (500 * 190/1000 = 95).
+    $note = Meteric::creditNote($invoice, Money::ofMinor(500, 'EUR'), 'partial');
+
+    expect($note->amount_minor)->toBe(500)
+        ->and($note->tax_minor)->toBe(95);
+});
+
 it('does not double-bill when the same pending set is invoiced twice in sequence', function () {
     $account = guardAccount();
     guardCharge($account, 1000);
