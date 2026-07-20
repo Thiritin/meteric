@@ -84,10 +84,23 @@ class Charge extends MetericModel
     /**
      * Flip to invoiced: a line now references this charge on a non-void invoice.
      * The charge<->invoice link lives on invoice_lines.charge_id, not here.
+     *
+     * The state guard is defense in depth behind the FOR UPDATE lock the caller
+     * holds: a charge can only leave the pending pool once, so a competing run
+     * that already invoiced it cannot be silently re-billed here.
      */
     public function markInvoiced(): void
     {
-        $this->update(['state' => ChargeState::Invoiced]);
+        $flipped = static::query()
+            ->whereKey($this->getKey())
+            ->where('state', ChargeState::Pending->value)
+            ->update(['state' => ChargeState::Invoiced->value]);
+
+        if ($flipped === 0) {
+            throw new \RuntimeException("Charge {$this->getKey()} was not pending when billed; concurrent run detected.");
+        }
+
+        $this->setAttribute('state', ChargeState::Invoiced)->syncOriginalAttribute('state');
     }
 
     /** Flip invoiced → settled once the invoice carrying this charge is paid. */

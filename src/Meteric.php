@@ -73,9 +73,16 @@ final class Meteric
     public function invoicePending(BillingAccount $account, ?string $currency = null): ?Invoice
     {
         $currency ??= $account->currency;
-        $charges = $this->pendingCharges([$account->id], $currency);
 
-        return $this->issue($account, $currency, $charges);
+        // Read the pending charges and issue them in one transaction with the
+        // rows locked, so two concurrent runs can never bill the same charge
+        // onto two invoices. Under READ COMMITTED the FOR UPDATE re-check drops
+        // any charge a competing run flipped to invoiced while we waited.
+        return DB::transaction(function () use ($account, $currency): ?Invoice {
+            $charges = $this->pendingCharges([$account->id], $currency);
+
+            return $this->issue($account, $currency, $charges);
+        });
     }
 
     /**
@@ -85,9 +92,12 @@ final class Meteric
     public function invoiceConsolidated(BillingAccount $payer, ?string $currency = null): ?Invoice
     {
         $currency ??= $payer->currency;
-        $charges = $this->pendingCharges($payer->payerScopeIds(), $currency);
 
-        return $this->issue($payer, $currency, $charges);
+        return DB::transaction(function () use ($payer, $currency): ?Invoice {
+            $charges = $this->pendingCharges($payer->payerScopeIds(), $currency);
+
+            return $this->issue($payer, $currency, $charges);
+        });
     }
 
     /**
@@ -134,6 +144,7 @@ final class Meteric
             currency: $currency,
             charges: $charges,
             idempotencyKey: $this->batchKey($charges),
+            dueDays: (int) config('meteric.invoice.net_days', 14),
         );
 
         // Driver call is the failure boundary. If it throws, nothing below runs.
@@ -473,15 +484,28 @@ final class Meteric
             ->whereIn('account_id', $accountIds)
             ->where('currency', $currency)
             ->orderBy('created_at')
+            ->lockForUpdate()
             ->get();
     }
 
     /** Record an inbound payment against an invoice and advance its state. */
     public function recordPayment(Invoice $invoice, Money $amount, ?string $reference = null): Payment
     {
+        $paymentCurrency = $amount->getCurrency()->getCurrencyCode();
+        if ($paymentCurrency !== $invoice->currency) {
+            throw new \InvalidArgumentException(
+                "Payment currency {$paymentCurrency} does not match invoice currency {$invoice->currency}."
+            );
+        }
+
         $payment = DB::transaction(function () use ($invoice, $amount, $reference): Payment {
+            // Lock the invoice row so concurrent payments (e.g. gateway webhook
+            // retries) serialize instead of both reading a stale paid_minor and
+            // clobbering each other's write.
+            $locked = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
             $payment = Payment::create([
-                'account_id' => $invoice->account_id,
+                'account_id' => $locked->account_id,
                 'amount_minor' => $amount->getMinorAmount()->toInt(),
                 'currency' => $amount->getCurrency()->getCurrencyCode(),
                 'reference' => $reference,
@@ -489,26 +513,30 @@ final class Meteric
 
             PaymentAllocation::create([
                 'payment_id' => $payment->id,
-                'invoice_id' => $invoice->id,
+                'invoice_id' => $locked->id,
                 'amount_minor' => $amount->getMinorAmount()->toInt(),
             ]);
 
-            $paid = $invoice->paid_minor + $amount->getMinorAmount()->toInt();
-            $fullyPaid = $paid >= $invoice->total_minor;
-            $invoice->forceFill([
+            $paid = $locked->paid_minor + $amount->getMinorAmount()->toInt();
+            $fullyPaid = $paid >= $locked->total_minor;
+            $locked->forceFill([
                 'paid_minor' => $paid,
                 'state' => $fullyPaid ? InvoiceState::Paid : InvoiceState::PartiallyPaid,
-                'paid_at' => $fullyPaid ? now() : $invoice->paid_at,
+                'paid_at' => $fullyPaid ? now() : $locked->paid_at,
             ])->save();
 
             // A fully paid invoice settles the charges it billed. A partial
             // payment leaves them invoiced.
             if ($fullyPaid) {
-                $chargeIds = $invoice->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
+                $chargeIds = $locked->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
                 foreach (Charge::whereIn('id', $chargeIds)->get() as $charge) {
                     $charge->markSettled();
                 }
             }
+
+            // Reflect the committed state onto the caller's model so the event
+            // dispatch below and the returned invoice see the new paid state.
+            $invoice->setRawAttributes($locked->getAttributes(), true);
 
             return $payment;
         });
