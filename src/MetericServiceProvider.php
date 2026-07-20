@@ -55,7 +55,10 @@ final class MetericServiceProvider extends ServiceProvider
         $this->app->singleton(TaxResolver::class, function ($app) {
             $cfg = $app['config']['meteric.tax'];
             $key = $cfg['driver'] ?? 'ibericode';
-            $class = $cfg['drivers'][$key] ?? EuVatResolver::class;
+            if (! isset($cfg['drivers'][$key])) {
+                throw new \InvalidArgumentException("Unknown Meteric tax driver [{$key}]. Add it to config('meteric.tax.drivers').");
+            }
+            $class = $cfg['drivers'][$key];
 
             return match ($class) {
                 DatabaseTaxResolver::class => new DatabaseTaxResolver(
@@ -83,7 +86,10 @@ final class MetericServiceProvider extends ServiceProvider
         $this->app->singleton(InvoiceDriver::class, function ($app) {
             $cfg = $app['config']['meteric.invoice'];
             $key = $cfg['driver'] ?? 'database';
-            $class = $cfg['drivers'][$key] ?? DatabaseInvoiceDriver::class;
+            if (! isset($cfg['drivers'][$key])) {
+                throw new \InvalidArgumentException("Unknown Meteric invoice driver [{$key}]. Add it to config('meteric.invoice.drivers').");
+            }
+            $class = $cfg['drivers'][$key];
 
             return match ($class) {
                 LexofficeInvoiceDriver::class => new LexofficeInvoiceDriver(
