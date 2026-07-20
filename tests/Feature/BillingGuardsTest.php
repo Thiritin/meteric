@@ -1,0 +1,110 @@
+<?php
+
+declare(strict_types=1);
+
+use Brick\Money\Money;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use Meteric\Enums\ChargeState;
+use Meteric\Enums\InvoiceState;
+use Meteric\Enums\LineKind;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+use Meteric\Models\Charge;
+use Meteric\Models\Invoice;
+
+uses(RefreshDatabase::class);
+
+function guardAccount(string $currency = 'EUR'): BillingAccount
+{
+    return BillingAccount::create([
+        'owner_type' => 'user', 'owner_id' => '1', 'currency' => $currency,
+        'tax_profile' => ['country' => 'DE', 'merchant_country' => 'DE'],
+    ]);
+}
+
+function guardCharge(BillingAccount $account, int $amountMinor, string $currency = 'EUR'): Charge
+{
+    return Charge::create([
+        'account_id' => $account->id,
+        'origin_type' => 'manual', 'origin_id' => (string) Str::uuid(),
+        'kind' => LineKind::Recurring, 'billing_mode' => 'in_advance',
+        'state' => ChargeState::Pending, 'description' => 'x',
+        'quantity' => 1, 'unit_minor' => $amountMinor, 'amount_minor' => $amountMinor,
+        'currency' => $currency, 'idempotency_key' => (string) Str::uuid(),
+    ]);
+}
+
+it('rejects a payment whose currency differs from the invoice', function () {
+    $account = guardAccount('EUR');
+    guardCharge($account, 1000);
+    $invoice = Meteric::invoicePending($account);
+
+    expect(fn () => Meteric::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'USD')))
+        ->toThrow(InvalidArgumentException::class);
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Open)
+        ->and($invoice->fresh()->paid_minor)->toBe(0);
+});
+
+it('refuses to bill a charge that is no longer pending (concurrent guard)', function () {
+    $account = guardAccount();
+    $charge = guardCharge($account, 1000);
+
+    // First run bills it.
+    Meteric::invoicePending($account);
+    expect($charge->fresh()->state)->toBe(ChargeState::Invoiced);
+
+    // A stale in-memory copy of the same charge cannot be re-billed: markInvoiced
+    // only flips a row still in the pending state.
+    expect(fn () => $charge->markInvoiced())->toThrow(RuntimeException::class);
+});
+
+it('numbers invoices sequentially per year and never reuses a number', function () {
+    $account = guardAccount();
+
+    guardCharge($account, 1000);
+    $first = Meteric::invoicePending($account);
+
+    guardCharge($account, 2000);
+    $second = Meteric::invoicePending($account);
+
+    $year = now()->year;
+    expect($first->number)->toBe(sprintf('INV-%d-000001', $year))
+        ->and($second->number)->toBe(sprintf('INV-%d-000002', $year));
+
+    // Voiding the second does not free its number; the next issue moves forward.
+    Meteric::voidInvoice($second);
+
+    guardCharge($account, 3000);
+    $third = Meteric::invoicePending($account);
+
+    expect($third->number)->toBe(sprintf('INV-%d-000003', $year))
+        ->and(Invoice::where('number', $second->number)->count())->toBe(1);
+});
+
+it('stamps a due date on every issued invoice so it can go overdue', function () {
+    config(['meteric.invoice.net_days' => 7]);
+    $account = guardAccount();
+    guardCharge($account, 1000);
+
+    $invoice = Meteric::invoicePending($account);
+
+    expect($invoice->due_at)->not->toBeNull()
+        ->and($invoice->due_at->toDateString())
+        ->toBe($invoice->issued_at->copy()->addDays(7)->toDateString());
+});
+
+it('does not double-bill when the same pending set is invoiced twice in sequence', function () {
+    $account = guardAccount();
+    guardCharge($account, 1000);
+    guardCharge($account, 500);
+
+    $first = Meteric::invoicePending($account);
+    $second = Meteric::invoicePending($account);
+
+    expect($first)->not->toBeNull()
+        ->and($second)->toBeNull()  // nothing left pending
+        ->and(Invoice::where('account_id', $account->id)->where('state', InvoiceState::Open->value)->count())->toBe(1)
+        ->and(Charge::where('account_id', $account->id)->where('state', ChargeState::Invoiced->value)->count())->toBe(2);
+});
