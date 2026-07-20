@@ -5,20 +5,19 @@
 - PostgreSQL 13+
 
 Meteric is PostgreSQL-only by design. It uses `tstzrange`, `btree_gist`,
-`pgcrypto`, and a GiST `EXCLUDE` constraint to guarantee no service window is
+and a GiST `EXCLUDE` constraint to guarantee no service window is
 billed twice. There is no MySQL or SQLite fallback for those guarantees, so the
 test suite and migrations target Postgres.
 
 ## PostgreSQL extensions
 
-The migrations enable the extensions they need (`btree_gist`, `pgcrypto`). The
+The migrations enable the extension they need (`btree_gist`). The
 database role running migrations must be allowed to `CREATE EXTENSION`. On
 managed Postgres this is usually granted; on a locked-down instance, have a
 superuser create the extensions once before you migrate:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS btree_gist;
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ```
 
 ## Money and precision
