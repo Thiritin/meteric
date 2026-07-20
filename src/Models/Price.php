@@ -165,6 +165,13 @@ class Price extends MetericModel
      */
     public function amountOfBase(Money $base): Money
     {
+        $baseCurrency = $base->getCurrency()->getCurrencyCode();
+        if ($this->currency !== $baseCurrency) {
+            throw new \InvalidArgumentException(
+                "Relative price currency {$this->currency} does not match base currency {$baseCurrency}."
+            );
+        }
+
         if ($this->percent === null || $this->percent <= 0) {
             return Money::ofMinor(0, $base->getCurrency());
         }
