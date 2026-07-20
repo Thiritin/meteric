@@ -17,6 +17,11 @@ use Meteric\Models\Subscription;
 
 uses(RefreshDatabase::class);
 
+// Subscriptions here are anchored to 2026-06-01, but cancellationOptions()
+// filters boundaries against the clock. Without a frozen now() those tests
+// pass only during the anchored period and rot afterwards.
+beforeEach(fn () => test()->travelTo(CarbonImmutable::parse('2026-06-01Z')));
+
 function cncAccount(): BillingAccount
 {
     return BillingAccount::create(['owner_type' => 'user', 'owner_id' => '1', 'currency' => 'EUR']);
