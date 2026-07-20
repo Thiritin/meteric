@@ -19,6 +19,7 @@ use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
+use Meteric\Support\Pg;
 use Meteric\Tax\TaxContext;
 use Meteric\Tax\TaxResult;
 
@@ -49,11 +50,15 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             $invoice->setRelation('pendingCharges', $draft->charges->values());
             $this->rebuildLines($invoice, $draft->charges->values());
 
-            // Financials are set while still draft, then frozen by flipping to open.
+            // Financials are set while still draft, then frozen by flipping to
+            // open. due_at is stamped here so a driver that commits locally then
+            // fails a downstream sync still leaves a dunnable invoice.
+            $issuedAt = now();
             $invoice->forceFill([
                 'number' => $this->nextNumber(),
                 'state' => InvoiceState::Open,
-                'issued_at' => now(),
+                'issued_at' => $issuedAt,
+                'due_at' => $issuedAt->copy()->addDays($draft->dueDays),
             ])->save();
 
             return new IssuedInvoice(
@@ -253,11 +258,25 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
         return new IssuedCreditNote(creditNoteId: $note->id, number: $note->number);
     }
 
+    /**
+     * Gapless per-prefix, per-year document number. An atomic upsert on the
+     * counter row (INSERT ... ON CONFLICT DO UPDATE ... RETURNING) takes a row
+     * lock, so concurrent issues serialize instead of colliding on the number.
+     * Runs inside the caller's transaction, so a rolled-back issue does not
+     * consume a number. Counts only assigned numbers, never drafts or voids.
+     */
     private function nextNumber(string $prefix = 'INV'): string
     {
-        $year = now()->year;
-        $seq = (int) DB::table('meteric_invoices')->whereYear('created_at', $year)->count() + 1;
+        $year = (int) now()->year;
+        $table = Pg::table('invoice_numbers');
 
-        return sprintf('%s-%d-%06d', $prefix, $year, $seq);
+        $row = DB::selectOne(
+            "INSERT INTO {$table} (prefix, year, seq) VALUES (?, ?, 1)
+             ON CONFLICT (prefix, year) DO UPDATE SET seq = {$table}.seq + 1
+             RETURNING seq",
+            [$prefix, $year],
+        );
+
+        return sprintf('%s-%d-%06d', $prefix, $year, (int) $row->seq);
     }
 }
