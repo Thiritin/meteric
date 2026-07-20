@@ -44,6 +44,22 @@ it('bills payer + child accounts onto one consolidated invoice', function () {
     expect(Charge::whereIn('account_id', [$payer->id, $childA->id, $childB->id])->pending()->count())->toBe(0);
 });
 
+it('bills grandchild accounts, not just direct children', function () {
+    $payer = BillingAccount::create(['owner_type' => 'org', 'owner_id' => '1', 'currency' => 'EUR']);
+    $child = BillingAccount::create(['owner_type' => 'org', 'owner_id' => '2', 'currency' => 'EUR', 'parent_id' => $payer->id]);
+    $grandchild = BillingAccount::create(['owner_type' => 'user', 'owner_id' => '3', 'currency' => 'EUR', 'parent_id' => $child->id]);
+
+    pending($payer, 500, 'Payer fee');
+    pending($child, 1000, 'Reseller fee');
+    pending($grandchild, 2000, 'End customer VPS');
+
+    $invoice = Meteric::invoiceConsolidated($payer);
+
+    expect($invoice->subtotal_minor)->toBe(3500)
+        ->and($invoice->lines)->toHaveCount(3)
+        ->and(Charge::where('account_id', $grandchild->id)->pending()->count())->toBe(0);
+});
+
 it('does not pull in unrelated accounts', function () {
     $payer = BillingAccount::create(['owner_type' => 'org', 'owner_id' => '1', 'currency' => 'EUR']);
     $other = BillingAccount::create(['owner_type' => 'org', 'owner_id' => '9', 'currency' => 'EUR']);

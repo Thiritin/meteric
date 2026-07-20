@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\DB;
 use Meteric\Tax\TaxContext;
 
 /**
@@ -65,9 +66,29 @@ class BillingAccount extends MetericModel
         return TaxContext::fromProfile($this->tax_profile ?? [], $inclusive);
     }
 
-    /** Accounts whose charges roll into this payer (self + descendants). */
+    /**
+     * Accounts whose charges roll into this payer: self and every descendant at
+     * any depth (a reseller's customers and their sub-accounts). A recursive CTE
+     * walks the whole tree so a consolidated invoice never silently drops a
+     * grandchild account.
+     *
+     * @return list<string>
+     */
     public function payerScopeIds(): array
     {
-        return [$this->id, ...$this->children()->pluck('id')->all()];
+        $table = $this->getTable();
+
+        $rows = DB::select(
+            "WITH RECURSIVE meteric_payer_tree AS (
+                SELECT id, parent_id FROM {$table} WHERE id = ?
+                UNION
+                SELECT c.id, c.parent_id FROM {$table} c
+                JOIN meteric_payer_tree t ON c.parent_id = t.id
+            )
+            SELECT id FROM meteric_payer_tree",
+            [$this->id],
+        );
+
+        return array_map(static fn ($row): string => (string) $row->id, $rows);
     }
 }
