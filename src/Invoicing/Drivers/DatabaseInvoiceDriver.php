@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Meteric\Invoicing\Drivers;
 
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -238,10 +240,16 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     {
         $model = Invoice::findOrFail($invoice->invoiceId);
 
-        // Credit the given net amount at the invoice's tax rate, so the note
-        // reverses the same VAT the invoice charged.
-        $rate = (float) ($model->lines->max('tax_rate') ?? 0);
+        // Credit tax at the invoice's blended effective rate (tax / subtotal),
+        // computed in BigDecimal. A full credit reverses exactly the VAT charged;
+        // a partial credit reverses it proportionally. Using max(tax_rate) would
+        // over-credit VAT on a mixed-rate invoice (e.g. reverse-charge + domestic).
         $net = $draft->amount->getMinorAmount()->toInt();
+        $subtotal = (int) $model->subtotal_minor;
+        $taxTotal = (int) $model->tax_minor;
+        $creditTax = $subtotal > 0
+            ? BigDecimal::of($net)->multipliedBy($taxTotal)->dividedBy($subtotal, 0, RoundingMode::HALF_UP)->toInt()
+            : 0;
 
         $note = CreditNote::create([
             'invoice_id' => $model->id,
@@ -249,7 +257,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             'state' => CreditState::Issued,
             'reason' => $draft->reason,
             'amount_minor' => $net,
-            'tax_minor' => (int) round($net * $rate),
+            'tax_minor' => $creditTax,
             'currency' => $draft->amount->getCurrency()->getCurrencyCode(),
             'number' => $this->nextNumber('CN'),
             'issued_at' => now(),
