@@ -2,7 +2,7 @@
 
 - PHP 8.3+
 - Laravel 12
-- PostgreSQL 13+
+- PostgreSQL 16+
 
 Meteric is PostgreSQL-only by design. It uses `tstzrange`, `btree_gist`,
 and a GiST `EXCLUDE` constraint to guarantee no service window is

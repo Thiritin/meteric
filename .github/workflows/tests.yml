@@ -40,7 +40,7 @@ jobs:
           # Without this the whole matrix runs on the newest release and the
           # supported range is only ever tested at its ceiling.
           - php: '8.4'
-            postgres: '13'
+            postgres: '16'
 
     services:
       postgres:
