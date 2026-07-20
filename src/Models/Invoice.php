@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Meteric\Enums\InvoiceState;
+use Meteric\Support\Models;
 
 /**
  * @property string $id
@@ -57,13 +58,13 @@ class Invoice extends MetericModel
     /** @return BelongsTo<BillingAccount, $this> */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
     /** @return HasMany<InvoiceLine, $this> */
     public function lines(): HasMany
     {
-        return $this->hasMany(InvoiceLine::class, 'invoice_id');
+        return $this->hasMany(Models::for(InvoiceLine::class), 'invoice_id');
     }
 
     /**
@@ -76,19 +77,19 @@ class Invoice extends MetericModel
     {
         $ids = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
 
-        return Charge::query()->whereIn('id', $ids)->get();
+        return Models::query(Charge::class)->whereIn('id', $ids)->get();
     }
 
     /** @return HasMany<CreditNote, $this> */
     public function creditNotes(): HasMany
     {
-        return $this->hasMany(CreditNote::class, 'invoice_id');
+        return $this->hasMany(Models::for(CreditNote::class), 'invoice_id');
     }
 
     /** @return HasMany<PaymentAllocation, $this> */
     public function payments(): HasMany
     {
-        return $this->hasMany(PaymentAllocation::class, 'invoice_id');
+        return $this->hasMany(Models::for(PaymentAllocation::class), 'invoice_id');
     }
 
     /**
@@ -100,9 +101,9 @@ class Invoice extends MetericModel
     public function subscriptions(): Collection
     {
         $chargeIds = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
-        $ids = Charge::query()->whereIn('id', $chargeIds)->whereNotNull('subscription_id')->distinct()->pluck('subscription_id');
+        $ids = Models::query(Charge::class)->whereIn('id', $chargeIds)->whereNotNull('subscription_id')->distinct()->pluck('subscription_id');
 
-        return Subscription::query()->whereIn('id', $ids)->get();
+        return Models::query(Subscription::class)->whereIn('id', $ids)->get();
     }
 
     public function total(): Money

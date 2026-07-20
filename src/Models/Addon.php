@@ -6,6 +6,7 @@ namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Enums\ItemState;
+use Meteric\Support\Models;
 
 /**
  * @property string $id
@@ -32,18 +33,18 @@ class Addon extends MetericModel
     /** @return BelongsTo<SubscriptionItem, $this> */
     public function item(): BelongsTo
     {
-        return $this->belongsTo(SubscriptionItem::class, 'item_id');
+        return $this->belongsTo(Models::for(SubscriptionItem::class), 'item_id');
     }
 
     /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
     /** @return BelongsTo<Price, $this> */
     public function price(): BelongsTo
     {
-        return $this->belongsTo(Price::class, 'price_id');
+        return $this->belongsTo(Models::for(Price::class), 'price_id');
     }
 }

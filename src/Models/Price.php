@@ -13,6 +13,7 @@ use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
 use Meteric\Pricing\Tiers;
+use Meteric\Support\Models;
 use Meteric\Support\MoneyMath;
 use Meteric\Support\RecurrenceRule;
 
@@ -71,7 +72,7 @@ class Price extends MetericModel
     /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
     public function recurrence(): RecurrenceRule

@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Enums\CreditState;
+use Meteric\Support\Models;
 
 /**
  * @property CreditState $state
@@ -37,7 +38,7 @@ class CreditNote extends MetericModel
     /** @return BelongsTo<Invoice, $this> */
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class, 'invoice_id');
+        return $this->belongsTo(Models::for(Invoice::class), 'invoice_id');
     }
 
     public function amount(): Money

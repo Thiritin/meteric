@@ -6,6 +6,7 @@ namespace Meteric\Models;
 
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Support\Models;
 
 /**
  * One allowed value of a product option, with its own Price (recurring + setup,
@@ -33,13 +34,13 @@ class ProductOptionValue extends MetericModel
     /** @return BelongsTo<ProductOption, $this> */
     public function option(): BelongsTo
     {
-        return $this->belongsTo(ProductOption::class, 'option_id');
+        return $this->belongsTo(Models::for(ProductOption::class), 'option_id');
     }
 
     /** @return BelongsTo<Price, $this> */
     public function price(): BelongsTo
     {
-        return $this->belongsTo(Price::class, 'price_id');
+        return $this->belongsTo(Models::for(Price::class), 'price_id');
     }
 
     /** Charge for this value at a quantity (free when it has no price). */

@@ -21,6 +21,7 @@ use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
+use Meteric\Support\Models;
 use Meteric\Support\Pg;
 use Meteric\Tax\TaxContext;
 use Meteric\Tax\TaxResult;
@@ -37,7 +38,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     public function issue(InvoiceDraft $draft): IssuedInvoice
     {
         return DB::transaction(function () use ($draft): IssuedInvoice {
-            $invoice = Invoice::create([
+            $invoice = Models::query(Invoice::class)->create([
                 'account_id' => $draft->account->id,
                 'customer_type' => $draft->account->owner_type,
                 'customer_id' => $draft->account->owner_id,
@@ -132,7 +133,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
         $net = $charge->money();
         $taxResult = $this->tax->resolve($net, $taxContext);
 
-        $line = InvoiceLine::create([
+        $line = Models::query(InvoiceLine::class)->create([
             'invoice_id' => $invoice->id,
             'charge_id' => $charge->id,
             'parent_id' => $parentId,
@@ -233,12 +234,12 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
 
     public function void(IssuedInvoice $invoice): void
     {
-        Invoice::whereKey($invoice->invoiceId)->update(['state' => InvoiceState::Void]);
+        Models::query(Invoice::class)->whereKey($invoice->invoiceId)->update(['state' => InvoiceState::Void]);
     }
 
     public function creditNote(IssuedInvoice $invoice, CreditNoteDraft $draft): IssuedCreditNote
     {
-        $model = Invoice::findOrFail($invoice->invoiceId);
+        $model = Models::query(Invoice::class)->findOrFail($invoice->invoiceId);
 
         // Credit tax at the invoice's blended effective rate (tax / subtotal),
         // computed in BigDecimal. A full credit reverses exactly the VAT charged;
@@ -251,7 +252,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             ? BigDecimal::of($net)->multipliedBy($taxTotal)->dividedBy($subtotal, 0, RoundingMode::HALF_UP)->toInt()
             : 0;
 
-        $note = CreditNote::create([
+        $note = Models::query(CreditNote::class)->create([
             'invoice_id' => $model->id,
             'driver' => 'database',
             'state' => CreditState::Issued,

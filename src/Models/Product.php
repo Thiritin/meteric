@@ -10,6 +10,7 @@ use Meteric\Casts\ProductConfigCast;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
+use Meteric\Support\Models;
 
 /**
  * @property string $id
@@ -45,19 +46,19 @@ class Product extends MetericModel
     /** @return HasMany<Price, $this> */
     public function prices(): HasMany
     {
-        return $this->hasMany(Price::class, 'product_id');
+        return $this->hasMany(Models::for(Price::class), 'product_id');
     }
 
     /** @return HasMany<MeterDimension, $this> */
     public function meterDimensions(): HasMany
     {
-        return $this->hasMany(MeterDimension::class, 'product_id');
+        return $this->hasMany(Models::for(MeterDimension::class), 'product_id');
     }
 
     /** @return HasMany<ProductOption, $this> */
     public function options(): HasMany
     {
-        return $this->hasMany(ProductOption::class, 'product_id')->orderBy('sort');
+        return $this->hasMany(Models::for(ProductOption::class), 'product_id')->orderBy('sort');
     }
 
     /**

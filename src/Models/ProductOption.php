@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Meteric\Enums\OptionType;
+use Meteric\Support\Models;
 
 /**
  * A configurable option a product offers (dropdown/radio/quantity/toggle).
@@ -41,13 +42,13 @@ class ProductOption extends MetericModel
     /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
     /** @return HasMany<ProductOptionValue, $this> */
     public function values(): HasMany
     {
-        return $this->hasMany(ProductOptionValue::class, 'option_id')->orderBy('sort');
+        return $this->hasMany(Models::for(ProductOptionValue::class), 'option_id')->orderBy('sort');
     }
 
     /**

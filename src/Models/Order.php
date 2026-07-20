@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Meteric\Enums\AnchorMode;
 use Meteric\Enums\CheckoutState;
 use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Support\Models;
 
 /**
  * A persisted, immutable checkout: the frozen intended subscription, held in the
@@ -76,7 +77,7 @@ class Order extends MetericModel
     /** @return BelongsTo<BillingAccount, $this> */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
     public function customer(): MorphTo
@@ -87,13 +88,13 @@ class Order extends MetericModel
     /** @return BelongsTo<Invoice, $this> */
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class, 'invoice_id');
+        return $this->belongsTo(Models::for(Invoice::class), 'invoice_id');
     }
 
     /** @return BelongsTo<Subscription, $this> */
     public function subscription(): BelongsTo
     {
-        return $this->belongsTo(Subscription::class, 'subscription_id');
+        return $this->belongsTo(Models::for(Subscription::class), 'subscription_id');
     }
 
     /** Gross total owed at checkout (subtotal + tax). */

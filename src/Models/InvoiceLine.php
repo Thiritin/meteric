@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Meteric\Casts\MoneyCast;
 use Meteric\Casts\PeriodCast;
 use Meteric\Enums\LineKind;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -65,19 +66,19 @@ class InvoiceLine extends MetericModel
     /** @return BelongsTo<Invoice, $this> */
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class, 'invoice_id');
+        return $this->belongsTo(Models::for(Invoice::class), 'invoice_id');
     }
 
     /** @return BelongsTo<Charge, $this> */
     public function charge(): BelongsTo
     {
-        return $this->belongsTo(Charge::class, 'charge_id');
+        return $this->belongsTo(Models::for(Charge::class), 'charge_id');
     }
 
     /** @return BelongsTo<InvoiceLine, $this> */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(self::class, 'parent_id');
+        return $this->belongsTo(Models::for(self::class), 'parent_id');
     }
 
     /**
@@ -87,7 +88,7 @@ class InvoiceLine extends MetericModel
      */
     public function children(): HasMany
     {
-        return $this->hasMany(self::class, 'parent_id')->orderBy('sort');
+        return $this->hasMany(Models::for(self::class), 'parent_id')->orderBy('sort');
     }
 
     public function gross(): Money

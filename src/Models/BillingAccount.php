@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\DB;
+use Meteric\Support\Models;
 use Meteric\Tax\TaxContext;
 
 /**
@@ -40,25 +41,25 @@ class BillingAccount extends MetericModel
     /** @return BelongsTo<self, $this> */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(self::class, 'parent_id');
+        return $this->belongsTo(Models::for(self::class), 'parent_id');
     }
 
     /** @return HasMany<self, $this> */
     public function children(): HasMany
     {
-        return $this->hasMany(self::class, 'parent_id');
+        return $this->hasMany(Models::for(self::class), 'parent_id');
     }
 
     /** @return HasMany<Subscription, $this> */
     public function subscriptions(): HasMany
     {
-        return $this->hasMany(Subscription::class, 'account_id');
+        return $this->hasMany(Models::for(Subscription::class), 'account_id');
     }
 
     /** @return HasMany<Invoice, $this> */
     public function invoices(): HasMany
     {
-        return $this->hasMany(Invoice::class, 'account_id');
+        return $this->hasMany(Models::for(Invoice::class), 'account_id');
     }
 
     public function taxContext(bool $inclusive = false): TaxContext

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Meteric\Support\Models;
 
 class PaymentAllocation extends MetericModel
 {
@@ -22,12 +23,12 @@ class PaymentAllocation extends MetericModel
     /** @return BelongsTo<Payment, $this> */
     public function payment(): BelongsTo
     {
-        return $this->belongsTo(Payment::class, 'payment_id');
+        return $this->belongsTo(Models::for(Payment::class), 'payment_id');
     }
 
     /** @return BelongsTo<Invoice, $this> */
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class, 'invoice_id');
+        return $this->belongsTo(Models::for(Invoice::class), 'invoice_id');
     }
 }

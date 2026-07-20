@@ -19,6 +19,7 @@ use Meteric\Models\Price;
 use Meteric\Models\ProductOptionValue;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
+use Meteric\Support\Models;
 
 /**
  * Mid-cycle item mutations — addons, configurable options, quantity. Each change
@@ -45,7 +46,7 @@ final class ItemManager
                 }
             }
 
-            $addon = Addon::create([
+            $addon = Models::query(Addon::class)->create([
                 'item_id' => $item->id,
                 'product_id' => $price->product_id,
                 'price_id' => $price->id,
@@ -112,7 +113,7 @@ final class ItemManager
             $existing = $item->options()->where('key', $key)->first();
             $oldQty = (float) ($existing->quantity ?? 0);
 
-            $option = ItemOption::updateOrCreate(
+            $option = Models::query(ItemOption::class)->updateOrCreate(
                 ['item_id' => $item->id, 'key' => $key],
                 ['type' => $type, 'value' => $value, 'label' => $label, 'price_id' => $price?->id, 'quantity' => $qty, 'min_qty' => $min, 'max_qty' => $max],
             );
@@ -186,7 +187,7 @@ final class ItemManager
     {
         $sub = $item->subscription;
 
-        Charge::create([
+        Models::query(Charge::class)->create([
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
             'origin_type' => $originType,

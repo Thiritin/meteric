@@ -23,6 +23,7 @@ use Meteric\Models\Charge;
 use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -126,7 +127,7 @@ final class SubscriptionBuilder
         $signup = $trialEnd ?? $at;
 
         return DB::transaction(function () use ($at, $account, $trialEnd, $signup): Subscription {
-            $sub = Subscription::create([
+            $sub = Models::query(Subscription::class)->create([
                 'account_id' => $account->id,
                 'customer_type' => $this->customer?->getMorphClass() ?? $account->owner_type,
                 'customer_id' => $this->customer?->getKey() ?? $account->owner_id,
@@ -153,7 +154,7 @@ final class SubscriptionBuilder
     public function checkout(): Checkout
     {
         $sub = $this->create();
-        $account = BillingAccount::findOrFail($sub->account_id);
+        $account = Models::query(BillingAccount::class)->findOrFail($sub->account_id);
         $invoice = app(Meteric::class)->invoicePending($account);
 
         return new Checkout($sub, $invoice);
@@ -164,7 +165,7 @@ final class SubscriptionBuilder
     {
         $price = $row['price'];
 
-        $item = SubscriptionItem::create([
+        $item = Models::query(SubscriptionItem::class)->create([
             'subscription_id' => $sub->id,
             'product_id' => $price->product_id,
             'price_id' => $price->id,
@@ -203,7 +204,7 @@ final class SubscriptionBuilder
     {
         $amount = $price->amountFor((float) $item->quantity);
 
-        Charge::create([
+        Models::query(Charge::class)->create([
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
             'origin_type' => 'subscription_item',
@@ -229,7 +230,7 @@ final class SubscriptionBuilder
             throw new \LogicException('subscribe() needs an account() or for(customer).');
         }
 
-        return BillingAccount::firstOrCreate(
+        return Models::query(BillingAccount::class)->firstOrCreate(
             ['owner_type' => $this->customer->getMorphClass(), 'owner_id' => $this->customer->getKey()],
             ['currency' => $this->currency],
         );

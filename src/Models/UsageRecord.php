@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Casts\PeriodCast;
+use Meteric\Support\Models;
 
 /**
  * @property float $quantity
@@ -34,13 +35,13 @@ class UsageRecord extends MetericModel
     /** @return BelongsTo<SubscriptionItem, $this> */
     public function item(): BelongsTo
     {
-        return $this->belongsTo(SubscriptionItem::class, 'item_id');
+        return $this->belongsTo(Models::for(SubscriptionItem::class), 'item_id');
     }
 
     /** @return BelongsTo<MeterDimension, $this> */
     public function dimension(): BelongsTo
     {
-        return $this->belongsTo(MeterDimension::class, 'dimension_id');
+        return $this->belongsTo(Models::for(MeterDimension::class), 'dimension_id');
     }
 
     public function scopeUnbilled(Builder $query): Builder

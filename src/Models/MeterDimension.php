@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Enums\Aggregation;
+use Meteric\Support\Models;
 use Meteric\Support\MoneyMath;
 
 /**
@@ -42,7 +43,7 @@ class MeterDimension extends MetericModel
     /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
     /** Overage: used units beyond the free allowance. */

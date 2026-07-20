@@ -19,6 +19,7 @@ use Meteric\Invoicing\IssuedInvoice;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
+use Meteric\Support\Models;
 use RuntimeException;
 
 /**
@@ -51,7 +52,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         $issued = $this->local->issue($draft);
 
         /** @var Invoice $invoice */
-        $invoice = Invoice::with('lines', 'account')->findOrFail($issued->invoiceId);
+        $invoice = Models::query(Invoice::class)->with('lines', 'account')->findOrFail($issued->invoiceId);
 
         $body = $this->invoiceBody($invoice);
 
@@ -118,7 +119,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         $result = $this->local->creditNote($invoice, $draft);
 
         /** @var CreditNote $note */
-        $note = CreditNote::with('invoice.account')->findOrFail($result->creditNoteId);
+        $note = Models::query(CreditNote::class)->with('invoice.account')->findOrFail($result->creditNoteId);
 
         $body = $this->creditNoteBody($note, $draft);
 
@@ -144,7 +145,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
      */
     public function void(IssuedInvoice $invoice): void
     {
-        $model = Invoice::find($invoice->invoiceId);
+        $model = Models::query(Invoice::class)->find($invoice->invoiceId);
 
         if ($model !== null && $model->external_id === null) {
             $this->local->void($invoice);

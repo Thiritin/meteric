@@ -29,6 +29,7 @@ use Meteric\Models\Payment;
 use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -97,7 +98,7 @@ final class CheckoutManager
         $at ??= $this->clock->now();
         $count = 0;
 
-        Order::query()
+        Models::query(Order::class)
             ->where('state', CheckoutState::Pending->value)
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', $at)
@@ -121,7 +122,7 @@ final class CheckoutManager
         $paying = $amount !== null && $amount->isPositive();
 
         $result = DB::transaction(function () use ($order, $amount, $ref, $at, $paying): array {
-            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $locked = Models::query(Order::class)->lockForUpdate()->findOrFail($order->id);
 
             // Idempotency guard: already converted -> return unchanged.
             if (! $locked->isPending() || $locked->subscription_id !== null) {
@@ -132,7 +133,7 @@ final class CheckoutManager
             $trialEnd = $locked->trial_days > 0 ? $when->addDays($locked->trial_days) : null;
             $signup = $trialEnd ?? $when;
 
-            $sub = Subscription::create([
+            $sub = Models::query(Subscription::class)->create([
                 'account_id' => $locked->account_id,
                 'customer_type' => $locked->customer_type,
                 'customer_id' => $locked->customer_id,
@@ -193,14 +194,14 @@ final class CheckoutManager
      */
     private function materializeItem(Subscription $sub, Order $order, array $content, CarbonImmutable $signup): CarbonImmutable
     {
-        $price = Price::find($content['price_id']);
+        $price = Models::query(Price::class)->find($content['price_id']);
         if ($price === null) {
             throw new \RuntimeException("Order price {$content['price_id']} no longer resolves.");
         }
 
         $covers = $this->itemPeriod($price, $order, $signup);
 
-        $item = SubscriptionItem::create([
+        $item = Models::query(SubscriptionItem::class)->create([
             'subscription_id' => $sub->id,
             'product_id' => $content['product_id'],
             'price_id' => $price->id,
@@ -221,7 +222,7 @@ final class CheckoutManager
             $item->lineTitle(), $covers, (float) $content['quantity']);
 
         foreach ($content['addons'] ?? [] as $addon) {
-            $addonModel = Addon::create([
+            $addonModel = Models::query(Addon::class)->create([
                 'item_id' => $item->id,
                 'product_id' => $addon['product_id'],
                 'price_id' => $addon['price_id'],
@@ -235,7 +236,7 @@ final class CheckoutManager
         }
 
         foreach ($content['options'] ?? [] as $opt) {
-            $option = ItemOption::create([
+            $option = Models::query(ItemOption::class)->create([
                 'item_id' => $item->id,
                 'key' => $opt['key'],
                 'type' => $opt['type'],
@@ -287,7 +288,7 @@ final class CheckoutManager
             return;
         }
 
-        Charge::create([
+        Models::query(Charge::class)->create([
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
             'origin_type' => $originType,

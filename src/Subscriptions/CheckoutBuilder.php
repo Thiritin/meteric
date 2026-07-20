@@ -16,6 +16,7 @@ use Meteric\Models\BillingAccount;
 use Meteric\Models\Order;
 use Meteric\Models\Price;
 use Meteric\Pricing\CheckoutPricer;
+use Meteric\Support\Models;
 
 /**
  * Fluent checkout creation. Mirrors SubscriptionBuilder, but instead of starting
@@ -190,7 +191,7 @@ final class CheckoutBuilder
             throw new \InvalidArgumentException('An order total cannot be negative.');
         }
 
-        $order = Order::create([
+        $order = Models::query(Order::class)->create([
             'account_id' => $account->id,
             'customer_type' => $this->customer?->getMorphClass() ?? $account->owner_type,
             'customer_id' => $this->customer?->getKey() ?? $account->owner_id,
@@ -231,7 +232,7 @@ final class CheckoutBuilder
             throw new \LogicException('openCheckout() needs an account() or for(customer).');
         }
 
-        return BillingAccount::firstOrCreate(
+        return Models::query(BillingAccount::class)->firstOrCreate(
             ['owner_type' => $this->customer->getMorphClass(), 'owner_id' => $this->customer->getKey()],
             ['currency' => $this->currency],
         );

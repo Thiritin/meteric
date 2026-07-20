@@ -17,6 +17,7 @@ use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -48,7 +49,7 @@ final class ChargeAccruer
 
                 $amount = $pp->prorated ? $this->prorate($pp, $price, $full) : $full;
 
-                $created[] = Charge::create([
+                $created[] = Models::query(Charge::class)->create([
                     'account_id' => $sub->account_id,
                     'subscription_id' => $sub->id,
                     'origin_type' => 'subscription_item',
@@ -102,7 +103,7 @@ final class ChargeAccruer
                 continue;
             }
 
-            $created[] = Charge::create([
+            $created[] = Models::query(Charge::class)->create([
                 'account_id' => $sub->account_id,
                 'subscription_id' => $sub->id,
                 'origin_type' => 'item_option',
@@ -134,7 +135,7 @@ final class ChargeAccruer
             }
             $amountMinor = $amount->getMinorAmount()->toInt();
 
-            $created[] = Charge::create([
+            $created[] = Models::query(Charge::class)->create([
                 'account_id' => $sub->account_id,
                 'subscription_id' => $sub->id,
                 'origin_type' => 'addon',
@@ -170,7 +171,7 @@ final class ChargeAccruer
      */
     private function reserve(SubscriptionItem $item, Period $period): bool
     {
-        $overlaps = BillingPeriod::query()
+        $overlaps = Models::query(BillingPeriod::class)
             ->where('item_id', $item->id)
             ->whereNull('dimension_id')
             ->whereRaw('covers && ?::tstzrange', [$period->toRange()])
@@ -180,7 +181,7 @@ final class ChargeAccruer
             return false;
         }
 
-        BillingPeriod::create(['item_id' => $item->id, 'covers' => $period]);
+        Models::query(BillingPeriod::class)->create(['item_id' => $item->id, 'covers' => $period]);
 
         return true;
     }

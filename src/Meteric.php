@@ -48,6 +48,7 @@ use Meteric\Subscriptions\CheckoutManager;
 use Meteric\Subscriptions\ItemManager;
 use Meteric\Subscriptions\SubscriptionBuilder;
 use Meteric\Subscriptions\SubscriptionManager;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 use Meteric\Tax\Vies\Vies;
 use Meteric\Tax\Vies\ViesResult;
@@ -64,6 +65,57 @@ use Throwable;
 final class Meteric
 {
     public function __construct(private InvoiceDriver $driver) {}
+
+    /**
+     * Register host-app subclasses for Meteric models. Each override must extend
+     * the model it replaces. Call once, e.g. in a service provider's register().
+     *
+     * @param  class-string<Model>  $override
+     */
+    public static function useModel(string $base, string $override): void
+    {
+        Models::swap($base, $override);
+    }
+
+    public static function useAccountModel(string $override): void
+    {
+        Models::swap(BillingAccount::class, $override);
+    }
+
+    public static function useSubscriptionModel(string $override): void
+    {
+        Models::swap(Subscription::class, $override);
+    }
+
+    public static function useChargeModel(string $override): void
+    {
+        Models::swap(Charge::class, $override);
+    }
+
+    public static function useInvoiceModel(string $override): void
+    {
+        Models::swap(Invoice::class, $override);
+    }
+
+    public static function usePaymentModel(string $override): void
+    {
+        Models::swap(Payment::class, $override);
+    }
+
+    public static function useCreditNoteModel(string $override): void
+    {
+        Models::swap(CreditNote::class, $override);
+    }
+
+    public static function useOrderModel(string $override): void
+    {
+        Models::swap(Order::class, $override);
+    }
+
+    public static function useUsageRecordModel(string $override): void
+    {
+        Models::swap(UsageRecord::class, $override);
+    }
 
     /**
      * Collect an account's pending charges (one currency) and issue them via the
@@ -96,7 +148,7 @@ final class Meteric
      */
     public function invoiceAllPending(BillingAccount $account): array
     {
-        $currencies = Charge::query()
+        $currencies = Models::query(Charge::class)
             ->pending()
             ->where('account_id', $account->id)
             ->distinct()
@@ -135,7 +187,7 @@ final class Meteric
      */
     public function charge(BillingAccount $account, Money $amount, string $title, ?string $group = null, ?string $description = null, LineKind $kind = LineKind::OneOff): Charge
     {
-        return Charge::create([
+        return Models::query(Charge::class)->create([
             'account_id' => $account->id,
             'origin_type' => 'manual',
             'origin_id' => (string) Str::uuid(),
@@ -186,7 +238,7 @@ final class Meteric
         // The driver builds the lines and flips each billed charge to invoiced.
         $issued = $this->driver->issue($draft);
 
-        $invoice = Invoice::findOrFail($issued->invoiceId);
+        $invoice = Models::query(Invoice::class)->findOrFail($issued->invoiceId);
         if ($invoice->due_at === null) {
             $net = (int) config('meteric.invoice.net_days', 14);
             $invoice->forceFill(['due_at' => ($invoice->issued_at ?? now())->addDays($net)])->save();
@@ -205,7 +257,7 @@ final class Meteric
     {
         $issued = new IssuedInvoice($invoice->id, $invoice->number, $invoice->external_id, $invoice->external_url);
         $result = $this->driver->creditNote($issued, new CreditNoteDraft($amount, $reason));
-        $note = CreditNote::findOrFail($result->creditNoteId);
+        $note = Models::query(CreditNote::class)->findOrFail($result->creditNoteId);
         CreditNoteIssued::dispatch($note);
 
         return $note;
@@ -239,7 +291,7 @@ final class Meteric
             $invoice->forceFill(['state' => InvoiceState::Void, 'idempotency_key' => null])->save();
 
             $chargeIds = $invoice->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
-            foreach (Charge::withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
+            foreach (Models::query(Charge::class)->withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
                 if (! $this->chargeHasLiveLine($charge)) {
                     $charge->revertToPending();
                 }
@@ -254,7 +306,7 @@ final class Meteric
     /** Does this charge still have a line on a non-void invoice? */
     private function chargeHasLiveLine(Charge $charge): bool
     {
-        return InvoiceLine::query()
+        return Models::query(InvoiceLine::class)
             ->where('charge_id', $charge->id)
             ->whereHas('invoice', fn ($q) => $q->where('state', '<>', InvoiceState::Void->value))
             ->exists();
@@ -267,7 +319,7 @@ final class Meteric
      */
     public function createInvoice(BillingAccount $account, ?string $currency = null): Invoice
     {
-        return Invoice::create([
+        return Models::query(Invoice::class)->create([
             'account_id' => $account->id,
             'customer_type' => $account->owner_type,
             'customer_id' => $account->owner_id,
@@ -308,7 +360,7 @@ final class Meteric
     public function copyInvoice(Invoice $source): Invoice
     {
         return DB::transaction(function () use ($source): Invoice {
-            $copy = Invoice::create(array_filter([
+            $copy = Models::query(Invoice::class)->create(array_filter([
                 'account_id' => $source->account_id,
                 'customer_type' => $source->customer_type,
                 'customer_id' => $source->customer_id,
@@ -339,7 +391,7 @@ final class Meteric
     /** Clone one invoice line onto $invoiceId under $parentId, keeping charge_id. */
     private function cloneLine(InvoiceLine $line, string $invoiceId, ?string $parentId): InvoiceLine
     {
-        return InvoiceLine::create([
+        return Models::query(InvoiceLine::class)->create([
             'invoice_id' => $invoiceId,
             'charge_id' => $line->charge_id,
             'parent_id' => $parentId,
@@ -421,7 +473,7 @@ final class Meteric
 
             $line->delete();   // cascades sub-lines
 
-            foreach (Charge::withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
+            foreach (Models::query(Charge::class)->withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
                 if (! $this->chargeHasLiveLine($charge)) {
                     $charge->revertToPending();
                 }
@@ -438,7 +490,7 @@ final class Meteric
 
         $next = (int) ($invoice->lines()->max('sort') ?? -1) + 1;
 
-        return InvoiceLine::create([
+        return Models::query(InvoiceLine::class)->create([
             'invoice_id' => $invoice->id,
             'charge_id' => null,
             'parent_id' => $parentId,
@@ -514,7 +566,7 @@ final class Meteric
      */
     private function pendingCharges(array $accountIds, string $currency): Collection
     {
-        return Charge::query()
+        return Models::query(Charge::class)
             ->pending()
             ->whereIn('account_id', $accountIds)
             ->where('currency', $currency)
@@ -537,16 +589,16 @@ final class Meteric
             // Lock the invoice row so concurrent payments (e.g. gateway webhook
             // retries) serialize instead of both reading a stale paid_minor and
             // clobbering each other's write.
-            $locked = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $locked = Models::query(Invoice::class)->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
-            $payment = Payment::create([
+            $payment = Models::query(Payment::class)->create([
                 'account_id' => $locked->account_id,
                 'amount_minor' => $amount->getMinorAmount()->toInt(),
                 'currency' => $amount->getCurrency()->getCurrencyCode(),
                 'reference' => $reference,
             ]);
 
-            PaymentAllocation::create([
+            Models::query(PaymentAllocation::class)->create([
                 'payment_id' => $payment->id,
                 'invoice_id' => $locked->id,
                 'amount_minor' => $amount->getMinorAmount()->toInt(),
@@ -564,7 +616,7 @@ final class Meteric
             // payment leaves them invoiced.
             if ($fullyPaid) {
                 $chargeIds = $locked->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
-                foreach (Charge::whereIn('id', $chargeIds)->get() as $charge) {
+                foreach (Models::query(Charge::class)->whereIn('id', $chargeIds)->get() as $charge) {
                     $charge->markSettled();
                 }
             }

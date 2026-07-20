@@ -6,6 +6,7 @@ namespace Meteric\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Casts\PeriodCast;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -33,6 +34,6 @@ class BillingPeriod extends MetericModel
     /** @return BelongsTo<SubscriptionItem, $this> */
     public function item(): BelongsTo
     {
-        return $this->belongsTo(SubscriptionItem::class, 'item_id');
+        return $this->belongsTo(Models::for(SubscriptionItem::class), 'item_id');
     }
 }

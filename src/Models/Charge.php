@@ -13,6 +13,7 @@ use Meteric\Casts\PeriodCast;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\LineKind;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -62,13 +63,13 @@ class Charge extends MetericModel
     /** @return BelongsTo<BillingAccount, $this> */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
     /** @return BelongsTo<Subscription, $this> */
     public function subscription(): BelongsTo
     {
-        return $this->belongsTo(Subscription::class, 'subscription_id');
+        return $this->belongsTo(Models::for(Subscription::class), 'subscription_id');
     }
 
     public function money(): Money
