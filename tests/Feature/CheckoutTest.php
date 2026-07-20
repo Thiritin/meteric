@@ -25,7 +25,7 @@ function checkoutPrice(int $minor = 1000): Price
 it('creates a subscription and invoices it immediately', function () {
     $acc = BillingAccount::create(['owner_type' => 'user', 'owner_id' => '1', 'currency' => 'EUR']);
 
-    $checkout = Meteric::checkout()
+    $checkout = Meteric::subscribe()
         ->account($acc)
         ->at(CarbonImmutable::parse('2026-06-01T00:00:00Z'))
         ->add(checkoutPrice(1000), 1)

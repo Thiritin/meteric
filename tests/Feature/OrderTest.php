@@ -6,15 +6,15 @@ use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
-use Meteric\Enums\CheckoutState;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\InvoiceState;
+use Meteric\Enums\OrderState;
 use Meteric\Enums\PricingModel;
 use Meteric\Enums\SubscriptionState;
-use Meteric\Events\CheckoutCanceled;
-use Meteric\Events\CheckoutCreated;
-use Meteric\Events\CheckoutExpired;
-use Meteric\Events\CheckoutPaid;
+use Meteric\Events\OrderCanceled;
+use Meteric\Events\OrderCreated;
+use Meteric\Events\OrderExpired;
+use Meteric\Events\OrderPaid;
 use Meteric\Events\SubscriptionStarted;
 use Meteric\Facades\Meteric;
 use Meteric\Models\Addon;
@@ -76,21 +76,21 @@ function orderRelativeAddonPrice(float $percent = 20): Price
 }
 
 it('opens a multi-item order without billing anything', function () {
-    Event::fake([CheckoutCreated::class]);
+    Event::fake([OrderCreated::class]);
     test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
 
     $acc = orderAccount();
     $hosting = orderMonthlyPrice(1000);
     $domain = orderYearlyPrice(12000);
 
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add($hosting, 1, label: 'web1')
         ->add($domain, 1, label: 'example.com')
         ->create();
 
-    expect($order->state)->toBe(CheckoutState::Pending)
+    expect($order->state)->toBe(OrderState::Pending)
         ->and($order->contents)->toHaveCount(2)
         ->and(Subscription::count())->toBe(0)
         ->and(Invoice::count())->toBe(0)
@@ -101,24 +101,24 @@ it('opens a multi-item order without billing anything', function () {
         ->and($order->subtotal_minor)->toBe(13000)
         ->and($order->total_minor)->toBe($order->subtotal_minor + $order->tax_minor);
 
-    Event::assertDispatched(CheckoutCreated::class);
+    Event::assertDispatched(OrderCreated::class);
 });
 
 it('pays an order in full and materializes a subscription + paid invoice', function () {
-    Event::fake([CheckoutPaid::class, SubscriptionStarted::class]);
+    Event::fake([OrderPaid::class, SubscriptionStarted::class]);
     test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
 
     $acc = orderAccount();
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add(orderMonthlyPrice(1000), 1, label: 'web1')
         ->add(orderYearlyPrice(12000), 1, label: 'example.com')
         ->create();
 
-    $paid = Meteric::payCheckout($order, Money::ofMinor($order->total_minor, 'EUR'), 'pi_123');
+    $paid = Meteric::payOrder($order, Money::ofMinor($order->total_minor, 'EUR'), 'pi_123');
 
-    expect($paid->state)->toBe(CheckoutState::Converted)
+    expect($paid->state)->toBe(OrderState::Converted)
         ->and($paid->subscription_id)->not->toBeNull()
         ->and($paid->invoice_id)->not->toBeNull();
 
@@ -131,7 +131,7 @@ it('pays an order in full and materializes a subscription + paid invoice', funct
         ->and($invoice->subtotal_minor)->toBe(13000);
 
     Event::assertDispatched(SubscriptionStarted::class);
-    Event::assertDispatched(CheckoutPaid::class);
+    Event::assertDispatched(OrderPaid::class);
 });
 
 it('freezes amounts so a later price change does not move a pending order', function () {
@@ -140,7 +140,7 @@ it('freezes amounts so a later price change does not move a pending order', func
     $acc = orderAccount();
     $price = orderMonthlyPrice(1000);
 
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add($price, 1, label: 'web1')
@@ -149,7 +149,7 @@ it('freezes amounts so a later price change does not move a pending order', func
     // Catalog price doubles after the order was frozen.
     $price->forceFill(['amount_minor' => 2000])->save();
 
-    $paid = Meteric::payCheckout($order, Money::ofMinor($order->total_minor, 'EUR'));
+    $paid = Meteric::payOrder($order, Money::ofMinor($order->total_minor, 'EUR'));
     $invoice = Invoice::findOrFail($paid->invoice_id);
 
     expect($order->subtotal_minor)->toBe(1000)
@@ -157,11 +157,11 @@ it('freezes amounts so a later price change does not move a pending order', func
 });
 
 it('expires a pending order past its ttl and is idempotent', function () {
-    Event::fake([CheckoutExpired::class]);
+    Event::fake([OrderExpired::class]);
     test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
 
     $acc = orderAccount();
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->expiresIn(60)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
@@ -171,12 +171,12 @@ it('expires a pending order past its ttl and is idempotent', function () {
     test()->travelTo(CarbonImmutable::parse('2026-06-01T02:00:00Z'));
     $this->artisan('meteric:run')->assertSuccessful();
 
-    expect(Order::findOrFail($order->id)->state)->toBe(CheckoutState::Expired)
+    expect(Order::findOrFail($order->id)->state)->toBe(OrderState::Expired)
         ->and(Subscription::count())->toBe(0);
-    Event::assertDispatchedTimes(CheckoutExpired::class, 1);
+    Event::assertDispatchedTimes(OrderExpired::class, 1);
 
     // Second sweep is a no-op.
-    $again = Meteric::expireCheckouts();
+    $again = Meteric::expireOrders();
     expect($again)->toBe(0);
 });
 
@@ -184,17 +184,17 @@ it('is idempotent: paying twice yields exactly one subscription and invoice', fu
     test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
 
     $acc = orderAccount();
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add(orderMonthlyPrice(1000), 1, label: 'web1')
         ->create();
 
     $amount = Money::ofMinor($order->total_minor, 'EUR');
-    Meteric::payCheckout($order, $amount);
-    $second = Meteric::payCheckout($order->fresh(), $amount);
+    Meteric::payOrder($order, $amount);
+    $second = Meteric::payOrder($order->fresh(), $amount);
 
-    expect($second->state)->toBe(CheckoutState::Converted)
+    expect($second->state)->toBe(OrderState::Converted)
         ->and(Subscription::count())->toBe(1)
         ->and(Invoice::count())->toBe(1);
 });
@@ -203,13 +203,13 @@ it('rejects a partial payment below the total', function () {
     test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
 
     $acc = orderAccount();
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add(orderMonthlyPrice(1000), 1, label: 'web1')
         ->create();
 
-    expect(fn () => Meteric::payCheckout($order, Money::ofMinor(500, 'EUR')))
+    expect(fn () => Meteric::payOrder($order, Money::ofMinor(500, 'EUR')))
         ->toThrow(InvalidArgumentException::class);
 
     expect(Subscription::count())->toBe(0)
@@ -217,21 +217,21 @@ it('rejects a partial payment below the total', function () {
 });
 
 it('cancels a pending order and rejects a later payment', function () {
-    Event::fake([CheckoutCanceled::class]);
+    Event::fake([OrderCanceled::class]);
     test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
 
     $acc = orderAccount();
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add(orderMonthlyPrice(1000), 1, label: 'web1')
         ->create();
 
-    $canceled = Meteric::cancelCheckout($order);
-    expect($canceled->state)->toBe(CheckoutState::Canceled);
-    Event::assertDispatched(CheckoutCanceled::class);
+    $canceled = Meteric::cancelOrder($order);
+    expect($canceled->state)->toBe(OrderState::Canceled);
+    Event::assertDispatched(OrderCanceled::class);
 
-    expect(fn () => Meteric::payCheckout($canceled, Money::ofMinor(1000, 'EUR')))
+    expect(fn () => Meteric::payOrder($canceled, Money::ofMinor(1000, 'EUR')))
         ->toThrow(LogicException::class);
 });
 
@@ -241,14 +241,14 @@ it('survives option value and label through to a materialized ItemOption', funct
     $acc = orderAccount();
     $optPrice = orderOptionPrice(500);
 
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add(orderMonthlyPrice(1000), 1, label: 'web1')
         ->option('ram', '1024', 'quantity', $optPrice, 1, label: '1 GB RAM')
         ->create();
 
-    $paid = Meteric::payCheckout($order, Money::ofMinor($order->total_minor, 'EUR'));
+    $paid = Meteric::payOrder($order, Money::ofMinor($order->total_minor, 'EUR'));
 
     $option = ItemOption::query()->where('key', 'ram')->firstOrFail();
     expect($option->value)->toBe('1024')
@@ -264,7 +264,7 @@ it('freezes a relative addon amount across a base price change', function () {
     $base = orderMonthlyPrice(1000);
     $backups = orderRelativeAddonPrice(20); // 20% of base
 
-    $order = Meteric::openCheckout()
+    $order = Meteric::createOrder()
         ->account($acc)
         ->firstPeriod(FirstPeriodPolicy::FullPeriod)
         ->add($base, 1, label: 'web1')
@@ -278,7 +278,7 @@ it('freezes a relative addon amount across a base price change', function () {
     // Base price triples mid-flight; the frozen addon must not follow.
     $base->forceFill(['amount_minor' => 3000])->save();
 
-    $paid = Meteric::payCheckout($order, Money::ofMinor($order->total_minor, 'EUR'));
+    $paid = Meteric::payOrder($order, Money::ofMinor($order->total_minor, 'EUR'));
 
     $addon = Addon::query()->firstOrFail();
     $addonCharge = Charge::query()->where('origin_id', $addon->id)->firstOrFail();

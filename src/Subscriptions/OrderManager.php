@@ -11,13 +11,13 @@ use Illuminate\Support\Str;
 use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\ChargeState;
-use Meteric\Enums\CheckoutState;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
+use Meteric\Enums\OrderState;
 use Meteric\Enums\SubscriptionState;
-use Meteric\Events\CheckoutCanceled;
-use Meteric\Events\CheckoutExpired;
-use Meteric\Events\CheckoutPaid;
+use Meteric\Events\OrderCanceled;
+use Meteric\Events\OrderExpired;
+use Meteric\Events\OrderPaid;
 use Meteric\Events\SubscriptionStarted;
 use Meteric\Meteric;
 use Meteric\Models\Addon;
@@ -39,7 +39,7 @@ use Meteric\Support\Period;
  * change mid-flight never moves the order's figures. Conversion is idempotent
  * (row lock + state guard), so a double payment yields exactly one subscription.
  */
-final class CheckoutManager
+final class OrderManager
 {
     public function __construct(private Clock $clock, private PeriodPlanner $planner) {}
 
@@ -83,11 +83,11 @@ final class CheckoutManager
         }
 
         $order->forceFill([
-            'state' => CheckoutState::Canceled,
+            'state' => OrderState::Canceled,
             'canceled_at' => $at ?? $this->clock->now(),
         ])->save();
 
-        CheckoutCanceled::dispatch($order);
+        OrderCanceled::dispatch($order);
 
         return $order;
     }
@@ -99,13 +99,13 @@ final class CheckoutManager
         $count = 0;
 
         Models::query(Order::class)
-            ->where('state', CheckoutState::Pending->value)
+            ->where('state', OrderState::Pending->value)
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', $at)
             ->cursor()
             ->each(function (Order $order) use ($at, &$count): void {
-                $order->forceFill(['state' => CheckoutState::Expired, 'canceled_at' => $at])->save();
-                CheckoutExpired::dispatch($order);
+                $order->forceFill(['state' => OrderState::Expired, 'canceled_at' => $at])->save();
+                OrderExpired::dispatch($order);
                 $count++;
             });
 
@@ -163,7 +163,7 @@ final class CheckoutManager
             }
 
             $locked->forceFill([
-                'state' => CheckoutState::Converted,
+                'state' => OrderState::Converted,
                 'subscription_id' => $sub->id,
                 'invoice_id' => $invoice?->id,
                 'paid_at' => $paying ? $when : null,
@@ -177,7 +177,7 @@ final class CheckoutManager
         [$converted, $sub, $invoice, $payment] = $result;
 
         if ($sub instanceof Subscription) {
-            CheckoutPaid::dispatch($converted, $invoice, $payment);
+            OrderPaid::dispatch($converted, $invoice, $payment);
             SubscriptionStarted::dispatch($converted, $sub, $invoice);
         }
 

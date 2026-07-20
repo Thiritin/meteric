@@ -8,7 +8,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Meteric\Models\Order;
 
 /** A pending order was canceled before payment. */
-final class CheckoutCanceled
+final class OrderCanceled
 {
     use Dispatchable;
 

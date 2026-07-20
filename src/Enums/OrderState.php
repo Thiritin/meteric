@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Meteric\Enums;
 
 /** Lifecycle of a checkout (an Order): pending until paid, then terminal. */
-enum CheckoutState: string
+enum OrderState: string
 {
     case Pending = 'pending';
     case Converted = 'converted';

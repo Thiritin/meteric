@@ -9,8 +9,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Meteric\Enums\AnchorMode;
-use Meteric\Enums\CheckoutState;
 use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\OrderState;
 use Meteric\Support\Models;
 
 /**
@@ -24,7 +24,7 @@ use Meteric\Support\Models;
  * @property string $customer_type
  * @property string $customer_id
  * @property string $currency
- * @property CheckoutState $state
+ * @property OrderState $state
  * @property AnchorMode $anchor_mode
  * @property ?int $anchor_day
  * @property FirstPeriodPolicy $first_period
@@ -47,14 +47,14 @@ use Meteric\Support\Models;
  */
 class Order extends MetericModel
 {
-    protected string $baseTable = 'checkouts';
+    protected string $baseTable = 'orders';
 
     protected $guarded = [];
 
     protected function casts(): array
     {
         return [
-            'state' => CheckoutState::class,
+            'state' => OrderState::class,
             'anchor_mode' => AnchorMode::class,
             'anchor_day' => 'integer',
             'first_period' => FirstPeriodPolicy::class,
@@ -105,11 +105,11 @@ class Order extends MetericModel
 
     public function isPending(): bool
     {
-        return $this->state === CheckoutState::Pending;
+        return $this->state === OrderState::Pending;
     }
 
     public function isConverted(): bool
     {
-        return $this->state === CheckoutState::Converted;
+        return $this->state === OrderState::Converted;
     }
 }

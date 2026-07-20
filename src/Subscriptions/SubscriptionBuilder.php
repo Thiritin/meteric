@@ -151,13 +151,13 @@ final class SubscriptionBuilder
     }
 
     /** Create the subscription and immediately invoice the first cycle's charges. */
-    public function checkout(): Checkout
+    public function checkout(): SubscriptionResult
     {
         $sub = $this->create();
         $account = Models::query(BillingAccount::class)->findOrFail($sub->account_id);
         $invoice = app(Meteric::class)->invoicePending($account);
 
-        return new Checkout($sub, $invoice);
+        return new SubscriptionResult($sub, $invoice);
     }
 
     /** @param array{price:Price,qty:float,resource:?Model,label:?string,group:?string} $row */

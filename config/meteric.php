@@ -105,13 +105,13 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Checkout (persisted orders)
+    | Orders (persisted, immutable)
     |--------------------------------------------------------------------------
     | Default minutes a pending order stays open before the meteric:run sweep
     | expires it (1 day). Set to 0 to disable expiry. Override per order with
     | ->expiresIn($minutes) on the builder.
     */
-    'checkout' => [
+    'order' => [
         'ttl_minutes' => (int) env('METERIC_CHECKOUT_TTL', 1440),
     ],
 

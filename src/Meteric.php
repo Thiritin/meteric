@@ -43,9 +43,9 @@ use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Models\UsageRecord;
 use Meteric\Quoting\QuoteBuilder;
-use Meteric\Subscriptions\CheckoutBuilder;
-use Meteric\Subscriptions\CheckoutManager;
 use Meteric\Subscriptions\ItemManager;
+use Meteric\Subscriptions\OrderBuilder;
+use Meteric\Subscriptions\OrderManager;
 use Meteric\Subscriptions\SubscriptionBuilder;
 use Meteric\Subscriptions\SubscriptionManager;
 use Meteric\Support\Models;
@@ -666,46 +666,40 @@ final class Meteric
         return $customer ? $builder->for($customer) : $builder;
     }
 
-    /** Begin a checkout — subscribe then immediately invoice. End with ->checkout(). */
-    public function checkout(?Model $customer = null): SubscriptionBuilder
-    {
-        return $this->subscribe($customer);
-    }
-
     /**
-     * Open a persisted, immutable order (a frozen checkout). Build the cart with
-     * add()/addon()/option(), end with ->create() to store a pending Order, then
-     * pay or confirm it later. No Subscription/Charge/Invoice exists until paid.
+     * Open a persisted, immutable order. Build the cart with add()/addon()/
+     * option(), end with ->create() to store a pending Order, then pay or confirm
+     * it later. No Subscription/Charge/Invoice exists until the order is paid.
      */
-    public function openCheckout(?Model $customer = null): CheckoutBuilder
+    public function createOrder(?Model $customer = null): OrderBuilder
     {
-        $builder = app(CheckoutBuilder::class);
+        $builder = app(OrderBuilder::class);
 
         return $customer ? $builder->for($customer) : $builder;
     }
 
     /** Pay an order in full and materialize its subscription + Paid invoice. */
-    public function payCheckout(Order $order, Money $amount, ?string $ref = null): Order
+    public function payOrder(Order $order, Money $amount, ?string $ref = null): Order
     {
-        return app(CheckoutManager::class)->pay($order, $amount, $ref);
+        return app(OrderManager::class)->pay($order, $amount, $ref);
     }
 
     /** Convert a zero-total order with no payment (e.g. a fully trialed signup). */
-    public function confirmCheckout(Order $order): Order
+    public function confirmOrder(Order $order): Order
     {
-        return app(CheckoutManager::class)->confirm($order);
+        return app(OrderManager::class)->confirm($order);
     }
 
     /** Cancel a pending order. No-op once terminal. */
-    public function cancelCheckout(Order $order): Order
+    public function cancelOrder(Order $order): Order
     {
-        return app(CheckoutManager::class)->cancel($order);
+        return app(OrderManager::class)->cancel($order);
     }
 
     /** Expire pending orders past their expiry. Returns the count. */
-    public function expireCheckouts(?CarbonImmutable $at = null): int
+    public function expireOrders(?CarbonImmutable $at = null): int
     {
-        return app(CheckoutManager::class)->expireDue($at);
+        return app(OrderManager::class)->expireDue($at);
     }
 
     /** Accrue the next cycle for all due items of a subscription (idempotent). */
