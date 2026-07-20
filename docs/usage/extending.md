@@ -23,6 +23,10 @@ All live in `Meteric\Events`. Register listeners the normal Laravel way.
 | `SubscriptionResumed` | billing resumed | `Subscription` |
 | `SubscriptionCancellationScheduled` | a future cancel was set (notice/confirmation) | `Subscription`, `CarbonImmutable $at`, `array $meta` |
 | `SubscriptionCanceled` | a subscription was terminated | `Subscription` |
+| `OrderCreated` | a pending order was placed | `Order` |
+| `OrderPaid` | an order was paid and materialized | `Order` |
+| `OrderCanceled` | a pending order was canceled | `Order` |
+| `OrderExpired` | a pending order passed its TTL | `Order` |
 
 ## Suspension
 
@@ -116,3 +120,24 @@ class ResumeOnPayment
 
 That is the whole loop. Overdue fires, you suspend. Payment lands, you resume.
 Meteric tracks the money and the state, you map it to your infrastructure.
+
+## Swapping models
+
+Every Meteric model can be replaced with a host-app subclass, so you can add
+relationships, casts, and methods of your own. Register the overrides once, in a
+service provider's `register()`:
+
+```php
+use Meteric\Facades\Meteric;
+
+Meteric::useInvoiceModel(App\Models\Invoice::class);
+Meteric::useSubscriptionModel(App\Models\Subscription::class);
+Meteric::useOrderModel(App\Models\Order::class);
+```
+
+An override must extend the model it replaces. The engine instantiates the
+configured class everywhere, including relationships, so `$account->invoices()`
+returns your subclass. Named helpers exist for the aggregate roots
+(`useAccountModel`, `useSubscriptionModel`, `useChargeModel`, `useInvoiceModel`,
+`usePaymentModel`, `useCreditNoteModel`, `useOrderModel`, `useUsageRecordModel`);
+for any other model use `Meteric::useModel(Base::class, Override::class)`.
