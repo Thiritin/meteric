@@ -7,8 +7,10 @@ namespace Meteric\Invoicing\Drivers;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\CreditState;
@@ -33,7 +35,12 @@ use Meteric\Tax\TaxResult;
  */
 final class DatabaseInvoiceDriver implements InvoiceDriver
 {
-    public function __construct(private TaxResolver $tax) {}
+    public function __construct(private TaxResolver $tax, private Clock $clock) {}
+
+    private function now(): CarbonImmutable
+    {
+        return $this->clock->now();
+    }
 
     public function issue(InvoiceDraft $draft): IssuedInvoice
     {
@@ -56,7 +63,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             // Financials are set while still draft, then frozen by flipping to
             // open. due_at is stamped here so a driver that commits locally then
             // fails a downstream sync still leaves a dunnable invoice.
-            $issuedAt = now();
+            $issuedAt = $this->now();
             $invoice->forceFill([
                 'number' => $this->nextNumber(),
                 'state' => InvoiceState::Open,
@@ -171,7 +178,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
         $invoice->forceFill([
             'number' => $invoice->number ?? $this->nextNumber(),
             'state' => InvoiceState::Open,
-            'issued_at' => $invoice->issued_at ?? now(),
+            'issued_at' => $invoice->issued_at ?? $this->now(),
         ])->save();
 
         return new IssuedInvoice(
@@ -261,7 +268,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             'tax_minor' => $creditTax,
             'currency' => $draft->amount->getCurrency()->getCurrencyCode(),
             'number' => $this->nextNumber('CN'),
-            'issued_at' => now(),
+            'issued_at' => $this->now(),
         ]);
 
         return new IssuedCreditNote(creditNoteId: $note->id, number: $note->number);
@@ -276,7 +283,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
      */
     private function nextNumber(string $prefix = 'INV'): string
     {
-        $year = (int) now()->year;
+        $year = (int) $this->now()->year;
         $table = Pg::table('invoice_numbers');
 
         $row = DB::selectOne(

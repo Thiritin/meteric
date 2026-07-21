@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Brick\Money\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Meteric\Contracts\Clock;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\LineKind;
@@ -12,6 +13,7 @@ use Meteric\Facades\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\Invoice;
+use Meteric\Support\FrozenClock;
 
 uses(RefreshDatabase::class);
 
@@ -100,6 +102,17 @@ it('refuses to credit more than the invoice net across multiple notes', function
 
     expect(fn () => Meteric::creditNote($invoice, Money::ofMinor(1, 'EUR'), 'over'))
         ->toThrow(InvalidArgumentException::class);
+});
+
+it('dates invoices from the injected clock, not wall time', function () {
+    app()->instance(Clock::class, FrozenClock::at('2031-05-10T00:00:00Z'));
+
+    $account = guardAccount();
+    guardCharge($account, 1000);
+    $invoice = Meteric::invoicePending($account);
+
+    expect($invoice->issued_at->toDateString())->toBe('2031-05-10')
+        ->and($invoice->number)->toStartWith('INV-2031-');
 });
 
 it('stamps a due date on every issued invoice so it can go overdue', function () {

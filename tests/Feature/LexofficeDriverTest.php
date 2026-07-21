@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Meteric\Contracts\Clock;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\InvoiceState;
@@ -82,7 +83,8 @@ function lexInvoiceResponse(string $id = 'e9066f04-8cc7-4616-93f8-ac9ecc8479c8')
 
 beforeEach(function () {
     app()->bind(DatabaseInvoiceDriver::class, fn ($app) => new DatabaseInvoiceDriver(
-        $app->make(TaxResolver::class)
+        $app->make(TaxResolver::class),
+        $app->make(Clock::class)
     ));
 });
 

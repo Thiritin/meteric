@@ -93,7 +93,7 @@ final class MetericServiceProvider extends ServiceProvider
 
             return match ($class) {
                 LexofficeInvoiceDriver::class => new LexofficeInvoiceDriver(
-                    local: new DatabaseInvoiceDriver($app->make(TaxResolver::class)),
+                    local: new DatabaseInvoiceDriver($app->make(TaxResolver::class), $app->make(Clock::class)),
                     apiToken: (string) ($cfg['lexoffice']['api_token'] ?? ''),
                     baseUrl: $cfg['lexoffice']['base_url'] ?? 'https://api.lexoffice.io',
                     taxType: $cfg['lexoffice']['tax_type'] ?? 'net',

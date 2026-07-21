@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Meteric\Contracts\Clock;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
@@ -29,7 +30,7 @@ beforeEach(function () {
 function liveMeteric(): Meteric
 {
     $driver = new LexofficeInvoiceDriver(
-        local: new DatabaseInvoiceDriver(app(TaxResolver::class)),
+        local: new DatabaseInvoiceDriver(app(TaxResolver::class), app(Clock::class)),
         apiToken: (string) env('METERIC_LEXOFFICE_TOKEN'),
         baseUrl: (string) env('METERIC_LEXOFFICE_BASE_URL', 'https://api.lexoffice.io'),
         taxType: 'net',
