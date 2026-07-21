@@ -1,6 +1,6 @@
 # Orders
 
-An order is a persisted, immutable checkout: one row in `meteric_checkouts`
+An order is a persisted, immutable cart: one row in `meteric_orders`
 holding a frozen cart in a single `contents` jsonb column, plus the amounts
 computed when it was opened. No `Subscription`, `Charge`, or `Invoice` exists
 until the order is paid, and the frozen amounts are the source of truth, so a
@@ -8,7 +8,7 @@ later catalog price change never moves a pending order's figures.
 
 One order can hold several items: a webhosting plan and a domain registration in
 the same cart. Because each order is a row with a `state`, orders are queryable
-for an admin view of pending, paid, and abandoned checkouts.
+for an admin view of pending, paid, and abandoned orders.
 
 ## When to use an order
 
@@ -69,7 +69,7 @@ $order->isPending();
 $order->isConverted();
 ```
 
-`Order` maps to the `meteric_checkouts` table. State runs through
+`Order` maps to the `meteric_orders` table. State runs through
 `OrderState`:
 
 - `Pending`: open, payable.
@@ -136,7 +136,7 @@ Meteric::cancelOrder($order);
 This is a no-op once the order is terminal, and fires `OrderCanceled`.
 
 Stale pending orders expire on their own. `create()` stamps `expires_at` from
-the checkout TTL (`config('meteric.checkout.ttl_minutes')`, default 1440, one
+the order TTL (`config('meteric.order.ttl_minutes')`, default 1440, one
 day). The `meteric:run` tick expires every pending order past its `expires_at`,
 sets state `Expired`, and fires `OrderExpired`. To expire on demand outside
 the tick:

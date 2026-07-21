@@ -12,12 +12,9 @@ use Meteric\Facades\Meteric;
 #### `subscribe(?Model $customer = null): SubscriptionBuilder`
 
 Start building a subscription. Pass the billable customer model, or omit it and
-set the account on the builder. See [Subscriptions](/usage/subscriptions).
-
-#### `checkout(?Model $customer = null): SubscriptionBuilder`
-
-Same as `subscribe()`. End the chain with `->checkout()` to create the
-subscription and immediately invoice the first cycle.
+set the account on the builder. End the chain with `->create()`, or with
+`->checkout()` to create the subscription and immediately invoice the first
+cycle. See [Subscriptions](/usage/subscriptions).
 
 #### `renew(Subscription $sub, ?CarbonImmutable $at = null): array`
 

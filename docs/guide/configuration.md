@@ -32,20 +32,8 @@ whole days.
 Applied per line. The invoice total is the sum of line totals, so it always
 reconciles. Use any `brick/math` `RoundingMode` name.
 
-## Anchoring and first period
-
-```php
-'anchor' => [
-    'mode' => env('METERIC_ANCHOR_MODE', 'signup'),   // signup | fixed_day | fixed_dow
-    'day' => env('METERIC_ANCHOR_DAY', 1),
-    'first_period' => env('METERIC_FIRST_PERIOD', 'prorate_only'),
-    'default_billing_mode' => 'in_advance',
-],
-```
-
-Global defaults for how the first billing period is anchored and billed. Each
-subscription can override these on the builder. See
-[Subscriptions](/usage/subscriptions) for the policies.
+Anchoring and the first-period policy are set per subscription on the builder;
+see [Subscriptions](/usage/subscriptions).
 
 ## Tax driver
 
@@ -84,16 +72,15 @@ See [Tax](/usage/tax) for the full setup.
     'driver' => env('METERIC_INVOICE_DRIVER', 'database'),
     'drivers' => [
         'database' => DatabaseInvoiceDriver::class,
-        // 'lexoffice' => \App\Billing\LexofficeInvoiceDriver::class,
+        'lexoffice' => LexofficeInvoiceDriver::class,
     ],
-    'mirror_to_database' => env('METERIC_INVOICE_MIRROR', true),
 ],
 ```
 
 The `database` driver writes invoices to the `meteric_*` tables. Bind your own
-class implementing `Meteric\Contracts\InvoiceDriver` to send invoices to an
-external accounting system. With `mirror_to_database` on, the canonical record
-is kept in the database even when a remote driver is primary. See
+class implementing `Meteric\Contracts\InvoiceDriver` (or select the bundled
+`lexoffice` driver) to also push invoices to an external accounting system; the
+local invoice is always the source of truth. An unknown driver key throws. See
 [Invoicing](/usage/invoicing).
 
 ## Schema
@@ -101,7 +88,6 @@ is kept in the database even when a remote driver is primary. See
 ```php
 'schema' => [
     'prefix' => 'meteric_',
-    'morph_key' => env('METERIC_MORPH_KEY', 'uuid'), // uuid | bigint
 ],
 ```
 
@@ -111,16 +97,15 @@ unprefixed tables (`subscriptions`, `invoices`). Constraint and index names keep
 a fixed spelling regardless. Set the prefix before the first migration; changing
 it after the tables exist leaves the old tables behind.
 
-`morph_key` is the key type used for host references (the morph columns that
-point at your models) and Meteric's own primary keys. Set it to match your
-application's key type before the first migration.
+## Swapping models
 
-## Ledger
+Every Meteric model can be replaced with a host-app subclass. Register the
+overrides once (e.g. in a service provider's `register()`):
 
 ```php
-'ledger' => [
-    'enabled' => env('METERIC_LEDGER', false),
-],
+use Meteric\Facades\Meteric;
+
+Meteric::useInvoiceModel(App\Models\Invoice::class);
 ```
 
-Off by default. Enables the double-entry audit ledger.
+See [Extending](/usage/extending#swapping-models) for the full list of helpers.

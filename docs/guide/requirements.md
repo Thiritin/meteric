@@ -1,6 +1,6 @@
 # Requirements
 
-- PHP 8.3+
+- PHP 8.3+ with the `bcmath` extension (exact money maths, no float fallback)
 - Laravel 12
 - PostgreSQL 16+
 
