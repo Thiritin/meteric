@@ -20,6 +20,9 @@ use Meteric\Support\Period;
  * Money owed — the source of truth. Accrues independently of invoicing.
  *
  * @property string $id
+ * @property string $account_id
+ * @property ?string $subscription_id
+ * @property ?string $dimension_id
  * @property ChargeState $state
  * @property BillingMode $billing_mode
  * @property LineKind $kind
@@ -27,12 +30,15 @@ use Meteric\Support\Period;
  * @property ?string $group
  * @property ?string $line_group
  * @property ?string $description
+ * @property float $quantity
  * @property ?string $unit
+ * @property ?int $unit_minor
+ * @property ?string $unit_rate
  * @property Money $amount
  * @property int $amount_minor
  * @property string $currency
  * @property ?Period $covers
- * @property array $metadata
+ * @property ?array $metadata
  */
 class Charge extends MetericModel
 {

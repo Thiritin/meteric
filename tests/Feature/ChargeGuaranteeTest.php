@@ -11,8 +11,10 @@ use Meteric\Enums\LineKind;
 use Meteric\Facades\Meteric as MetericFacade;
 use Meteric\Invoicing\CreditNoteDraft;
 use Meteric\Invoicing\InvoiceDraft;
+use Meteric\Invoicing\InvoiceManager;
 use Meteric\Invoicing\IssuedCreditNote;
 use Meteric\Invoicing\IssuedInvoice;
+use Meteric\Invoicing\LineComposer;
 use Meteric\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
@@ -66,7 +68,7 @@ it('keeps charges pending when the invoice driver fails (the core guarantee)', f
     guaranteeCharge($acc, 1000);
     guaranteeCharge($acc, 2000);
 
-    $meteric = new Meteric(throwingDriver());
+    $meteric = new Meteric(new InvoiceManager(throwingDriver(), app(LineComposer::class)));
 
     expect(fn () => $meteric->invoicePending($acc))->toThrow(RuntimeException::class);
 

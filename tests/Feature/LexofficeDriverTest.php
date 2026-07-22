@@ -8,7 +8,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
-use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\LineKind;
@@ -17,6 +16,7 @@ use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
 use Meteric\Invoicing\InvoiceDraft;
 use Meteric\Invoicing\IssuedInvoice;
+use Meteric\Invoicing\LineComposer;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
@@ -83,7 +83,7 @@ function lexInvoiceResponse(string $id = 'e9066f04-8cc7-4616-93f8-ac9ecc8479c8')
 
 beforeEach(function () {
     app()->bind(DatabaseInvoiceDriver::class, fn ($app) => new DatabaseInvoiceDriver(
-        $app->make(TaxResolver::class),
+        $app->make(LineComposer::class),
         $app->make(Clock::class)
     ));
 });
@@ -262,7 +262,7 @@ it('finalizes a draft invoice by posting its current lines to lexoffice', functi
         'driver' => 'lexoffice', 'state' => InvoiceState::Draft, 'currency' => 'EUR',
     ]);
     $charges = Charge::where('account_id', $account->id)->get();
-    app(DatabaseInvoiceDriver::class)->rebuildLines($invoice, $charges);
+    app(LineComposer::class)->rebuild($invoice, $charges);
 
     $issued = lexDriver()->finalize($invoice->fresh());
 

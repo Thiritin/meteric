@@ -19,6 +19,8 @@ use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
+use Meteric\Invoicing\InvoiceManager;
+use Meteric\Invoicing\LineComposer;
 use Meteric\Pricing\CheckoutPricer;
 use Meteric\Proration\Prorator;
 use Meteric\Quoting\QuoteBuilder;
@@ -93,7 +95,7 @@ final class MetericServiceProvider extends ServiceProvider
 
             return match ($class) {
                 LexofficeInvoiceDriver::class => new LexofficeInvoiceDriver(
-                    local: new DatabaseInvoiceDriver($app->make(TaxResolver::class), $app->make(Clock::class)),
+                    local: $app->make(DatabaseInvoiceDriver::class),
                     apiToken: (string) ($cfg['lexoffice']['api_token'] ?? ''),
                     baseUrl: $cfg['lexoffice']['base_url'] ?? 'https://api.lexoffice.io',
                     taxType: $cfg['lexoffice']['tax_type'] ?? 'net',
@@ -102,6 +104,13 @@ final class MetericServiceProvider extends ServiceProvider
                 default => $app->make($class),
             };
         });
+
+        $this->app->singleton(LineComposer::class, fn ($app) => new LineComposer($app->make(TaxResolver::class)));
+
+        $this->app->singleton(InvoiceManager::class, fn ($app) => new InvoiceManager(
+            driver: $app->make(InvoiceDriver::class),
+            lines: $app->make(LineComposer::class),
+        ));
 
         $this->app->singleton(Prorator::class, function ($app) {
             $cfg = $app['config']['meteric'];
@@ -112,7 +121,7 @@ final class MetericServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->singleton(Meteric::class, fn ($app) => new Meteric($app->make(InvoiceDriver::class)));
+        $this->app->singleton(Meteric::class, fn ($app) => new Meteric($app->make(InvoiceManager::class)));
 
         $this->app->singleton(PeriodPlanner::class);
         $this->app->singleton(ChargeAccruer::class, fn ($app) => new ChargeAccruer($app->make(Prorator::class)));
