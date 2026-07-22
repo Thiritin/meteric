@@ -9,7 +9,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
-use Meteric\Enums\ChargeState;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Models\Addon;
@@ -185,24 +184,14 @@ final class ItemManager
 
     private function charge(SubscriptionItem $item, string $originType, string $originId, LineKind $kind, Money $amount, string $desc, bool $covers = true): void
     {
-        $sub = $item->subscription;
-
-        Models::query(Charge::class)->create([
-            'account_id' => $sub->account_id,
-            'subscription_id' => $sub->id,
+        Charge::pendingForItem($item, [
             'origin_type' => $originType,
             'origin_id' => $originId,
             'kind' => $kind,
-            'billing_mode' => $item->billingMode(),
-            'state' => ChargeState::Pending,
-            'title' => $item->lineTitle(),
-            'group' => $item->group,
-            'line_group' => $item->id,
             'description' => $desc,
             'quantity' => 1,
             'unit_minor' => $amount->getMinorAmount()->toInt(),
             'amount_minor' => $amount->getMinorAmount()->toInt(),
-            'currency' => $sub->currency,
             'covers' => $covers ? $item->current_period : null,
             'idempotency_key' => 'item_'.Str::uuid()->toString(),
         ]);

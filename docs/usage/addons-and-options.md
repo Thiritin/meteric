@@ -112,6 +112,7 @@ setOption(
     ?CarbonImmutable $at = null,
     ?float $min = null,
     ?float $max = null,
+    ?string $label = null,
 ): ItemOption
 ```
 
@@ -279,8 +280,9 @@ Iterate the item's options and call `toDisplay()` on each, or `amount()` for the
 ```php
 foreach ($item->options as $option) {
     $row = $option->toDisplay();
-    // ['key' => 'slots', 'value' => '32', 'quantity' => 32.0,
-    //  'amount_minor' => 2560, 'amount' => '25.60', 'currency' => 'EUR']
+    // ['key' => 'slots', 'value' => '32', 'label' => '32 slots',
+    //  'quantity' => 32.0, 'amount_minor' => 2560, 'amount' => '25.60',
+    //  'currency' => 'EUR']
 
     $money = $option->amount(); // Brick\Money\Money, or null when free
 }

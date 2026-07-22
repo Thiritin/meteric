@@ -20,6 +20,9 @@ use Meteric\Support\Period;
  * Money owed — the source of truth. Accrues independently of invoicing.
  *
  * @property string $id
+ * @property string $account_id
+ * @property ?string $subscription_id
+ * @property ?string $dimension_id
  * @property ChargeState $state
  * @property BillingMode $billing_mode
  * @property LineKind $kind
@@ -27,12 +30,15 @@ use Meteric\Support\Period;
  * @property ?string $group
  * @property ?string $line_group
  * @property ?string $description
+ * @property float $quantity
  * @property ?string $unit
+ * @property ?int $unit_minor
+ * @property ?string $unit_rate
  * @property Money $amount
  * @property int $amount_minor
  * @property string $currency
  * @property ?Period $covers
- * @property array $metadata
+ * @property ?array $metadata
  */
 class Charge extends MetericModel
 {
@@ -41,6 +47,34 @@ class Charge extends MetericModel
     protected string $baseTable = 'charges';
 
     protected $guarded = [];
+
+    /**
+     * Create a pending charge whose ledger fields derive from a subscription
+     * item. Site-specific columns merge over the item-derived defaults, so a
+     * caller only states what varies: kind, amounts, covers, idempotency_key,
+     * and an origin when the charge stems from an option or addon rather than
+     * the item itself.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public static function pendingForItem(SubscriptionItem $item, array $attributes): self
+    {
+        $sub = $item->subscription;
+
+        return Models::query(self::class)->create([
+            'account_id' => $sub->account_id,
+            'subscription_id' => $sub->id,
+            'origin_type' => 'subscription_item',
+            'origin_id' => $item->id,
+            'billing_mode' => $item->billingMode(),
+            'state' => ChargeState::Pending,
+            'title' => $item->lineTitle(),
+            'group' => $item->group,
+            'line_group' => $item->id,
+            'currency' => $sub->currency,
+            ...$attributes,
+        ]);
+    }
 
     protected function casts(): array
     {

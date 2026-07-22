@@ -24,7 +24,7 @@ abstract class TestCase extends Orchestra
         $app['config']->set('database.connections.pgsql', [
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '55432'),
+            'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'meteric_test'),
             'username' => env('DB_USERNAME', 'postgres'),
             'password' => env('DB_PASSWORD', 'secret'),

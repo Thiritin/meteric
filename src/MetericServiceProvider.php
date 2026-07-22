@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Meteric;
 
 use Brick\Math\RoundingMode;
-use Ibericode\Vat\Countries;
 use Ibericode\Vat\Rates;
-use Ibericode\Vat\Validator;
 use Illuminate\Support\ServiceProvider;
 use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Charges\ChargeAccruer;
@@ -17,8 +15,9 @@ use Meteric\Console\VatSyncCommand;
 use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\TaxResolver;
-use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
-use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
+use Meteric\Invoicing\InvoiceDriverManager;
+use Meteric\Invoicing\InvoiceManager;
+use Meteric\Invoicing\LineComposer;
 use Meteric\Pricing\CheckoutPricer;
 use Meteric\Proration\Prorator;
 use Meteric\Quoting\QuoteBuilder;
@@ -28,10 +27,7 @@ use Meteric\Subscriptions\OrderManager;
 use Meteric\Subscriptions\SubscriptionBuilder;
 use Meteric\Subscriptions\SubscriptionManager;
 use Meteric\Support\SystemClock;
-use Meteric\Tax\DatabaseTaxResolver;
-use Meteric\Tax\EuVatResolver;
-use Meteric\Tax\FlatRateTaxResolver;
-use Meteric\Tax\IbericodeVatResolver;
+use Meteric\Tax\TaxResolverManager;
 use Meteric\Tax\Vies\Vies;
 use Meteric\Usage\UsageRollup;
 
@@ -51,27 +47,13 @@ final class MetericServiceProvider extends ServiceProvider
             ], fn ($v): bool => $v !== null && $v !== ''),
         ));
 
-        // Tax resolver — selected by config('meteric.tax.driver').
-        $this->app->singleton(TaxResolver::class, function ($app) {
-            $cfg = $app['config']['meteric.tax'];
-            $key = $cfg['driver'] ?? 'ibericode';
-            if (! isset($cfg['drivers'][$key])) {
-                throw new \InvalidArgumentException("Unknown Meteric tax driver [{$key}]. Add it to config('meteric.tax.drivers').");
-            }
-            $class = $cfg['drivers'][$key];
+        // Tax resolution and invoice emission are driver-based (extend() to add
+        // your own). The contracts resolve to each manager's configured driver.
+        $this->app->singleton(TaxResolverManager::class);
+        $this->app->singleton(TaxResolver::class, fn ($app) => $app->make(TaxResolverManager::class)->driver());
 
-            return match ($class) {
-                DatabaseTaxResolver::class => new DatabaseTaxResolver(
-                    countries: new Countries,
-                    validator: ($cfg['ibericode']['verify_vat_id'] ?? true) ? new Validator : null,
-                    merchantCountry: $cfg['merchant_country'] ?? 'DE',
-                ),
-                IbericodeVatResolver::class => $this->makeIbericodeResolver($cfg),
-                FlatRateTaxResolver::class => new FlatRateTaxResolver((float) ($cfg['flat_rate'] ?? 0.19)),
-                EuVatResolver::class => new EuVatResolver(merchantCountry: $cfg['merchant_country'] ?? 'DE'),
-                default => $app->make($class),
-            };
-        });
+        $this->app->singleton(InvoiceDriverManager::class);
+        $this->app->singleton(InvoiceDriver::class, fn ($app) => $app->make(InvoiceDriverManager::class)->driver());
 
         // ibericode Rates singleton (used by the vat-sync command).
         $this->app->singleton(Rates::class, function ($app) {
@@ -82,26 +64,12 @@ final class MetericServiceProvider extends ServiceProvider
             return new Rates((string) $path, (int) ($ib['refresh_interval'] ?? 43200));
         });
 
-        // Invoice driver — selected by config('meteric.invoice.driver').
-        $this->app->singleton(InvoiceDriver::class, function ($app) {
-            $cfg = $app['config']['meteric.invoice'];
-            $key = $cfg['driver'] ?? 'database';
-            if (! isset($cfg['drivers'][$key])) {
-                throw new \InvalidArgumentException("Unknown Meteric invoice driver [{$key}]. Add it to config('meteric.invoice.drivers').");
-            }
-            $class = $cfg['drivers'][$key];
+        $this->app->singleton(LineComposer::class, fn ($app) => new LineComposer($app->make(TaxResolver::class)));
 
-            return match ($class) {
-                LexofficeInvoiceDriver::class => new LexofficeInvoiceDriver(
-                    local: new DatabaseInvoiceDriver($app->make(TaxResolver::class), $app->make(Clock::class)),
-                    apiToken: (string) ($cfg['lexoffice']['api_token'] ?? ''),
-                    baseUrl: $cfg['lexoffice']['base_url'] ?? 'https://api.lexoffice.io',
-                    taxType: $cfg['lexoffice']['tax_type'] ?? 'net',
-                    defaultCountry: $cfg['lexoffice']['country'] ?? 'DE',
-                ),
-                default => $app->make($class),
-            };
-        });
+        $this->app->singleton(InvoiceManager::class, fn ($app) => new InvoiceManager(
+            driver: $app->make(InvoiceDriver::class),
+            lines: $app->make(LineComposer::class),
+        ));
 
         $this->app->singleton(Prorator::class, function ($app) {
             $cfg = $app['config']['meteric'];
@@ -112,7 +80,7 @@ final class MetericServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->singleton(Meteric::class, fn ($app) => new Meteric($app->make(InvoiceDriver::class)));
+        $this->app->singleton(Meteric::class, fn ($app) => new Meteric($app->make(InvoiceManager::class)));
 
         $this->app->singleton(PeriodPlanner::class);
         $this->app->singleton(ChargeAccruer::class, fn ($app) => new ChargeAccruer($app->make(Prorator::class)));
@@ -164,22 +132,6 @@ final class MetericServiceProvider extends ServiceProvider
             defaultCurrency: $app['config']['meteric.currency'] ?? 'EUR',
             ttlMinutes: $app['config']['meteric.order.ttl_minutes'] ?? null,
         ));
-    }
-
-    /** @param array<string,mixed> $cfg meteric.tax config */
-    private function makeIbericodeResolver(array $cfg): IbericodeVatResolver
-    {
-        $ib = $cfg['ibericode'] ?? [];
-        $path = $ib['storage_path'] ?? storage_path('framework/cache/meteric-vat-rates.json');
-        @mkdir(dirname((string) $path), 0775, true);
-
-        return new IbericodeVatResolver(
-            rates: new Rates((string) $path, (int) ($ib['refresh_interval'] ?? 43200)),
-            validator: new Validator,
-            countries: new Countries,
-            merchantCountry: $cfg['merchant_country'] ?? 'DE',
-            verifyVatId: (bool) ($ib['verify_vat_id'] ?? true),
-        );
     }
 
     public function boot(): void

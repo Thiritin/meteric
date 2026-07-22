@@ -45,6 +45,40 @@ Enact scheduled cancellations whose boundary has passed: cancel the subscription
 and fire `SubscriptionCanceled`. Returns the count. `meteric:run` calls this, so
 you rarely call it directly.
 
+#### `pause(Subscription $sub): Subscription`
+
+Suspend billing (state → `paused`). `renew()` accrues nothing while paused.
+
+#### `resume(Subscription $sub, ?CarbonImmutable $at = null): Subscription`
+
+Resume billing (state → `active`) from `$at`, defaulting to now.
+
+## Orders
+
+#### `createOrder(?Model $customer = null): OrderBuilder`
+
+Open a persisted, immutable order. Build the cart with `add()` / `addon()` /
+`option()`, end with `->create()` to store a pending order, then pay or confirm
+it later. No subscription, charge, or invoice exists until the order is paid. See
+[Orders](/usage/orders).
+
+#### `payOrder(Order $order, Money $amount, ?string $ref = null): Order`
+
+Pay an order in full and materialize its subscription and paid invoice.
+
+#### `confirmOrder(Order $order): Order`
+
+Convert a zero-total order with no payment, e.g. a fully trialed signup.
+
+#### `cancelOrder(Order $order): Order`
+
+Cancel a pending order. No-op once terminal.
+
+#### `expireOrders(?CarbonImmutable $at = null): int`
+
+Expire pending orders past their expiry. Returns the count. `meteric:run` calls
+this, so you rarely call it directly.
+
 ## Items: addons, options, quantity
 
 #### `addAddon(SubscriptionItem $item, Price $price, ?string $group = null, float $qty = 1, ?CarbonImmutable $at = null): Addon`
@@ -76,6 +110,11 @@ Change an item's base quantity, prorating the difference.
 
 ## Usage
 
+#### `billingCycle(SubscriptionItem $item): ?Period`
+
+The current billing cycle window for an item. Query your usage API for this
+range, then report the result with `recordUsage`.
+
 #### `recordUsage(SubscriptionItem $item, string $dimension, float $quantity, ?CarbonImmutable $occurredAt = null, ?string $key = null): UsageRecord`
 
 Report metered usage for a dimension. Idempotent on `key`.
@@ -104,6 +143,13 @@ billing run bills it. For a standalone document now, use `createInvoice`.
 Collect an account's pending charges in one currency and issue them via the
 bound driver. Returns the invoice, or `null` when nothing is pending. Currency
 defaults to the account's.
+
+#### `invoiceAllPending(BillingAccount $account): array`
+
+Invoice every currency that has pending charges for the account, not just the
+account's default. A subscription or usage dimension can carry its own currency,
+so billing only the default would strand the rest as permanently pending.
+Returns the issued invoices, one per currency, as a `list<Invoice>`.
 
 #### `invoiceConsolidated(BillingAccount $payer, ?string $currency = null): ?Invoice`
 
@@ -161,6 +207,21 @@ draft, keeping each line's `charge_id`. No charge is duplicated.
 Send a draft's current lines through the driver, set the due date, flip to
 `open`, and fire `InvoiceIssued`. Throws on a non-draft.
 
+#### `markOverdue(?CarbonImmutable $at = null): int`
+
+Mark invoices past their due date as `past_due` and fire `InvoiceOverdue`.
+Returns the count. `meteric:run` calls this, so you rarely call it directly.
+
 #### `driver(): InvoiceDriver`
 
 The bound invoice driver instance.
+
+## Tax
+
+#### `viesCheck(string $countryCode, string $vatNumber, array $trader = [], array $requester = []): ViesResult`
+
+Qualified VIES check: validates an EU VAT id and, when `$trader` details are
+passed, returns VIES's registered name and address plus per-field match flags for
+a "details do not match" warning. The `consultationNumber` is your audit
+reference. Tax computation runs the resolvers' own VIES check; this one is for
+the UI warning and the record. See [Tax](/usage/tax).

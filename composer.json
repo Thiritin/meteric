@@ -1,7 +1,7 @@
 {
     "name": "thiritin/meteric",
-    "description": "Dynamic billing engine for hosting systems — subscriptions, proration, usage, charges and pluggable invoice/tax drivers. PostgreSQL.",
-    "keywords": ["laravel", "billing", "subscriptions", "invoicing", "hosting", "whmcs", "proration", "usage", "postgres"],
+    "description": "Advanced billing engine for Laravel: subscriptions, proration, usage metering, credit notes, and pluggable invoice/tax drivers. PostgreSQL.",
+    "keywords": ["laravel", "billing", "subscriptions", "invoicing", "saas", "iaas", "proration", "usage", "metered-billing", "postgres"],
     "license": "MIT",
     "type": "library",
     "require": {

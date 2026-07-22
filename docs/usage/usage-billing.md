@@ -18,6 +18,7 @@ use Meteric\Enums\Aggregation;
 MeterDimension::create([
     'product_id' => $product->id,
     'key' => 'cpu_hours',
+    'unit' => 'hour',
     'aggregation' => Aggregation::Sum,
     'rate' => '0.01200000',   // €0.012 per unit, high precision
     'currency' => 'EUR',
@@ -149,11 +150,13 @@ PHP, and pushes it. A platform like OpenStack fits the batch shape: fetch every
 server once, compute, record.
 
 ```php
-// app/Console/Kernel.php (or a scheduled job)
-$schedule->call(function () {
+// routes/console.php (or a scheduled job)
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::call(function () {
     $servers = OpenStack::servers();                 // one batch call
 
-    foreach (SubscriptionItem::whereType('vps')->with('subscription')->cursor() as $item) {
+    foreach (SubscriptionItem::whereHas('product', fn ($q) => $q->where('type', 'vps'))->with('subscription')->cursor() as $item) {
         $mbps = percentile95($servers[$item->resource_id]->bandwidthSamples());
         Meteric::recordUsage($item, 'bandwidth', $mbps);
     }

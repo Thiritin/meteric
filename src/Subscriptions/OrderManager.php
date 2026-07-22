@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Contracts\Clock;
-use Meteric\Enums\ChargeState;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\OrderState;
@@ -218,7 +217,7 @@ final class OrderManager
         $item->setRelation('price', $price);
 
         $kind = LineKind::from($content['kind']);
-        $this->charge($sub, $item, 'subscription_item', $item->id, $kind, (int) $content['amount_minor'],
+        $this->charge($item, 'subscription_item', $item->id, $kind, (int) $content['amount_minor'],
             $item->lineTitle(), $covers, (float) $content['quantity']);
 
         foreach ($content['addons'] ?? [] as $addon) {
@@ -231,7 +230,7 @@ final class OrderManager
                 'state' => ItemState::Active,
             ]);
 
-            $this->charge($sub, $item, 'addon', $addonModel->id, LineKind::Addon, (int) $addon['amount_minor'],
+            $this->charge($item, 'addon', $addonModel->id, LineKind::Addon, (int) $addon['amount_minor'],
                 $item->lineTitle(), $covers, (float) $addon['quantity']);
         }
 
@@ -248,11 +247,11 @@ final class OrderManager
                 'max_qty' => $opt['max_qty'] ?? null,
             ]);
 
-            $this->charge($sub, $item, 'item_option', $option->id, LineKind::Option, (int) $opt['amount_minor'],
+            $this->charge($item, 'item_option', $option->id, LineKind::Option, (int) $opt['amount_minor'],
                 ucfirst((string) $opt['key']), $covers, (float) $opt['quantity']);
 
             if ((int) ($opt['setup_minor'] ?? 0) > 0) {
-                $this->charge($sub, $item, 'item_option', $option->id, LineKind::Setup, (int) $opt['setup_minor'],
+                $this->charge($item, 'item_option', $option->id, LineKind::Setup, (int) $opt['setup_minor'],
                     ucfirst((string) $opt['key']).' setup', null, 1);
             }
         }
@@ -274,7 +273,6 @@ final class OrderManager
 
     /** Create a pending Charge using a frozen minor amount (zero amounts are skipped). */
     private function charge(
-        Subscription $sub,
         SubscriptionItem $item,
         string $originType,
         string $originId,
@@ -288,22 +286,14 @@ final class OrderManager
             return;
         }
 
-        Models::query(Charge::class)->create([
-            'account_id' => $sub->account_id,
-            'subscription_id' => $sub->id,
+        Charge::pendingForItem($item, [
             'origin_type' => $originType,
             'origin_id' => $originId,
             'kind' => $kind,
-            'billing_mode' => $item->billingMode(),
-            'state' => ChargeState::Pending,
-            'title' => $item->lineTitle(),
-            'group' => $item->group,
-            'line_group' => $item->id,
             'description' => $description,
             'quantity' => $quantity,
             'unit_minor' => $amountMinor,
             'amount_minor' => $amountMinor,
-            'currency' => $sub->currency,
             'covers' => $covers,
             'idempotency_key' => 'order_'.Str::uuid()->toString(),
         ]);

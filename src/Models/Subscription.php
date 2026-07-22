@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Meteric\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -18,6 +19,8 @@ use Meteric\Support\Period;
 /**
  * @property string $id
  * @property string $account_id
+ * @property ?string $customer_type
+ * @property ?string $customer_id
  * @property string $currency
  * @property SubscriptionState $state
  * @property AnchorMode $anchor_mode
@@ -27,6 +30,8 @@ use Meteric\Support\Period;
  * @property ?CarbonImmutable $trial_end
  * @property ?CarbonImmutable $cancel_at
  * @property ?CarbonImmutable $canceled_at
+ * @property int $version
+ * @property ?array $metadata
  */
 class Subscription extends MetericModel
 {
@@ -92,9 +97,14 @@ class Subscription extends MetericModel
             ->min();
     }
 
-    public function scopeDueForRenewal($query, CarbonImmutable $at)
+    public function scopeDueForRenewal(Builder $query, CarbonImmutable $at): Builder
     {
-        return $query->whereIn('state', ['active', 'trialing', 'past_due'])
+        return $query
+            ->whereIn('state', [
+                SubscriptionState::Active->value,
+                SubscriptionState::Trialing->value,
+                SubscriptionState::PastDue->value,
+            ])
             ->whereRaw('upper(current_period) <= ?', [$at]);
     }
 }

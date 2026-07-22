@@ -39,7 +39,7 @@ class SuspendPrepaid
 {
     public function handle(InvoiceOverdue $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             Meteric::pause($subscription);              // billing stops, no further invoices
             $this->provisioner->suspend($subscription); // grace, then delete
         }
@@ -85,7 +85,7 @@ class DunContract
 {
     public function handle(InvoiceOverdue $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             // No pause: the term keeps billing. Send a dunning notice instead.
             $this->dunning->notify($subscription, $event->invoice);
         }

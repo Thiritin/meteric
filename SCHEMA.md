@@ -21,6 +21,11 @@ Conventions: all tables `meteric_*`, money = `*_minor BIGINT` + `currency
 CHAR(3)`, time = `timestamptz`, periods = `tstzrange [start, end)`. Morphs =
 `*_type TEXT` + `*_id` (uuid or bigint via text; host PK type configurable).
 
+> **Scope.** Six tables that ship in the migrations have no DDL here yet:
+> `meteric_orders`, `meteric_product_options`, `meteric_product_option_values`,
+> `meteric_tax_rates`, `meteric_tax_registrations`, `meteric_invoice_numbers`.
+> Read `database/migrations/` for those.
+
 ### Money precision rule
 
 Two distinct things, two storage types:
@@ -48,7 +53,6 @@ Rates keep full precision; only the billable amount is rounded.
 > `varchar` + a `CHECK` listing the PHP enum's values (`Meteric\Support\Pg::enumCheck`).
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;    -- gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS btree_gist;  -- EXCLUDE: scalar = + range &&
 ```
 
@@ -159,7 +163,8 @@ CREATE TABLE meteric_meter_dimensions (
   key            text NOT NULL,                 -- 'cpu_hour' | 'traffic_out_gb' | 'iops' | 'slot_hour'
   unit           text NOT NULL,                 -- display unit
   aggregation    meteric_aggregation NOT NULL DEFAULT 'sum',
-  rate_minor     bigint NOT NULL CHECK (rate_minor >= 0),
+  rate           numeric(20,8) NOT NULL CHECK (rate >= 0),  -- per unit, or per block when block_size is set
+  block_size     numeric(20,6),                     -- bill per block of this many units (ceil); NULL = per unit
   currency       char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   included_qty   numeric(20,6) NOT NULL DEFAULT 0,   -- free allowance per cycle
   cap_minor      bigint,                            -- per-dimension cap
@@ -271,23 +276,6 @@ CREATE TABLE meteric_item_options (
 );
 ```
 
-
-### meteric_allowances
-Per-subscription-item override / tracking of included units (resets per cycle).
-
-```sql
-CREATE TABLE meteric_allowances (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id       uuid NOT NULL REFERENCES meteric_subscription_items(id) ON DELETE CASCADE,
-  dimension_id  uuid NOT NULL REFERENCES meteric_meter_dimensions(id) ON DELETE CASCADE,
-  included_qty  numeric(20,6) NOT NULL,
-  period        tstzrange NOT NULL,
-  consumed_qty  numeric(20,6) NOT NULL DEFAULT 0,
-  shared_pool   text,                           -- non-null ⇒ pooled across items (Hetzner project traffic)
-  UNIQUE (item_id, dimension_id, period)
-);
-```
-
 ---
 
 ## 3. Usage & periods (the no-double-bill core)
@@ -357,10 +345,15 @@ CREATE TABLE meteric_charges (
   kind            meteric_line_kind NOT NULL,
   billing_mode    meteric_billing_mode NOT NULL,
   state           meteric_charge_state NOT NULL DEFAULT 'pending',
-  description     text NOT NULL,
+  title           text,                        -- line name (product + resource)
+  "group"         text,                        -- invoice section heading (Domains, Usage, …)
+  line_group      uuid,                        -- owning subscription item: links a base line to its options/addons
+  description     text,                        -- multi-line detail (period, usage breakdown)
   quantity        numeric(20,6) NOT NULL DEFAULT 1,
-  unit_minor      bigint NOT NULL,
-  amount_minor    bigint NOT NULL,             -- signed (negative = credit)
+  unit            text,                        -- quantity unit label (month, hours, GB)
+  unit_minor      bigint,                      -- integer unit price (fixed/per-unit)
+  unit_rate       numeric(20,8),               -- sub-cent unit rate (usage), for display
+  amount_minor    bigint NOT NULL,             -- rounded billable amount; signed (negative = credit)
   currency        char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   covers          tstzrange,                   -- service period billed
   idempotency_key text NOT NULL,
@@ -433,9 +426,14 @@ CREATE TABLE meteric_invoice_lines (
   charge_id     uuid REFERENCES meteric_charges(id) ON DELETE SET NULL,
   parent_id     uuid REFERENCES meteric_invoice_lines(id) ON DELETE CASCADE,  -- sub-line
   kind          meteric_line_kind NOT NULL,
-  description   text NOT NULL,
+  title         text,                          -- line name (product + resource)
+  "group"       text,                          -- invoice section heading (Domains, Usage, …)
+  line_group    uuid,                          -- owning subscription item: links a base line to its options/addons
+  description   text,                          -- multi-line detail (period, usage breakdown)
   quantity      numeric(20,6) NOT NULL DEFAULT 1,
-  unit_minor    bigint NOT NULL,
+  unit          text,                          -- quantity unit label (month, hours, GB)
+  unit_minor    bigint,                        -- integer unit price (fixed/per-unit)
+  unit_rate     numeric(20,8),                 -- sub-cent unit rate (usage), for display
   amount_minor  bigint NOT NULL,               -- net, signed; own amount only (children carry theirs)
   tax_rate      numeric(6,4) NOT NULL DEFAULT 0,   -- e.g. 0.1900
   tax_minor     bigint NOT NULL DEFAULT 0,      -- per-line tax
@@ -496,43 +494,10 @@ CREATE TABLE meteric_payment_allocations (
 
 ---
 
-## 6. Discounts & coupons
+## 7. Ledger (double-entry audit)
 
-```sql
-CREATE TABLE meteric_coupons (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code           text NOT NULL UNIQUE,
-  type           meteric_discount_type NOT NULL,
-  value          numeric(12,4) NOT NULL,        -- percent (0–100) or fixed minor (store minor in value_minor)
-  value_minor    bigint,                        -- used when type = fixed
-  currency       char(3) CHECK (currency ~ '^[A-Z]{3}$'),
-  duration_cycles integer,                      -- NULL = forever, 3 = first 3 cycles
-  max_redemptions integer,
-  redeemed_count  integer NOT NULL DEFAULT 0,
-  valid_from     timestamptz,
-  valid_to       timestamptz,
-  exclusive      boolean NOT NULL DEFAULT false,
-  metadata       jsonb NOT NULL DEFAULT '{}',
-  created_at     timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE meteric_discounts (              -- a coupon applied to a target
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  coupon_id     uuid REFERENCES meteric_coupons(id) ON DELETE SET NULL,
-  target_type   text NOT NULL,                  -- subscription | item
-  target_id     text NOT NULL,
-  remaining_cycles integer,
-  created_at    timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX meteric_discounts_target_idx ON meteric_discounts (target_type, target_id);
-```
-
----
-
-## 7. Ledger (optional double-entry audit)
-
-Enable via config for accounting-grade trails. Every money movement = balanced
-debit/credit rows.
+The table is provisioned by migration but is not yet written to by any Meteric
+code path. Every money movement = balanced debit/credit rows.
 
 ```sql
 CREATE TABLE meteric_ledger (
@@ -591,24 +556,12 @@ CREATE TRIGGER meteric_lines_immutable BEFORE INSERT OR UPDATE OR DELETE ON mete
 
 ---
 
-## 9. Entity → Eloquent model map + helper methods
+## 9. Eloquent models
 
-Each table = one model. Helpers keep business logic in the domain, not callers.
-
-| Model | Key relations | Helper methods (business logic) |
-|-------|---------------|----------------------------------|
-| `BillingAccount` | `subscriptions`, `invoices`, `parent/children` | `consolidatedInvoice()`, `creditBalance()`, `applyCredit()`, `taxProfile()` |
-| `Product` | `prices`, `meterDimensions` | `priceFor($currency,$purpose)`, `pricingModel()`, `isMetered()`, `quote()` |
-| `Price` | `product` | `recurrence(): RecurrenceRule`, `isRecurring()`, `setupFee()`, `cap()`, `amountFor($qty)` (rounds rate×qty to minor) |
-| `Subscription` | `items`, `account`, `charges`, `invoices` | `add()`, `changePlan()`, `cancel()`, `pause()/resume()`, `renew()`, `nextRenewalAt()`, `currentPeriod()`, `quoteChange()` |
-| `SubscriptionItem` | `subscription`, `price`, `addons`, `options`, `usageRecords` | `setQuantity()`, `changePrice()`, `addAddon()`, `setOption()`, `recordUsage()`, `prorate($at)`, `accrueDue()`, `coversBilled($range)` |
-| `Addon` | `item`, `price` | `swap($price)`, `prorate($at)` |
-| `ItemOption` | `item`, `price` | `setValue()`, `lineAmount()` |
-| `Charge` | `account`, `subscription`, `invoice` | `markInvoiced($invoice)`, `void()`, `isCredit()`, `money(): Money`, `scopePending()` |
-| `Invoice` | `account`, `lines`, `creditNotes`, `payments` | `issueVia($driver)`, `recordPayment()`, `void()`, `creditNote()`, `isOverdue()`, `outstandingMinor()` |
-| `InvoiceLine` | `invoice`, `charge` | `gross(): Money`, `coversLabel()` |
-| `UsageRecord` | `item`, `dimension` | `scopeUnbilled()`, `rollup()` |
-| `Coupon` | `discounts` | `isValidAt($t)`, `redeem()`, `apply(Money $base)` |
+Each table maps to one model in `src/Models/`, all extending `MetericModel`.
+Relations and helper methods live there and change with the code, so this doc
+does not mirror them — read `src/Models/` for the authoritative list of models,
+their relations, and their public methods.
 
 **Quote** (no table) — `QuoteBuilder` returns a `Quote` value object with
 `->dueNow()`, `->recurring()`, `->lines()`, `->toArray()`/`->toJson()` for
@@ -622,30 +575,24 @@ custom Eloquent cast (`MoneyCast`). Ranges cast to a `Period` value object
 
 ## 10. Migration & extensibility notes
 
-- Table prefix + morph PK type (`uuid` vs `bigint`) configurable in
-  `config/meteric.php` (publish migrations, host owns them).
-- Enums added via `ALTER TYPE ... ADD VALUE` in later migrations — never
-  destructive.
+- Table prefix is configurable in `config/meteric.php` (`schema.prefix`, applied
+  by `Meteric\Support\Pg::table()` to models and migrations alike). Set it once,
+  before migrating. Constraint and index identifiers keep a fixed `meteric_`
+  spelling and are not affected by it.
+- Morph columns (`owner_type`/`owner_id`, `customer_*`, `resource_*`,
+  `origin_*`, `billable_*`) are plain `varchar` on both halves, so a host PK of
+  any type (uuid, bigint, ulid) stores as text. There is no config key for the
+  morph key type.
+- Enums are `varchar` + a named CHECK constraint generated from the PHP backed
+  enum (`Meteric\Support\Pg::enumCheck`) — no native `CREATE TYPE`, so no
+  `ALTER TYPE ... ADD VALUE`. Widening an enum means adding the case in PHP and
+  swapping the CHECK (drop + add), which runs inside a normal transactional
+  migration.
 - All `jsonb` config columns give the open-source consumer room to extend
   pricing/meter behavior without schema changes.
-- `btree_gist` + `pgcrypto` are the only hard extension deps; both standard.
+- `btree_gist` is the only hard extension dep; standard. `gen_random_uuid()` is
+  core since PG 13, so `pgcrypto` is not needed.
 - Money composite domain (`CREATE DOMAIN`) intentionally **not** used — keeping
   `*_minor`/`currency` as plain columns maps cleanly to Eloquent casts and to
   external drivers (lexoffice).
 
----
-
-## 11. Documentation deliverables (open-source)
-
-Ship with the package:
-- `README.md` — install, quickstart, the 5 core flows (subscribe, renew, change,
-  quote, invoice).
-- `docs/` — one page per domain: Pricing models, Recurrence & anchoring,
-  Proration, Billing timing, Charges vs invoices, Drivers (tax + invoice),
-  Quotes/checkout, Usage & metering, IP projects, Consolidated billing.
-- Each public method PHPDoc'd; each `Quote`/value object has a documented
-  `toArray()` contract for frontend consumers.
-- A worked **checkout example** (controller + Quote → JSON) so a client app can
-  build dynamic package calculation against a stable contract.
-- Upgrade guide + `CHANGELOG.md`; tests double as usage examples (one per UC).
-```

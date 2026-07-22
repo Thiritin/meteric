@@ -124,8 +124,9 @@ return [
         // Applied to every Meteric table name (models + migrations). Set this
         // ONCE before running migrations; changing it after migrating orphans
         // the existing tables. '' means no prefix (e.g. plain `subscriptions`).
-        // Constraint and index identifier names keep a fixed `meteric_`
-        // spelling regardless of this value and are not affected by it.
+        // Hand-named constraints and indexes (e.g. `meteric_subs_due_idx`)
+        // keep a fixed `meteric_` spelling, but auto-derived enum and currency
+        // CHECK names follow the prefixed table name.
         'prefix' => 'meteric_',
     ],
 ];

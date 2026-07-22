@@ -96,7 +96,7 @@ can have a parent for consolidated billing.
 - **Columns:** `account_id`, `number`, `driver`, `state`, `currency`, `subtotal_minor`, `tax_minor`, `total_minor`, `paid_minor`, `due_at`, `paid_at`.
 - **State:** `draft` (editable) -> `open` -> `paid` / `partially_paid` / `void`.
 - **Relationships:** `account()`, `lines()`, `creditNotes()`, `payments()`.
-- **Derived:** `charges(): Collection` and `subscriptions(): Collection` resolve through the lines (`invoice_lines.charge_id`).
+- **Derived:** `billedCharges(): Collection` and `billedSubscriptions(): Collection` resolve through the lines (`invoice_lines.charge_id`). The old `charges()` / `subscriptions()` names still work but are deprecated.
 - **Helpers:**
   - `total(): Money`, `outstanding(): Money`.
   - `isPaid(): bool`, `isOverdue(): bool`.

@@ -7,7 +7,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
-use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\CreditState;
 use Meteric\Enums\InvoiceState;
@@ -16,6 +15,7 @@ use Meteric\Facades\Meteric;
 use Meteric\Invoicing\CreditNoteDraft;
 use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Meteric\Invoicing\IssuedInvoice;
+use Meteric\Invoicing\LineComposer;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
@@ -49,7 +49,7 @@ function settlementDriver(): DatabaseInvoiceDriver
 
     return $resolved instanceof DatabaseInvoiceDriver
         ? $resolved
-        : new DatabaseInvoiceDriver(app(TaxResolver::class), app(Clock::class));
+        : new DatabaseInvoiceDriver(app(LineComposer::class), app(Clock::class));
 }
 
 it('leaves an invoice partially paid then flips to paid on the remainder', function () {

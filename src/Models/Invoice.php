@@ -28,9 +28,11 @@ use Meteric\Support\Models;
  * @property int $tax_minor
  * @property int $total_minor
  * @property int $paid_minor
+ * @property ?CarbonImmutable $issued_at
  * @property ?CarbonImmutable $due_at
  * @property ?CarbonImmutable $overdue_at
  * @property ?CarbonImmutable $paid_at
+ * @property int $version
  */
 class Invoice extends MetericModel
 {
@@ -70,14 +72,25 @@ class Invoice extends MetericModel
     /**
      * The charges this invoice bills, derived through its lines (a charge is
      * linked only via invoice_lines.charge_id). Manual lines carry no charge.
+     * Not a relationship — it executes a query and returns the set.
+     *
+     * @return Collection<int, Charge>
+     */
+    public function billedCharges(): Collection
+    {
+        $ids = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
+
+        return Models::query(Charge::class)->whereIn('id', $ids)->get();
+    }
+
+    /**
+     * @deprecated Use billedCharges(); the relation-style name misleads.
      *
      * @return Collection<int, Charge>
      */
     public function charges(): Collection
     {
-        $ids = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
-
-        return Models::query(Charge::class)->whereIn('id', $ids)->get();
+        return $this->billedCharges();
     }
 
     /** @return HasMany<CreditNote, $this> */
@@ -94,16 +107,27 @@ class Invoice extends MetericModel
 
     /**
      * Subscriptions this invoice bills, via its charges. Use in an InvoicePaid
-     * listener to resume the right services after payment.
+     * listener to resume the right services after payment. Not a relationship —
+     * it executes a query and returns the set.
      *
      * @return Collection<int, Subscription>
      */
-    public function subscriptions(): Collection
+    public function billedSubscriptions(): Collection
     {
         $chargeIds = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
         $ids = Models::query(Charge::class)->whereIn('id', $chargeIds)->whereNotNull('subscription_id')->distinct()->pluck('subscription_id');
 
         return Models::query(Subscription::class)->whereIn('id', $ids)->get();
+    }
+
+    /**
+     * @deprecated Use billedSubscriptions(); the relation-style name misleads.
+     *
+     * @return Collection<int, Subscription>
+     */
+    public function subscriptions(): Collection
+    {
+        return $this->billedSubscriptions();
     }
 
     public function total(): Money

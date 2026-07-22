@@ -143,12 +143,6 @@ class Price extends MetericModel
         return $effective;
     }
 
-    /**
-     * Charge for a quantity with the usage-style knobs applied: free allowance
-     * (included_qty), block rounding (block_size), then the tier/flat pricing of
-     * amountFor(), clamped to min_charge_minor and cap_minor. Use this for
-     * configurable options and addons so their settings match metered usage.
-     */
     public function isRelative(): bool
     {
         return $this->pricing_model === PricingModel::Relative;
@@ -180,6 +174,12 @@ class Price extends MetericModel
         return $base->multipliedBy($this->percent / 100, RoundingMode::HALF_UP);
     }
 
+    /**
+     * Charge for a quantity with the usage-style knobs applied: free allowance
+     * (included_qty), block rounding (block_size), then the tier/flat pricing of
+     * amountFor(), clamped to min_charge_minor and cap_minor. Use this for
+     * configurable options and addons so their settings match metered usage.
+     */
     public function amountForQuantity(float $quantity): Money
     {
         $amount = $this->amountFor($this->billedUnits($quantity));

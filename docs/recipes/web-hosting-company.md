@@ -340,7 +340,7 @@ class SuspendOverdueHosting
 {
     public function handle(InvoiceOverdue $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             Meteric::pause($subscription);
             $this->provisioner->suspend($subscription); // stop the hosting account
         }
@@ -348,7 +348,7 @@ class SuspendOverdueHosting
 }
 ```
 
-Resume when the invoice is paid. `Invoice::subscriptions()` gives you the set the
+Resume when the invoice is paid. `Invoice::billedSubscriptions()` gives you the set the
 invoice covered:
 
 ```php
@@ -359,7 +359,7 @@ class ResumeOnPayment
 {
     public function handle(InvoicePaid $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             if ($subscription->state === SubscriptionState::Paused) {
                 Meteric::resume($subscription);
                 $this->provisioner->start($subscription);

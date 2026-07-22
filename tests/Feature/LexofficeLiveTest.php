@@ -5,10 +5,10 @@ declare(strict_types=1);
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Meteric\Contracts\Clock;
-use Meteric\Contracts\TaxResolver;
 use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
+use Meteric\Invoicing\InvoiceManager;
+use Meteric\Invoicing\LineComposer;
 use Meteric\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Price;
@@ -30,14 +30,14 @@ beforeEach(function () {
 function liveMeteric(): Meteric
 {
     $driver = new LexofficeInvoiceDriver(
-        local: new DatabaseInvoiceDriver(app(TaxResolver::class), app(Clock::class)),
+        local: app(DatabaseInvoiceDriver::class),
         apiToken: (string) env('METERIC_LEXOFFICE_TOKEN'),
         baseUrl: (string) env('METERIC_LEXOFFICE_BASE_URL', 'https://api.lexoffice.io'),
         taxType: 'net',
         defaultCountry: 'DE',
     );
 
-    return new Meteric($driver);
+    return new Meteric(new InvoiceManager($driver, app(LineComposer::class)));
 }
 
 it('creates a real invoice in the lexoffice sandbox', function () {

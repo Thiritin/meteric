@@ -12,7 +12,6 @@ use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\AnchorMode;
-use Meteric\Enums\ChargeState;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
@@ -182,7 +181,7 @@ final class SubscriptionBuilder
 
         // One-off purchase: a single immediate charge, no recurrence/period guard.
         if (! $price->isRecurring()) {
-            $this->oneOffCharge($sub, $item, $price);
+            $this->oneOffCharge($item, $price);
             $item->forceFill(['current_period' => new Period($signup, $signup->addSecond())])->save();
 
             return $signup->addSecond();
@@ -200,26 +199,16 @@ final class SubscriptionBuilder
         return $plan->ongoing->end;
     }
 
-    private function oneOffCharge(Subscription $sub, SubscriptionItem $item, Price $price): void
+    private function oneOffCharge(SubscriptionItem $item, Price $price): void
     {
         $amount = $price->amountFor((float) $item->quantity);
 
-        Models::query(Charge::class)->create([
-            'account_id' => $sub->account_id,
-            'subscription_id' => $sub->id,
-            'origin_type' => 'subscription_item',
-            'origin_id' => $item->id,
+        Charge::pendingForItem($item, [
             'kind' => LineKind::OneOff,
-            'billing_mode' => $item->billingMode(),
-            'state' => ChargeState::Pending,
-            'title' => $item->lineTitle(),
-            'group' => $item->group,
-            'line_group' => $item->id,
             'description' => $price->purpose->value === 'setup' ? 'Setup' : null,
             'quantity' => $item->quantity,
             'unit_minor' => $price->amount_minor,
             'amount_minor' => $amount->getMinorAmount()->toInt(),
-            'currency' => $sub->currency,
             'idempotency_key' => 'oneoff_'.Str::uuid()->toString(),
         ]);
     }

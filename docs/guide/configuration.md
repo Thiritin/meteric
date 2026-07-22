@@ -1,7 +1,8 @@
 # Configuration
 
 `config/meteric.php` is published with `vendor:publish --tag=meteric-config`.
-Every key reads from an env var, so most setup is environment-driven.
+Nearly every key reads from an env var, so most setup is environment-driven.
+The exception is `schema.prefix`, a plain literal you edit in the published file.
 
 ## Currency
 
@@ -93,9 +94,10 @@ local invoice is always the source of truth. An unknown driver key throws. See
 
 `prefix` is prepended to every table name (`meteric_subscriptions`,
 `meteric_invoices`, and so on). Set it to your own prefix, or to `''` for
-unprefixed tables (`subscriptions`, `invoices`). Constraint and index names keep
-a fixed spelling regardless. Set the prefix before the first migration; changing
-it after the tables exist leaves the old tables behind.
+unprefixed tables (`subscriptions`, `invoices`). Hand-named constraints and
+indexes keep a fixed `meteric_` spelling, but auto-derived enum and currency
+CHECK names follow the prefixed table name. Set the prefix before the first
+migration; changing it after the tables exist leaves the old tables behind.
 
 ## Swapping models
 

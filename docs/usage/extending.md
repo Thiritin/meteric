@@ -24,7 +24,8 @@ All live in `Meteric\Events`. Register listeners the normal Laravel way.
 | `SubscriptionCancellationScheduled` | a future cancel was set (notice/confirmation) | `Subscription`, `CarbonImmutable $at`, `array $meta` |
 | `SubscriptionCanceled` | a subscription was terminated | `Subscription` |
 | `OrderCreated` | a pending order was placed | `Order` |
-| `OrderPaid` | an order was paid and materialized | `Order` |
+| `OrderPaid` | an order was paid and materialized | `Order`, `?Invoice`, `?Payment` |
+| `SubscriptionStarted` | a paid order became a subscription (the provisioning hook) | `Order`, `Subscription`, `?Invoice` |
 | `OrderCanceled` | a pending order was canceled | `Order` |
 | `OrderExpired` | a pending order passed its TTL | `Order` |
 
@@ -81,7 +82,7 @@ class SuspendOverdue
 {
     public function handle(InvoiceOverdue $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             if ($this->isContract($subscription)) {
                 continue; // keep invoicing, hand to debt collection
             }
@@ -96,7 +97,7 @@ class SuspendOverdue
 ## Resume on payment
 
 When the invoice is paid, resume the subscriptions it covered and start the
-service. `Invoice::subscriptions()` gives you the set to act on.
+service. `Invoice::billedSubscriptions()` gives you the set to act on.
 
 ```php
 use Meteric\Events\InvoicePaid;
@@ -106,7 +107,7 @@ class ResumeOnPayment
 {
     public function handle(InvoicePaid $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             if ($subscription->state !== SubscriptionState::Paused) {
                 continue;
             }

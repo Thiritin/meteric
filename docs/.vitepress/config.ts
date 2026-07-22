@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Meteric',
-  description: 'A billing engine for Laravel hosting systems: subscriptions, proration, usage metering, and a charge-vs-invoice safety model.',
+  description: 'An advanced billing engine for Laravel: subscriptions, proration, usage metering, and a charge-vs-invoice safety model.',
   lang: 'en-US',
   base: '/meteric/',
   cleanUrls: true,
