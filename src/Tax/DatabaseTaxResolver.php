@@ -12,6 +12,7 @@ use Ibericode\Vat\Validator;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Models\TaxRate;
 use Meteric\Models\TaxRegistration;
+use Meteric\Support\Models;
 use Throwable;
 
 /**
@@ -72,7 +73,7 @@ final class DatabaseTaxResolver implements TaxResolver
 
     private function registeredFor(string $country, CarbonImmutable $date): bool
     {
-        return TaxRegistration::query()->activeOn($date)
+        return Models::query(TaxRegistration::class)->activeOn($date)
             ->where(function ($q) use ($country) {
                 $q->where('country', $country);
                 if ($this->countries->isCountryCodeInEU($country)) {
@@ -84,7 +85,7 @@ final class DatabaseTaxResolver implements TaxResolver
 
     private function rateFor(string $country, string $category, CarbonImmutable $date): ?TaxRate
     {
-        $find = fn (string $cat) => TaxRate::query()->activeOn($date)
+        $find = fn (string $cat) => Models::query(TaxRate::class)->activeOn($date)
             ->where('country', $country)
             ->where('category', $cat)
             ->orderByDesc('effective_from')

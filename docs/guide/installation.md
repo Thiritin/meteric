@@ -15,13 +15,13 @@ add to `config/app.php`.
 ## What migrate creates
 
 The migrations create the `meteric_*` tables: products, prices, billing
-accounts, subscriptions and items, charges, invoices and lines, payments, tax
-rates and registrations, meter dimensions, usage records, billing periods,
-coupons, and discounts. Table names are prefixed `meteric_` (see
+accounts, subscriptions and items, charges, invoices and lines, payments, credit
+notes, tax rates and registrations, meter dimensions, usage records, billing
+periods, and orders. Table names are prefixed `meteric_` (see
 [Configuration](/guide/configuration)).
 
 Run them against PostgreSQL. The migration step enables `btree_gist` and
-`pgcrypto` and installs the GiST exclusion constraint on `meteric_billing_periods`.
+and installs the GiST exclusion constraint on `meteric_billing_periods`.
 If your database role cannot create extensions, see [Requirements](/guide/requirements).
 
 ## Making a model billable

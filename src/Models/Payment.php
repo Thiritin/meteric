@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Meteric\Support\Models;
 
 /**
  * @property int $amount_minor
@@ -32,13 +33,13 @@ class Payment extends MetericModel
     /** @return BelongsTo<BillingAccount, $this> */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
     /** @return HasMany<PaymentAllocation, $this> */
     public function allocations(): HasMany
     {
-        return $this->hasMany(PaymentAllocation::class, 'payment_id');
+        return $this->hasMany(Models::for(PaymentAllocation::class), 'payment_id');
     }
 
     public function amount(): Money

@@ -13,6 +13,7 @@ use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
 use Meteric\Pricing\Tiers;
+use Meteric\Support\Models;
 use Meteric\Support\MoneyMath;
 use Meteric\Support\RecurrenceRule;
 
@@ -71,7 +72,7 @@ class Price extends MetericModel
     /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
     public function recurrence(): RecurrenceRule
@@ -165,6 +166,13 @@ class Price extends MetericModel
      */
     public function amountOfBase(Money $base): Money
     {
+        $baseCurrency = $base->getCurrency()->getCurrencyCode();
+        if ($this->currency !== $baseCurrency) {
+            throw new \InvalidArgumentException(
+                "Relative price currency {$this->currency} does not match base currency {$baseCurrency}."
+            );
+        }
+
         if ($this->percent === null || $this->percent <= 0) {
             return Money::ofMinor(0, $base->getCurrency());
         }

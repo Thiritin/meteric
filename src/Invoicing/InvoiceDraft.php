@@ -22,6 +22,7 @@ final class InvoiceDraft
         public readonly string $currency,
         public readonly Collection $charges,
         public readonly string $idempotencyKey,
+        public readonly int $dueDays = 14,
         public readonly array $meta = [],
     ) {}
 }

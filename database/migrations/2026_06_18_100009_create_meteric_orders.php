@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
-use Meteric\Enums\CheckoutState;
+use Meteric\Enums\OrderState;
 use Meteric\Support\Pg;
 use Tpetry\PostgresqlEnhanced\Schema\Blueprint;
 use Tpetry\PostgresqlEnhanced\Support\Facades\Schema;
@@ -13,13 +13,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create(Pg::table('checkouts'), function (Blueprint $table) {
+        Schema::create(Pg::table('orders'), function (Blueprint $table) {
             $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->foreignUuid('account_id')->constrained(Pg::table('billing_accounts'))->restrictOnDelete();
             $table->string('customer_type');                  // frozen morph of the buyer
             $table->string('customer_id');
             $table->char('currency', 3);
-            $table->string('state')->default(CheckoutState::Pending->value);
+            $table->string('state')->default(OrderState::Pending->value);
             $table->string('anchor_mode')->default('signup');
             $table->smallInteger('anchor_day')->nullable();
             $table->string('first_period')->default('prorate_only');
@@ -50,15 +50,15 @@ return new class extends Migration
 
             $table->index('account_id');
             // Sweep target: only pending orders that can expire.
-            $table->index('expires_at', 'meteric_checkouts_expiry_idx')->where("state = 'pending'");
+            $table->index('expires_at', 'meteric_orders_expiry_idx')->where("state = 'pending'");
         });
-        Pg::currencyCheck(Pg::table('checkouts'));
-        Pg::enumCheck(Pg::table('checkouts'), 'state', CheckoutState::class);
-        Pg::check(Pg::table('checkouts'), 'meteric_checkouts_total_nonneg', 'total_minor >= 0');
+        Pg::currencyCheck(Pg::table('orders'));
+        Pg::enumCheck(Pg::table('orders'), 'state', OrderState::class);
+        Pg::check(Pg::table('orders'), 'meteric_orders_total_nonneg', 'total_minor >= 0');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists(Pg::table('checkouts'));
+        Schema::dropIfExists(Pg::table('orders'));
     }
 };

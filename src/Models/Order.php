@@ -9,8 +9,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Meteric\Enums\AnchorMode;
-use Meteric\Enums\CheckoutState;
 use Meteric\Enums\FirstPeriodPolicy;
+use Meteric\Enums\OrderState;
+use Meteric\Support\Models;
 
 /**
  * A persisted, immutable checkout: the frozen intended subscription, held in the
@@ -23,7 +24,7 @@ use Meteric\Enums\FirstPeriodPolicy;
  * @property string $customer_type
  * @property string $customer_id
  * @property string $currency
- * @property CheckoutState $state
+ * @property OrderState $state
  * @property AnchorMode $anchor_mode
  * @property ?int $anchor_day
  * @property FirstPeriodPolicy $first_period
@@ -46,14 +47,14 @@ use Meteric\Enums\FirstPeriodPolicy;
  */
 class Order extends MetericModel
 {
-    protected string $baseTable = 'checkouts';
+    protected string $baseTable = 'orders';
 
     protected $guarded = [];
 
     protected function casts(): array
     {
         return [
-            'state' => CheckoutState::class,
+            'state' => OrderState::class,
             'anchor_mode' => AnchorMode::class,
             'anchor_day' => 'integer',
             'first_period' => FirstPeriodPolicy::class,
@@ -76,7 +77,7 @@ class Order extends MetericModel
     /** @return BelongsTo<BillingAccount, $this> */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
     public function customer(): MorphTo
@@ -87,13 +88,13 @@ class Order extends MetericModel
     /** @return BelongsTo<Invoice, $this> */
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class, 'invoice_id');
+        return $this->belongsTo(Models::for(Invoice::class), 'invoice_id');
     }
 
     /** @return BelongsTo<Subscription, $this> */
     public function subscription(): BelongsTo
     {
-        return $this->belongsTo(Subscription::class, 'subscription_id');
+        return $this->belongsTo(Models::for(Subscription::class), 'subscription_id');
     }
 
     /** Gross total owed at checkout (subtotal + tax). */
@@ -104,11 +105,11 @@ class Order extends MetericModel
 
     public function isPending(): bool
     {
-        return $this->state === CheckoutState::Pending;
+        return $this->state === OrderState::Pending;
     }
 
     public function isConverted(): bool
     {
-        return $this->state === CheckoutState::Converted;
+        return $this->state === OrderState::Converted;
     }
 }

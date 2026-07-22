@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use Meteric\Enums\BillingMode;
-use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Invoicing\Drivers\DatabaseInvoiceDriver;
 use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
 use Meteric\Tax\DatabaseTaxResolver;
@@ -40,19 +38,6 @@ return [
     | One of brick/math RoundingMode names.
     */
     'rounding' => env('METERIC_ROUNDING', 'HALF_UP'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Anchoring & first period defaults
-    |--------------------------------------------------------------------------
-    | Global default; overridable per subscription/product.
-    */
-    'anchor' => [
-        'mode' => env('METERIC_ANCHOR_MODE', 'signup'),     // signup | fixed_day | fixed_dow
-        'day' => env('METERIC_ANCHOR_DAY', 1),
-        'first_period' => env('METERIC_FIRST_PERIOD', FirstPeriodPolicy::ProrateOnly->value),
-        'default_billing_mode' => BillingMode::InAdvance->value,
-    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -105,8 +90,6 @@ return [
             'database' => DatabaseInvoiceDriver::class,
             'lexoffice' => LexofficeInvoiceDriver::class,
         ],
-        // Mirror canonical record to DB even when a remote driver is primary.
-        'mirror_to_database' => env('METERIC_INVOICE_MIRROR', true),
 
         // Days after issue an invoice is due. meteric:mark-overdue uses this.
         'net_days' => (int) env('METERIC_INVOICE_NET_DAYS', 14),
@@ -122,30 +105,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Checkout (persisted orders)
+    | Orders (persisted, immutable)
     |--------------------------------------------------------------------------
     | Default minutes a pending order stays open before the meteric:run sweep
     | expires it (1 day). Set to 0 to disable expiry. Override per order with
     | ->expiresIn($minutes) on the builder.
     */
-    'checkout' => [
+    'order' => [
         'ttl_minutes' => (int) env('METERIC_CHECKOUT_TTL', 1440),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Ledger (double-entry audit)
-    |--------------------------------------------------------------------------
-    */
-    'ledger' => [
-        'enabled' => env('METERIC_LEDGER', false),
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Schema
     |--------------------------------------------------------------------------
-    | Morph key type for host references and Meteric PKs.
     */
     'schema' => [
         // Applied to every Meteric table name (models + migrations). Set this
@@ -154,6 +127,5 @@ return [
         // Constraint and index identifier names keep a fixed `meteric_`
         // spelling regardless of this value and are not affected by it.
         'prefix' => 'meteric_',
-        'morph_key' => env('METERIC_MORPH_KEY', 'uuid'), // uuid | bigint
     ],
 ];

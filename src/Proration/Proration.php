@@ -29,7 +29,7 @@ final class Proration
         $totalSeconds = $this->period->totalSeconds();
         $remainingSeconds = $this->period->remainingSecondsFrom($this->changeAt);
 
-        if ($this->unit === 'day') {
+        if (in_array(strtolower($this->unit), ['day', 'days'], true)) {
             $total = max(1.0, round($totalSeconds / 86400));
             $remaining = round($remainingSeconds / 86400);
 

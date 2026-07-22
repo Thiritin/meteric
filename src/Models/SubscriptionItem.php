@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Meteric\Casts\PeriodCast;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\ItemState;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -50,19 +51,19 @@ class SubscriptionItem extends MetericModel
     /** @return BelongsTo<Subscription, $this> */
     public function subscription(): BelongsTo
     {
-        return $this->belongsTo(Subscription::class, 'subscription_id');
+        return $this->belongsTo(Models::for(Subscription::class), 'subscription_id');
     }
 
     /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
     /** @return BelongsTo<Price, $this> */
     public function price(): BelongsTo
     {
-        return $this->belongsTo(Price::class, 'price_id');
+        return $this->belongsTo(Models::for(Price::class), 'price_id');
     }
 
     public function resource(): MorphTo
@@ -73,19 +74,19 @@ class SubscriptionItem extends MetericModel
     /** @return HasMany<Addon, $this> */
     public function addons(): HasMany
     {
-        return $this->hasMany(Addon::class, 'item_id');
+        return $this->hasMany(Models::for(Addon::class), 'item_id');
     }
 
     /** @return HasMany<ItemOption, $this> */
     public function options(): HasMany
     {
-        return $this->hasMany(ItemOption::class, 'item_id');
+        return $this->hasMany(Models::for(ItemOption::class), 'item_id');
     }
 
     /** @return HasMany<UsageRecord, $this> */
     public function usageRecords(): HasMany
     {
-        return $this->hasMany(UsageRecord::class, 'item_id');
+        return $this->hasMany(Models::for(UsageRecord::class), 'item_id');
     }
 
     /** Invoice line title: "Product - label" (e.g. "VPS XL - vps12345.example"), or just the product name. */

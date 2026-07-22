@@ -25,9 +25,11 @@ final class Prorator
     /** Net change when swapping amounts mid-period: credit old + charge new. */
     public function swap(Period $period, CarbonImmutable $changeAt, Money $oldFull, Money $newFull): Money
     {
-        $credit = $this->for($period, $changeAt, $oldFull)->creditAmount();
-        $charge = $this->for($period, $changeAt, $newFull)->amount();
+        // Both legs share the same ratio, so prorate the net delta and round
+        // once. Rounding the credit and the charge separately can leave the net
+        // off by a minor unit.
+        $ratio = $this->for($period, $changeAt, $newFull)->ratio();
 
-        return $charge->plus($credit);
+        return $newFull->minus($oldFull)->multipliedBy($ratio, $this->rounding);
     }
 }

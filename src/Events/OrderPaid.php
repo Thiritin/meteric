@@ -10,7 +10,7 @@ use Meteric\Models\Order;
 use Meteric\Models\Payment;
 
 /** An order was paid in full and converted into a real subscription + invoice. */
-final class CheckoutPaid
+final class OrderPaid
 {
     use Dispatchable;
 

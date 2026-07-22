@@ -12,6 +12,7 @@ use Meteric\Casts\PeriodCast;
 use Meteric\Enums\AnchorMode;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\SubscriptionState;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -52,7 +53,7 @@ class Subscription extends MetericModel
     /** @return BelongsTo<BillingAccount, $this> */
     public function account(): BelongsTo
     {
-        return $this->belongsTo(BillingAccount::class, 'account_id');
+        return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
     public function customer(): MorphTo
@@ -63,13 +64,13 @@ class Subscription extends MetericModel
     /** @return HasMany<SubscriptionItem, $this> */
     public function items(): HasMany
     {
-        return $this->hasMany(SubscriptionItem::class, 'subscription_id');
+        return $this->hasMany(Models::for(SubscriptionItem::class), 'subscription_id');
     }
 
     /** @return HasMany<Charge, $this> */
     public function charges(): HasMany
     {
-        return $this->hasMany(Charge::class, 'subscription_id');
+        return $this->hasMany(Models::for(Charge::class), 'subscription_id');
     }
 
     public function isBillable(): bool

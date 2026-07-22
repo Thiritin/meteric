@@ -61,9 +61,9 @@ A quote includes them as lines flagged `estimated` with the unit rate and a zero
 amount, and the quote's top-level `estimated` flag is set. Show them as "metered,
 billed monthly" rather than a fixed price.
 
-## Checkout
+## SubscriptionResult
 
-Checkout is subscribe then immediately invoice. Use the subscription builder and
+SubscriptionResult is subscribe then immediately invoice. Use the subscription builder and
 end with `checkout()` instead of `create()`.
 
 ```php
@@ -79,7 +79,7 @@ $result->subscription;  // created Subscription
 $result->invoice;       // the issued Invoice, or null if nothing was due
 ```
 
-`checkout()` returns a `Checkout` with the created subscription and the invoice
+`checkout()` returns a `SubscriptionResult` with the created subscription and the invoice
 that was issued for the charges due now. Because the quote and the real flow
 share the same calculators, the invoice total matches what you quoted for the
 same inputs.

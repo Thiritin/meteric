@@ -35,6 +35,7 @@ use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /** Lifecycle operations on existing subscriptions: renew, change plan, cancel. */
@@ -131,7 +132,7 @@ final class SubscriptionManager
         $at ??= $this->clock->now();
         $count = 0;
 
-        Invoice::query()
+        Models::query(Invoice::class)
             ->whereIn('state', [InvoiceState::Open->value, InvoiceState::PartiallyPaid->value])
             ->whereNotNull('due_at')
             ->where('due_at', '<', $at)
@@ -275,15 +276,15 @@ final class SubscriptionManager
             return null;
         }
 
-        $chargeIds = Charge::query()
+        $chargeIds = Models::query(Charge::class)
             ->where('origin_type', 'subscription_item')
             ->where('origin_id', $item->id)
             ->whereRaw('covers && ?::tstzrange', [$item->current_period->toRange()])
             ->latest('created_at')
             ->pluck('id');
 
-        return Invoice::query()
-            ->whereIn('id', InvoiceLine::query()->whereIn('charge_id', $chargeIds)->select('invoice_id'))
+        return Models::query(Invoice::class)
+            ->whereIn('id', Models::query(InvoiceLine::class)->whereIn('charge_id', $chargeIds)->select('invoice_id'))
             ->where('state', '<>', InvoiceState::Void->value)
             ->latest('created_at')
             ->first();
@@ -452,7 +453,7 @@ final class SubscriptionManager
         $at ??= $this->clock->now();
         $count = 0;
 
-        Subscription::query()
+        Models::query(Subscription::class)
             ->whereNotNull('cancel_at')
             ->where('cancel_at', '<=', $at)
             ->whereIn('state', [SubscriptionState::Active->value, SubscriptionState::Trialing->value, SubscriptionState::PastDue->value])
@@ -471,7 +472,7 @@ final class SubscriptionManager
 
     private function prorationCharge(SubscriptionItem $item, Subscription $sub, LineKind $kind, Money $amount, string $desc): void
     {
-        Charge::create([
+        Models::query(Charge::class)->create([
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
             'origin_type' => 'subscription_item',

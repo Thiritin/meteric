@@ -7,6 +7,7 @@ namespace Meteric\Models;
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Enums\OptionType;
+use Meteric\Support\Models;
 
 /**
  * @property string $key
@@ -37,13 +38,13 @@ class ItemOption extends MetericModel
     /** @return BelongsTo<SubscriptionItem, $this> */
     public function item(): BelongsTo
     {
-        return $this->belongsTo(SubscriptionItem::class, 'item_id');
+        return $this->belongsTo(Models::for(SubscriptionItem::class), 'item_id');
     }
 
     /** @return BelongsTo<Price, $this> */
     public function price(): BelongsTo
     {
-        return $this->belongsTo(Price::class, 'price_id');
+        return $this->belongsTo(Models::for(Price::class), 'price_id');
     }
 
     public function boolValue(): bool

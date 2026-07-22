@@ -13,3 +13,5 @@ build/
 coverage/
 
 /.claude/
+/.playwright-mcp/
+/meteric-demo-*.png

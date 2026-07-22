@@ -8,7 +8,7 @@ use Meteric\Models\Invoice;
 use Meteric\Models\Subscription;
 
 /** Result of a checkout: the created subscription + the invoice billed now. */
-final class Checkout
+final class SubscriptionResult
 {
     public function __construct(
         public readonly Subscription $subscription,

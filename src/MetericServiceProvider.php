@@ -22,9 +22,9 @@ use Meteric\Invoicing\Drivers\LexofficeInvoiceDriver;
 use Meteric\Pricing\CheckoutPricer;
 use Meteric\Proration\Prorator;
 use Meteric\Quoting\QuoteBuilder;
-use Meteric\Subscriptions\CheckoutBuilder;
-use Meteric\Subscriptions\CheckoutManager;
 use Meteric\Subscriptions\ItemManager;
+use Meteric\Subscriptions\OrderBuilder;
+use Meteric\Subscriptions\OrderManager;
 use Meteric\Subscriptions\SubscriptionBuilder;
 use Meteric\Subscriptions\SubscriptionManager;
 use Meteric\Support\SystemClock;
@@ -55,7 +55,10 @@ final class MetericServiceProvider extends ServiceProvider
         $this->app->singleton(TaxResolver::class, function ($app) {
             $cfg = $app['config']['meteric.tax'];
             $key = $cfg['driver'] ?? 'ibericode';
-            $class = $cfg['drivers'][$key] ?? EuVatResolver::class;
+            if (! isset($cfg['drivers'][$key])) {
+                throw new \InvalidArgumentException("Unknown Meteric tax driver [{$key}]. Add it to config('meteric.tax.drivers').");
+            }
+            $class = $cfg['drivers'][$key];
 
             return match ($class) {
                 DatabaseTaxResolver::class => new DatabaseTaxResolver(
@@ -83,11 +86,14 @@ final class MetericServiceProvider extends ServiceProvider
         $this->app->singleton(InvoiceDriver::class, function ($app) {
             $cfg = $app['config']['meteric.invoice'];
             $key = $cfg['driver'] ?? 'database';
-            $class = $cfg['drivers'][$key] ?? DatabaseInvoiceDriver::class;
+            if (! isset($cfg['drivers'][$key])) {
+                throw new \InvalidArgumentException("Unknown Meteric invoice driver [{$key}]. Add it to config('meteric.invoice.drivers').");
+            }
+            $class = $cfg['drivers'][$key];
 
             return match ($class) {
                 LexofficeInvoiceDriver::class => new LexofficeInvoiceDriver(
-                    local: new DatabaseInvoiceDriver($app->make(TaxResolver::class)),
+                    local: new DatabaseInvoiceDriver($app->make(TaxResolver::class), $app->make(Clock::class)),
                     apiToken: (string) ($cfg['lexoffice']['api_token'] ?? ''),
                     baseUrl: $cfg['lexoffice']['base_url'] ?? 'https://api.lexoffice.io',
                     taxType: $cfg['lexoffice']['tax_type'] ?? 'net',
@@ -146,17 +152,17 @@ final class MetericServiceProvider extends ServiceProvider
             tax: $app->make(TaxResolver::class),
         ));
 
-        $this->app->singleton(CheckoutManager::class, fn ($app) => new CheckoutManager(
+        $this->app->singleton(OrderManager::class, fn ($app) => new OrderManager(
             clock: $app->make(Clock::class),
             planner: $app->make(PeriodPlanner::class),
         ));
 
         // Fresh builder per order (stateful).
-        $this->app->bind(CheckoutBuilder::class, fn ($app) => new CheckoutBuilder(
+        $this->app->bind(OrderBuilder::class, fn ($app) => new OrderBuilder(
             clock: $app->make(Clock::class),
             pricer: $app->make(CheckoutPricer::class),
             defaultCurrency: $app['config']['meteric.currency'] ?? 'EUR',
-            ttlMinutes: $app['config']['meteric.checkout.ttl_minutes'] ?? null,
+            ttlMinutes: $app['config']['meteric.order.ttl_minutes'] ?? null,
         ));
     }
 

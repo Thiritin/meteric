@@ -19,6 +19,7 @@ use Meteric\Invoicing\IssuedInvoice;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
+use Meteric\Support\Models;
 use RuntimeException;
 
 /**
@@ -51,11 +52,11 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         $issued = $this->local->issue($draft);
 
         /** @var Invoice $invoice */
-        $invoice = Invoice::with('lines', 'account')->findOrFail($issued->invoiceId);
+        $invoice = Models::query(Invoice::class)->with('lines', 'account')->findOrFail($issued->invoiceId);
 
         $body = $this->invoiceBody($invoice);
 
-        $response = $this->client()->post('/v1/invoices?finalize=true', $body);
+        $response = $this->client($invoice->id)->post('/v1/invoices?finalize=true', $body);
         $data = $this->ok($response, 'invoice');
 
         $externalId = (string) $data['id'];
@@ -94,7 +95,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
 
         $body = $this->invoiceBody($invoice);
 
-        $response = $this->client()->post('/v1/invoices?finalize=true', $body);
+        $response = $this->client($invoice->id)->post('/v1/invoices?finalize=true', $body);
         $data = $this->ok($response, 'invoice');
 
         $externalId = (string) $data['id'];
@@ -118,11 +119,11 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         $result = $this->local->creditNote($invoice, $draft);
 
         /** @var CreditNote $note */
-        $note = CreditNote::with('invoice.account')->findOrFail($result->creditNoteId);
+        $note = Models::query(CreditNote::class)->with('invoice.account')->findOrFail($result->creditNoteId);
 
         $body = $this->creditNoteBody($note, $draft);
 
-        $response = $this->client()->post('/v1/credit-notes?finalize=true', $body);
+        $response = $this->client($note->id)->post('/v1/credit-notes?finalize=true', $body);
         $data = $this->ok($response, 'credit-note');
 
         $externalId = (string) $data['id'];
@@ -144,7 +145,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
      */
     public function void(IssuedInvoice $invoice): void
     {
-        $model = Invoice::find($invoice->invoiceId);
+        $model = Models::query(Invoice::class)->find($invoice->invoiceId);
 
         if ($model !== null && $model->external_id === null) {
             $this->local->void($invoice);
@@ -328,11 +329,27 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
         return (float) $money->getAmount()->toScale(2, RoundingMode::HALF_UP)->__toString();
     }
 
-    private function client(): PendingRequest
+    /**
+     * A configured lexoffice client. Passing an idempotency key makes a POST
+     * safe to retry: if the first attempt reached lexoffice but the response was
+     * lost, the retry returns the original document instead of creating a
+     * second finalized (legally numbered) invoice. Use a value stable across
+     * resyncs of the same local record (the invoice/credit-note id).
+     */
+    private function client(?string $idempotencyKey = null): PendingRequest
     {
-        return Http::withToken($this->apiToken)
+        $request = Http::withToken($this->apiToken)
             ->acceptJson()
-            ->baseUrl($this->baseUrl);
+            ->baseUrl($this->baseUrl)
+            ->connectTimeout(10)
+            ->timeout(30)
+            ->retry(3, 500, throw: false);
+
+        if ($idempotencyKey !== null) {
+            $request->withHeaders(['Idempotency-Key' => $idempotencyKey]);
+        }
+
+        return $request;
     }
 
     /**

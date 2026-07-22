@@ -11,13 +11,13 @@ use Illuminate\Support\Str;
 use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\ChargeState;
-use Meteric\Enums\CheckoutState;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
+use Meteric\Enums\OrderState;
 use Meteric\Enums\SubscriptionState;
-use Meteric\Events\CheckoutCanceled;
-use Meteric\Events\CheckoutExpired;
-use Meteric\Events\CheckoutPaid;
+use Meteric\Events\OrderCanceled;
+use Meteric\Events\OrderExpired;
+use Meteric\Events\OrderPaid;
 use Meteric\Events\SubscriptionStarted;
 use Meteric\Meteric;
 use Meteric\Models\Addon;
@@ -29,6 +29,7 @@ use Meteric\Models\Payment;
 use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -38,7 +39,7 @@ use Meteric\Support\Period;
  * change mid-flight never moves the order's figures. Conversion is idempotent
  * (row lock + state guard), so a double payment yields exactly one subscription.
  */
-final class CheckoutManager
+final class OrderManager
 {
     public function __construct(private Clock $clock, private PeriodPlanner $planner) {}
 
@@ -82,11 +83,11 @@ final class CheckoutManager
         }
 
         $order->forceFill([
-            'state' => CheckoutState::Canceled,
+            'state' => OrderState::Canceled,
             'canceled_at' => $at ?? $this->clock->now(),
         ])->save();
 
-        CheckoutCanceled::dispatch($order);
+        OrderCanceled::dispatch($order);
 
         return $order;
     }
@@ -97,14 +98,14 @@ final class CheckoutManager
         $at ??= $this->clock->now();
         $count = 0;
 
-        Order::query()
-            ->where('state', CheckoutState::Pending->value)
+        Models::query(Order::class)
+            ->where('state', OrderState::Pending->value)
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', $at)
             ->cursor()
             ->each(function (Order $order) use ($at, &$count): void {
-                $order->forceFill(['state' => CheckoutState::Expired, 'canceled_at' => $at])->save();
-                CheckoutExpired::dispatch($order);
+                $order->forceFill(['state' => OrderState::Expired, 'canceled_at' => $at])->save();
+                OrderExpired::dispatch($order);
                 $count++;
             });
 
@@ -121,7 +122,7 @@ final class CheckoutManager
         $paying = $amount !== null && $amount->isPositive();
 
         $result = DB::transaction(function () use ($order, $amount, $ref, $at, $paying): array {
-            $locked = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $locked = Models::query(Order::class)->lockForUpdate()->findOrFail($order->id);
 
             // Idempotency guard: already converted -> return unchanged.
             if (! $locked->isPending() || $locked->subscription_id !== null) {
@@ -132,7 +133,7 @@ final class CheckoutManager
             $trialEnd = $locked->trial_days > 0 ? $when->addDays($locked->trial_days) : null;
             $signup = $trialEnd ?? $when;
 
-            $sub = Subscription::create([
+            $sub = Models::query(Subscription::class)->create([
                 'account_id' => $locked->account_id,
                 'customer_type' => $locked->customer_type,
                 'customer_id' => $locked->customer_id,
@@ -162,7 +163,7 @@ final class CheckoutManager
             }
 
             $locked->forceFill([
-                'state' => CheckoutState::Converted,
+                'state' => OrderState::Converted,
                 'subscription_id' => $sub->id,
                 'invoice_id' => $invoice?->id,
                 'paid_at' => $paying ? $when : null,
@@ -176,7 +177,7 @@ final class CheckoutManager
         [$converted, $sub, $invoice, $payment] = $result;
 
         if ($sub instanceof Subscription) {
-            CheckoutPaid::dispatch($converted, $invoice, $payment);
+            OrderPaid::dispatch($converted, $invoice, $payment);
             SubscriptionStarted::dispatch($converted, $sub, $invoice);
         }
 
@@ -193,14 +194,14 @@ final class CheckoutManager
      */
     private function materializeItem(Subscription $sub, Order $order, array $content, CarbonImmutable $signup): CarbonImmutable
     {
-        $price = Price::find($content['price_id']);
+        $price = Models::query(Price::class)->find($content['price_id']);
         if ($price === null) {
             throw new \RuntimeException("Order price {$content['price_id']} no longer resolves.");
         }
 
         $covers = $this->itemPeriod($price, $order, $signup);
 
-        $item = SubscriptionItem::create([
+        $item = Models::query(SubscriptionItem::class)->create([
             'subscription_id' => $sub->id,
             'product_id' => $content['product_id'],
             'price_id' => $price->id,
@@ -221,7 +222,7 @@ final class CheckoutManager
             $item->lineTitle(), $covers, (float) $content['quantity']);
 
         foreach ($content['addons'] ?? [] as $addon) {
-            $addonModel = Addon::create([
+            $addonModel = Models::query(Addon::class)->create([
                 'item_id' => $item->id,
                 'product_id' => $addon['product_id'],
                 'price_id' => $addon['price_id'],
@@ -235,7 +236,7 @@ final class CheckoutManager
         }
 
         foreach ($content['options'] ?? [] as $opt) {
-            $option = ItemOption::create([
+            $option = Models::query(ItemOption::class)->create([
                 'item_id' => $item->id,
                 'key' => $opt['key'],
                 'type' => $opt['type'],
@@ -287,7 +288,7 @@ final class CheckoutManager
             return;
         }
 
-        Charge::create([
+        Models::query(Charge::class)->create([
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
             'origin_type' => $originType,

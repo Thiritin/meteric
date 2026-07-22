@@ -15,11 +15,10 @@ it('runs all migrations and creates the core tables', function () {
     foreach ([
         'billing_accounts', 'products', 'prices',
         'meter_dimensions', 'subscriptions', 'subscription_items',
-        'addons', 'item_options', 'allowances',
+        'addons', 'item_options',
         'usage_records', 'billing_periods', 'charges',
         'invoices', 'invoice_lines', 'credit_notes',
-        'payments', 'payment_allocations', 'coupons',
-        'discounts', 'ledger',
+        'payments', 'payment_allocations', 'ledger',
     ] as $name) {
         $table = Pg::table($name);
         expect(Schema::hasTable($table))->toBeTrue("missing table {$table}");

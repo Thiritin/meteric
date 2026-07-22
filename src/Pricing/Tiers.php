@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Meteric\Pricing;
 
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 
 /**
@@ -24,7 +26,14 @@ final class Tiers
     {
         $rate = self::rateFor($tiers, $quantity);
 
-        return Money::ofMinor((int) round($rate * $quantity), $currency);
+        // Multiply in BigDecimal and round once, so a fractional quantity cannot
+        // drift the minor total the way native float arithmetic does.
+        $minor = BigDecimal::of((string) $rate)
+            ->multipliedBy(BigDecimal::of((string) $quantity))
+            ->toScale(0, RoundingMode::HALF_UP)
+            ->toInt();
+
+        return Money::ofMinor($minor, $currency);
     }
 
     /**
@@ -32,21 +41,27 @@ final class Tiers
      */
     public static function graduated(array $tiers, float $quantity, string $currency): Money
     {
-        $total = 0.0;
-        $prev = 0.0;
+        $qty = BigDecimal::of((string) $quantity);
+        $total = BigDecimal::zero();
+        $prev = BigDecimal::zero();
 
         foreach ($tiers as $tier) {
-            $bound = $tier['up_to'] === null ? INF : (float) $tier['up_to'];
-            $slice = max(0.0, min($quantity, $bound) - $prev);
-            $total += $slice * (int) $tier['unit_minor'];
+            $unbounded = $tier['up_to'] === null;
+            $bound = $unbounded ? $qty : BigDecimal::of((string) $tier['up_to']);
+            $upper = $bound->isLessThan($qty) ? $bound : $qty;
+
+            $slice = $upper->minus($prev);
+            if ($slice->isPositive()) {
+                $total = $total->plus($slice->multipliedBy((string) (int) $tier['unit_minor']));
+            }
             $prev = $bound;
 
-            if ($quantity <= $bound) {
+            if ($unbounded || $qty->isLessThanOrEqualTo($bound)) {
                 break;
             }
         }
 
-        return Money::ofMinor((int) round($total), $currency);
+        return Money::ofMinor($total->toScale(0, RoundingMode::HALF_UP)->toInt(), $currency);
     }
 
     /**

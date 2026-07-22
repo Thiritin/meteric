@@ -15,7 +15,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('CREATE EXTENSION IF NOT EXISTS pgcrypto');   // gen_random_uuid()
+        // gen_random_uuid() is core since PG 13, so pgcrypto is not needed.
         DB::statement('CREATE EXTENSION IF NOT EXISTS btree_gist'); // EXCLUDE: scalar = + range &&
     }
 

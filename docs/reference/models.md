@@ -141,14 +141,6 @@ maps to invoices.
 - **Relationships:** `item()`, `dimension()`.
 - **Helpers:** `scopeUnbilled($q)`: records with no `charge_id`.
 
-## Allowance
-
-`meteric_allowances`: consumed-versus-included tracking for a dimension.
-
-- **Columns:** `included_qty`, `consumed_qty`, `period` (Period).
-- **Relationships:** `item()`, `dimension()`.
-- **Helpers:** `remaining(): float`.
-
 ## Addon / ItemOption
 
 Mid-cycle item extras.
@@ -180,8 +172,6 @@ The two tables behind the database tax driver. See [Tax](/usage/tax).
 - **TaxRate (`meteric_tax_rates`):** `country`, `region`, `category`, `rate` (fraction string), `source`, `effective_from`, `effective_to`. Helper: `rateFraction(): float`, scope `activeOn($q, $date)`.
 - **TaxRegistration (`meteric_tax_registrations`):** `country`, `scheme`, `number`, `valid_from`, `valid_to`. Scope `activeOn($q, $date)`.
 
-## Coupon / Discount / CreditNote
+## CreditNote
 
-- **Coupon (`meteric_coupons`):** `code`, `type`, `value`, `value_minor`, `max_redemptions`, `redeemed_count`, `valid_from`, `valid_to`. Helpers: `isValidAt(CarbonImmutable $at): bool`, `discountFor(Money $base): Money`.
-- **Discount (`meteric_discounts`):** `remaining_cycles`; relationships `coupon()`, `target()` (morph).
-- **CreditNote (`meteric_credit_notes`):** `state`, `number`, `reason`, `amount_minor` (net), `tax_minor` (mirrors the invoice VAT), `currency`; relationship `invoice()`; helper `amount(): Money`. See [Credit notes and refunds](/usage/invoicing#credit-notes-and-refunds).
+- **CreditNote (`meteric_credit_notes`):** `state`, `number`, `reason`, `amount_minor` (net), `tax_minor` (the invoice's blended VAT on that net), `currency`; relationship `invoice()`; helper `amount(): Money`. See [Credit notes and refunds](/usage/invoicing#credit-notes-and-refunds).

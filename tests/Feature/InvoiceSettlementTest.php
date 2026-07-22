@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Brick\Money\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\ChargeState;
@@ -48,7 +49,7 @@ function settlementDriver(): DatabaseInvoiceDriver
 
     return $resolved instanceof DatabaseInvoiceDriver
         ? $resolved
-        : new DatabaseInvoiceDriver(app(TaxResolver::class));
+        : new DatabaseInvoiceDriver(app(TaxResolver::class), app(Clock::class));
 }
 
 it('leaves an invoice partially paid then flips to paid on the remainder', function () {

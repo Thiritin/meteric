@@ -16,6 +16,7 @@ use Meteric\Models\Charge;
 use Meteric\Models\MeterDimension;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Models\UsageRecord;
+use Meteric\Support\Models;
 use Meteric\Support\Period;
 
 /**
@@ -37,7 +38,7 @@ final class UsageRollup
     ): UsageRecord {
         $dimension = $this->dimension($item, $dimensionKey);
 
-        return UsageRecord::firstOrCreate(
+        return Models::query(UsageRecord::class)->firstOrCreate(
             ['idempotency_key' => $idempotencyKey ?? (string) Str::uuid()],
             [
                 'item_id' => $item->id,
@@ -63,14 +64,14 @@ final class UsageRollup
         return DB::transaction(function () use ($item, $sub, $period, &$created): array {
             // Discover dimensions from the usage itself, not the item's current product —
             // so usage recorded before a plan change (different product) still rolls up.
-            $dimensionIds = UsageRecord::query()->unbilled()
+            $dimensionIds = Models::query(UsageRecord::class)->unbilled()
                 ->where('item_id', $item->id)
                 ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
                 ->distinct()->pluck('dimension_id');
 
             foreach ($dimensionIds as $dimensionId) {
-                $dimension = MeterDimension::findOrFail($dimensionId);
-                $records = UsageRecord::query()->unbilled()
+                $dimension = Models::query(MeterDimension::class)->findOrFail($dimensionId);
+                $records = Models::query(UsageRecord::class)->unbilled()
                     ->where('item_id', $item->id)
                     ->where('dimension_id', $dimension->id)
                     ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
@@ -83,11 +84,25 @@ final class UsageRollup
 
                 $used = $this->aggregate($records->pluck('quantity')->all(), $dimension->aggregation);
                 if (! $this->reserve($item, $dimension->id, $period)) {
-                    continue; // window already billed for this dimension
+                    // Window already billed for this dimension. Attach these
+                    // late-arriving records to the existing window charge so they
+                    // leave the unbilled pool instead of being re-scanned forever;
+                    // the closed window is never billed twice.
+                    $existing = Models::query(Charge::class)
+                        ->where('origin_id', $item->id)
+                        ->where('dimension_id', $dimension->id)
+                        ->where('kind', LineKind::Usage->value)
+                        ->whereRaw('covers && ?::tstzrange', [$period->toRange()])
+                        ->first();
+                    if ($existing !== null) {
+                        Models::query(UsageRecord::class)->whereIn('id', $records->pluck('id'))->update(['charge_id' => $existing->id]);
+                    }
+
+                    continue;
                 }
 
                 $amount = $dimension->amountFor($used);
-                $charge = Charge::create([
+                $charge = Models::query(Charge::class)->create([
                     'account_id' => $sub->account_id,
                     'subscription_id' => $sub->id,
                     'origin_type' => 'subscription_item',
@@ -113,10 +128,13 @@ final class UsageRollup
                         'overage' => $dimension->overage($used),
                         'block_size' => $dimension->block_size,
                     ],
-                    'idempotency_key' => 'usage_'.Str::uuid()->toString(),
+                    // Deterministic key: a retry of the same window+dimension
+                    // collides on the unique index instead of billing a second
+                    // charge, backing up the billing-period guard.
+                    'idempotency_key' => 'usage_'.substr(hash('sha256', $item->id.$dimension->id.$period->toRange()), 0, 34),
                 ]);
 
-                UsageRecord::whereIn('id', $records->pluck('id'))->update(['charge_id' => $charge->id]);
+                Models::query(UsageRecord::class)->whereIn('id', $records->pluck('id'))->update(['charge_id' => $charge->id]);
                 $created[] = $charge;
             }
 
@@ -126,7 +144,7 @@ final class UsageRollup
 
     private function dimension(SubscriptionItem $item, string $key): MeterDimension
     {
-        return MeterDimension::query()
+        return Models::query(MeterDimension::class)
             ->where('product_id', $item->product_id)
             ->where('key', $key)
             ->firstOrFail();
@@ -152,7 +170,7 @@ final class UsageRollup
 
     private function reserve(SubscriptionItem $item, string $dimensionId, Period $period): bool
     {
-        $overlaps = BillingPeriod::query()
+        $overlaps = Models::query(BillingPeriod::class)
             ->where('item_id', $item->id)
             ->where('dimension_id', $dimensionId)
             ->whereRaw('covers && ?::tstzrange', [$period->toRange()])
@@ -162,7 +180,7 @@ final class UsageRollup
             return false;
         }
 
-        BillingPeriod::create(['item_id' => $item->id, 'dimension_id' => $dimensionId, 'covers' => $period]);
+        Models::query(BillingPeriod::class)->create(['item_id' => $item->id, 'dimension_id' => $dimensionId, 'covers' => $period]);
 
         return true;
     }

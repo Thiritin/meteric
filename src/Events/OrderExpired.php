@@ -8,7 +8,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Meteric\Models\Order;
 
 /** A pending order passed its expiry and was swept to expired. */
-final class CheckoutExpired
+final class OrderExpired
 {
     use Dispatchable;
 

@@ -9,13 +9,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\AnchorMode;
-use Meteric\Enums\CheckoutState;
 use Meteric\Enums\FirstPeriodPolicy;
-use Meteric\Events\CheckoutCreated;
+use Meteric\Enums\OrderState;
+use Meteric\Events\OrderCreated;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Order;
 use Meteric\Models\Price;
 use Meteric\Pricing\CheckoutPricer;
+use Meteric\Support\Models;
 
 /**
  * Fluent checkout creation. Mirrors SubscriptionBuilder, but instead of starting
@@ -24,7 +25,7 @@ use Meteric\Pricing\CheckoutPricer;
  * attach to the item most recently added. No Subscription/Charge/Invoice exists
  * until the order is paid.
  */
-final class CheckoutBuilder
+final class OrderBuilder
 {
     private ?BillingAccount $account = null;
 
@@ -190,12 +191,12 @@ final class CheckoutBuilder
             throw new \InvalidArgumentException('An order total cannot be negative.');
         }
 
-        $order = Order::create([
+        $order = Models::query(Order::class)->create([
             'account_id' => $account->id,
             'customer_type' => $this->customer?->getMorphClass() ?? $account->owner_type,
             'customer_id' => $this->customer?->getKey() ?? $account->owner_id,
             'currency' => $currency,
-            'state' => CheckoutState::Pending,
+            'state' => OrderState::Pending,
             'anchor_mode' => $this->anchorMode,
             'anchor_day' => $this->anchorDay,
             'first_period' => $this->firstPeriod,
@@ -211,7 +212,7 @@ final class CheckoutBuilder
             'expires_at' => $this->ttlMinutes !== null && $this->ttlMinutes > 0 ? $at->addMinutes($this->ttlMinutes) : null,
         ]);
 
-        CheckoutCreated::dispatch($order);
+        OrderCreated::dispatch($order);
 
         return $order;
     }
@@ -228,10 +229,10 @@ final class CheckoutBuilder
     private function resolveAccount(): BillingAccount
     {
         if ($this->customer === null) {
-            throw new \LogicException('openCheckout() needs an account() or for(customer).');
+            throw new \LogicException('createOrder() needs an account() or for(customer).');
         }
 
-        return BillingAccount::firstOrCreate(
+        return Models::query(BillingAccount::class)->firstOrCreate(
             ['owner_type' => $this->customer->getMorphClass(), 'owner_id' => $this->customer->getKey()],
             ['currency' => $this->currency],
         );

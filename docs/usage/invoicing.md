@@ -164,14 +164,14 @@ bind a class implementing `Meteric\Contracts\InvoiceDriver`:
         'database'  => \Meteric\Invoicing\Drivers\DatabaseInvoiceDriver::class,
         'lexoffice' => \Meteric\Invoicing\Drivers\LexofficeInvoiceDriver::class,
     ],
-    'mirror_to_database' => true,
 ],
 ```
 
 Throwing from `issue()` is the boundary that preserves pending charges, so a remote
-driver that fails to reach its API should throw rather than swallow the error. With
-`mirror_to_database` on, the canonical invoice is written locally even when a remote
-driver is primary. Reach the active driver with `Meteric::driver()`.
+driver that fails to reach its API should throw rather than swallow the error. The
+bundled `lexoffice` driver composes the database driver, so the canonical invoice is
+always written locally even when the remote push fails. Reach the active driver with
+`Meteric::driver()`.
 
 The bundled `lexoffice` driver wraps the `database` driver: it persists the
 canonical local invoice first, then finalizes the document in Lexware Office. The

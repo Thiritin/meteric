@@ -102,23 +102,10 @@ return new class extends Migration
             $table->unique(['item_id', 'key']);
         });
         Pg::enumCheck(Pg::table('item_options'), 'type', OptionType::class);
-
-        Schema::create(Pg::table('allowances'), function (Blueprint $table) {
-            $table->uuid('id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->foreignUuid('item_id')->constrained(Pg::table('subscription_items'))->cascadeOnDelete();
-            $table->foreignUuid('dimension_id')->constrained(Pg::table('meter_dimensions'))->cascadeOnDelete();
-            $table->decimal('included_qty', 20, 6);
-            $table->timestampTzRange('period');
-            $table->decimal('consumed_qty', 20, 6)->default(0);
-            $table->string('shared_pool')->nullable();
-
-            $table->unique(['item_id', 'dimension_id', 'period']);
-        });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists(Pg::table('allowances'));
         Schema::dropIfExists(Pg::table('item_options'));
         Schema::dropIfExists(Pg::table('addons'));
         Schema::dropIfExists(Pg::table('subscription_items'));

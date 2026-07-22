@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Meteric\Invoicing\Drivers;
 
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Brick\Money\Money;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\CreditState;
@@ -19,6 +23,8 @@ use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
+use Meteric\Support\Models;
+use Meteric\Support\Pg;
 use Meteric\Tax\TaxContext;
 use Meteric\Tax\TaxResult;
 
@@ -29,12 +35,17 @@ use Meteric\Tax\TaxResult;
  */
 final class DatabaseInvoiceDriver implements InvoiceDriver
 {
-    public function __construct(private TaxResolver $tax) {}
+    public function __construct(private TaxResolver $tax, private Clock $clock) {}
+
+    private function now(): CarbonImmutable
+    {
+        return $this->clock->now();
+    }
 
     public function issue(InvoiceDraft $draft): IssuedInvoice
     {
         return DB::transaction(function () use ($draft): IssuedInvoice {
-            $invoice = Invoice::create([
+            $invoice = Models::query(Invoice::class)->create([
                 'account_id' => $draft->account->id,
                 'customer_type' => $draft->account->owner_type,
                 'customer_id' => $draft->account->owner_id,
@@ -49,11 +60,15 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             $invoice->setRelation('pendingCharges', $draft->charges->values());
             $this->rebuildLines($invoice, $draft->charges->values());
 
-            // Financials are set while still draft, then frozen by flipping to open.
+            // Financials are set while still draft, then frozen by flipping to
+            // open. due_at is stamped here so a driver that commits locally then
+            // fails a downstream sync still leaves a dunnable invoice.
+            $issuedAt = $this->now();
             $invoice->forceFill([
                 'number' => $this->nextNumber(),
                 'state' => InvoiceState::Open,
-                'issued_at' => now(),
+                'issued_at' => $issuedAt,
+                'due_at' => $issuedAt->copy()->addDays($draft->dueDays),
             ])->save();
 
             return new IssuedInvoice(
@@ -125,7 +140,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
         $net = $charge->money();
         $taxResult = $this->tax->resolve($net, $taxContext);
 
-        $line = InvoiceLine::create([
+        $line = Models::query(InvoiceLine::class)->create([
             'invoice_id' => $invoice->id,
             'charge_id' => $charge->id,
             'parent_id' => $parentId,
@@ -163,7 +178,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
         $invoice->forceFill([
             'number' => $invoice->number ?? $this->nextNumber(),
             'state' => InvoiceState::Open,
-            'issued_at' => $invoice->issued_at ?? now(),
+            'issued_at' => $invoice->issued_at ?? $this->now(),
         ])->save();
 
         return new IssuedInvoice(
@@ -226,38 +241,58 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
 
     public function void(IssuedInvoice $invoice): void
     {
-        Invoice::whereKey($invoice->invoiceId)->update(['state' => InvoiceState::Void]);
+        Models::query(Invoice::class)->whereKey($invoice->invoiceId)->update(['state' => InvoiceState::Void]);
     }
 
     public function creditNote(IssuedInvoice $invoice, CreditNoteDraft $draft): IssuedCreditNote
     {
-        $model = Invoice::findOrFail($invoice->invoiceId);
+        $model = Models::query(Invoice::class)->findOrFail($invoice->invoiceId);
 
-        // Credit the given net amount at the invoice's tax rate, so the note
-        // reverses the same VAT the invoice charged.
-        $rate = (float) ($model->lines->max('tax_rate') ?? 0);
+        // Credit tax at the invoice's blended effective rate (tax / subtotal),
+        // computed in BigDecimal. A full credit reverses exactly the VAT charged;
+        // a partial credit reverses it proportionally. Using max(tax_rate) would
+        // over-credit VAT on a mixed-rate invoice (e.g. reverse-charge + domestic).
         $net = $draft->amount->getMinorAmount()->toInt();
+        $subtotal = (int) $model->subtotal_minor;
+        $taxTotal = (int) $model->tax_minor;
+        $creditTax = $subtotal > 0
+            ? BigDecimal::of($net)->multipliedBy($taxTotal)->dividedBy($subtotal, 0, RoundingMode::HALF_UP)->toInt()
+            : 0;
 
-        $note = CreditNote::create([
+        $note = Models::query(CreditNote::class)->create([
             'invoice_id' => $model->id,
             'driver' => 'database',
             'state' => CreditState::Issued,
             'reason' => $draft->reason,
             'amount_minor' => $net,
-            'tax_minor' => (int) round($net * $rate),
+            'tax_minor' => $creditTax,
             'currency' => $draft->amount->getCurrency()->getCurrencyCode(),
             'number' => $this->nextNumber('CN'),
-            'issued_at' => now(),
+            'issued_at' => $this->now(),
         ]);
 
         return new IssuedCreditNote(creditNoteId: $note->id, number: $note->number);
     }
 
+    /**
+     * Gapless per-prefix, per-year document number. An atomic upsert on the
+     * counter row (INSERT ... ON CONFLICT DO UPDATE ... RETURNING) takes a row
+     * lock, so concurrent issues serialize instead of colliding on the number.
+     * Runs inside the caller's transaction, so a rolled-back issue does not
+     * consume a number. Counts only assigned numbers, never drafts or voids.
+     */
     private function nextNumber(string $prefix = 'INV'): string
     {
-        $year = now()->year;
-        $seq = (int) DB::table('meteric_invoices')->whereYear('created_at', $year)->count() + 1;
+        $year = (int) $this->now()->year;
+        $table = Pg::table('invoice_numbers');
 
-        return sprintf('%s-%d-%06d', $prefix, $year, $seq);
+        $row = DB::selectOne(
+            "INSERT INTO {$table} (prefix, year, seq) VALUES (?, ?, 1)
+             ON CONFLICT (prefix, year) DO UPDATE SET seq = {$table}.seq + 1
+             RETURNING seq",
+            [$prefix, $year],
+        );
+
+        return sprintf('%s-%d-%06d', $prefix, $year, (int) $row->seq);
     }
 }
