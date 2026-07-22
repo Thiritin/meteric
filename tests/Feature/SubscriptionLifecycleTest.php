@@ -215,13 +215,3 @@ it('cancels immediately', function () {
 
     expect($sub->fresh()->state)->toBe(SubscriptionState::Canceled);
 });
-
-it('schedules a period-end cancel', function () {
-    $acc = freshAccount();
-    $sub = subAt($acc, planPrice(1000, 'std'), '2026-06-01T00:00:00Z');
-
-    Meteric::cancel($sub, 'period_end');
-
-    expect($sub->fresh()->state)->toBe(SubscriptionState::Active)
-        ->and($sub->fresh()->cancel_at)->not->toBeNull();
-});

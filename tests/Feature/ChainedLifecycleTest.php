@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Meteric\Enums\ChargeState;

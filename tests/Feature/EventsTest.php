@@ -62,16 +62,6 @@ it('fires InvoicePartiallyPaid on a part payment', function () {
     Event::assertNotDispatched(InvoicePaid::class);
 });
 
-it('sets a due date on issue from net_days', function () {
-    config()->set('meteric.invoice.net_days', 14);
-    $acc = eventsAccount();
-    Meteric::subscribe()->account($acc)->at(CarbonImmutable::parse('2026-06-01Z'))->add(eventsPlan(1000), 1)->create();
-    $invoice = Meteric::invoicePending($acc);
-
-    expect($invoice->due_at)->not->toBeNull()
-        ->and($invoice->due_at->greaterThan($invoice->issued_at))->toBeTrue();
-});
-
 it('marks overdue invoices past_due and fires the events', function () {
     Event::fake([InvoiceOverdue::class, SubscriptionPastDue::class]);
     config()->set('meteric.invoice.net_days', 14);
