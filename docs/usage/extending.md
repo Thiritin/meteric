@@ -82,7 +82,7 @@ class SuspendOverdue
 {
     public function handle(InvoiceOverdue $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             if ($this->isContract($subscription)) {
                 continue; // keep invoicing, hand to debt collection
             }
@@ -97,7 +97,7 @@ class SuspendOverdue
 ## Resume on payment
 
 When the invoice is paid, resume the subscriptions it covered and start the
-service. `Invoice::subscriptions()` gives you the set to act on.
+service. `Invoice::billedSubscriptions()` gives you the set to act on.
 
 ```php
 use Meteric\Events\InvoicePaid;
@@ -107,7 +107,7 @@ class ResumeOnPayment
 {
     public function handle(InvoicePaid $event): void
     {
-        foreach ($event->invoice->subscriptions() as $subscription) {
+        foreach ($event->invoice->billedSubscriptions() as $subscription) {
             if ($subscription->state !== SubscriptionState::Paused) {
                 continue;
             }

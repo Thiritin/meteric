@@ -138,7 +138,7 @@ final class SubscriptionManager
             ->whereNull('overdue_at')   // fire once per invoice; safe to run every few minutes
             ->each(function (Invoice $invoice) use ($at, &$count): void {
                 $invoice->forceFill(['overdue_at' => $at])->save();
-                foreach ($invoice->subscriptions() as $sub) {
+                foreach ($invoice->billedSubscriptions() as $sub) {
                     if (in_array($sub->state, [SubscriptionState::Active, SubscriptionState::Trialing], true)) {
                         $sub->forceFill(['state' => SubscriptionState::PastDue])->save();
                     }
