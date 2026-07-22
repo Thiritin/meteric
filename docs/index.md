@@ -1,9 +1,10 @@
 # Introduction
 
-Meteric is a billing engine for hosting systems, built as a Laravel package. It
-handles subscriptions, proration, usage metering, addons, and
-invoicing for products like VPS, domains, webhosting, cloud, and gameservers.
-The design borrows from Stripe Billing and WHMCS and is sized for hosts running
+Meteric is a billing engine for applications with advanced billing needs, built
+as a Laravel package. It handles subscriptions, proration, usage metering,
+addons, and invoicing for SaaS, IaaS, and any product with recurring or
+usage-based pricing: cloud resources, API quotas, seats, domains, gameservers.
+The design borrows from Stripe Billing and WHMCS and is sized for teams running
 real money through PostgreSQL.
 
 It is not a payment gateway and not an accounting system. It computes what is
@@ -12,7 +13,7 @@ payments and, optionally, an accounting system as an invoice driver.
 
 ## The two ideas that matter
 
-Most hosting billing tangles the money math into the application. Meteric keeps
+Most billing code tangles the money math into the application. Meteric keeps
 two things separate and leans on the database to keep them honest.
 
 ### A charge is not an invoice

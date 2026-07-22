@@ -21,8 +21,10 @@ $product = Product::create([
 ```
 
 `pricing_model` is one of `fixed`, `per_unit`, `tiered`, `volume`, `metered`,
-`hourly`, `one_off`. `metered` and `hourly` are usage-based, `isMetered()`
-returns true for those.
+`hourly`, `one_off`, `relative`. `metered` and `hourly` are usage-based,
+`isMetered()` returns true for those. `relative` charges a percentage of the
+owning item's base price and is used by addons; see
+[Relative pricing](/usage/addons-and-options#relative-pricing).
 
 ### Product config
 

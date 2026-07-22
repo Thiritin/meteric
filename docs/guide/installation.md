@@ -21,7 +21,7 @@ periods, and orders. Table names are prefixed `meteric_` (see
 [Configuration](/guide/configuration)).
 
 Run them against PostgreSQL. The migration step enables `btree_gist` and
-and installs the GiST exclusion constraint on `meteric_billing_periods`.
+installs the GiST exclusion constraint on `meteric_billing_periods`.
 If your database role cannot create extensions, see [Requirements](/guide/requirements).
 
 ## Making a model billable

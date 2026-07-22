@@ -24,7 +24,8 @@ All live in `Meteric\Events`. Register listeners the normal Laravel way.
 | `SubscriptionCancellationScheduled` | a future cancel was set (notice/confirmation) | `Subscription`, `CarbonImmutable $at`, `array $meta` |
 | `SubscriptionCanceled` | a subscription was terminated | `Subscription` |
 | `OrderCreated` | a pending order was placed | `Order` |
-| `OrderPaid` | an order was paid and materialized | `Order` |
+| `OrderPaid` | an order was paid and materialized | `Order`, `?Invoice`, `?Payment` |
+| `SubscriptionStarted` | a paid order became a subscription (the provisioning hook) | `Order`, `Subscription`, `?Invoice` |
 | `OrderCanceled` | a pending order was canceled | `Order` |
 | `OrderExpired` | a pending order passed its TTL | `Order` |
 

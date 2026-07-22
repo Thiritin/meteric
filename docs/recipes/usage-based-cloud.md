@@ -90,6 +90,7 @@ MeterDimension::create([
     'unit' => 'GB',
     'aggregation' => Aggregation::Last,   // cycle-to-date counter
     'rate' => '0.50000000',
+    'currency' => 'EUR',
     'block_size' => 100,
     'included_qty' => 500,
     'cap_minor' => 5000,                  // never bill more than €50.00/cycle
@@ -116,21 +117,14 @@ The customer's subscription carries the base-fee item (prepaid) and the metered
 item (usage). The base item accrues its first month; the metered item
 accrues nothing on its own, usage drives its charges.
 
-```php
-use Meteric\Facades\Meteric;
-
-$subscription = Meteric::subscribe($user)
-    ->add($basePrice, qty: 1)         // €20/mo prepaid
-    ->add($platform->priceFor('EUR') ?? $meterPlaceholder, qty: 1, resource: $instance)
-    ->create();
-```
-
 A metered product has no recurring price to add, so attach the metered item with
 a zero-amount `Price` whose `pricing_model` is `Metered`, or model the meter on
 the base item's product directly. The simplest shape is one metered item per
 provisioned instance:
 
 ```php
+use Meteric\Facades\Meteric;
+
 $meterPrice = Price::create([
     'product_id' => $platform->id,
     'currency' => 'EUR',
