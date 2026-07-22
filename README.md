@@ -9,10 +9,10 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 [![issues - meteric](https://img.shields.io/github/issues/thiritin/meteric)](https://github.com/thiritin/meteric/issues)
 
-Dynamic billing for Laravel hosting systems. Subscriptions, proration, usage
-metering, configurable options, addons, orders, and invoicing on PostgreSQL,
-built so a charge is never billed twice and never lost when your accounting
-system is down.
+Advanced billing for Laravel. Subscriptions, proration, usage metering,
+configurable options, addons, orders, and invoicing on PostgreSQL, built so a
+charge is never billed twice and never lost when your accounting system is
+down. Fits SaaS, IaaS, and any product with usage-based or recurring pricing.
 
 ## Documentation
 
