@@ -28,9 +28,11 @@ use Meteric\Support\Models;
  * @property int $tax_minor
  * @property int $total_minor
  * @property int $paid_minor
+ * @property ?CarbonImmutable $issued_at
  * @property ?CarbonImmutable $due_at
  * @property ?CarbonImmutable $overdue_at
  * @property ?CarbonImmutable $paid_at
+ * @property int $version
  */
 class Invoice extends MetericModel
 {
