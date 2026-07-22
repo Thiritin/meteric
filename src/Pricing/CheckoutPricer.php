@@ -52,64 +52,61 @@ final class CheckoutPricer
         int $trialDays,
         TaxContext $taxContext,
     ): FrozenCart {
-        $zero = Money::ofMinor(0, $currency);
-        $trialing = $trialDays > 0;
+        $terms = new CheckoutTerms($currency, $at, $anchorMode, $anchorDay, $firstPeriod, $trialDays, $taxContext);
 
-        $contents = [];
-        $lines = [];
-        $subtotal = $zero;
+        $rows = array_map(fn (array $row): PricedRow => $this->priceRow($row, $terms), $cart);
+
+        return $this->freeze($rows, $terms);
+    }
+
+    /**
+     * Price one cart row: the frozen base amount plus its addons and options,
+     * the display line with tax, and the deltas the cart totals fold up.
+     *
+     * @param  array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}>}  $row
+     */
+    private function priceRow(array $row, CheckoutTerms $terms): PricedRow
+    {
+        $zero = $terms->zero();
+        $price = $row['price'];
+        $qty = $row['qty'];
+
+        [$dueNow, $kind, $covers, $ongoing, $usage] = $this->priceBase($price, $qty, $terms);
+
+        $addons = array_map(
+            fn (array $addon): array => $this->priceAddon($addon, $price->amountFor($qty), $terms),
+            $row['addons'],
+        );
+        $options = array_map(
+            fn (array $option): array => $this->priceOption($option, $terms),
+            $row['options'],
+        );
+
+        // Frozen due-now for the whole row: base + addons + options + setups.
+        $rowDueNow = $dueNow;
+        foreach ($addons as $a) {
+            $rowDueNow = $rowDueNow->plus(Money::ofMinor($a['amount_minor'], $terms->currency));
+        }
+        foreach ($options as $o) {
+            $rowDueNow = $rowDueNow->plus(Money::ofMinor($o['amount_minor'] + $o['setup_minor'], $terms->currency));
+        }
+
+        // Ongoing per-period total (display only): full base + full extras.
         $recurring = $zero;
-        $interval = null;
-        $intervalCount = null;
-        $nextChargeAt = null;
-        $estimated = false;
-
-        foreach ($cart as $row) {
-            $price = $row['price'];
-            $qty = $row['qty'];
-            $label = $row['label'] ?? $price->product->name ?? 'Item';
-
-            [$dueNow, $kind, $covers, $ongoing, $usage] = $this->priceBase($price, $qty, $at, $anchorMode, $anchorDay, $firstPeriod, $trialing, $zero);
-            $estimated = $estimated || $usage;
-
-            $addons = [];
-            foreach ($row['addons'] as $addon) {
-                $addons[] = $this->priceAddon($addon, $price->amountFor($qty), $trialing, $zero);
-            }
-
-            $options = [];
-            foreach ($row['options'] as $option) {
-                $options[] = $this->priceOption($option, $trialing, $zero);
-            }
-
-            // Frozen due-now for the whole row: base + addons + options + setups.
-            $rowDueNow = $dueNow;
+        if ($price->isRecurring()) {
+            $recurring = $price->amountFor($qty);
             foreach ($addons as $a) {
-                $rowDueNow = $rowDueNow->plus(Money::ofMinor($a['amount_minor'], $currency));
+                $recurring = $recurring->plus(Money::ofMinor($a['amount_minor'], $terms->currency));
             }
             foreach ($options as $o) {
-                $rowDueNow = $rowDueNow->plus(Money::ofMinor($o['amount_minor'] + $o['setup_minor'], $currency));
+                $recurring = $recurring->plus(Money::ofMinor($o['amount_minor'], $terms->currency));
             }
+        }
 
-            $subtotal = $subtotal->plus($rowDueNow);
+        $label = $row['label'] ?? $price->product->name ?? 'Item';
 
-            // Ongoing per-period total (display only): full base + full extras.
-            if ($price->isRecurring()) {
-                $recurring = $recurring->plus($price->amountFor($qty));
-                foreach ($addons as $a) {
-                    $recurring = $recurring->plus(Money::ofMinor($a['amount_minor'], $currency));
-                }
-                foreach ($options as $o) {
-                    $recurring = $recurring->plus(Money::ofMinor($o['amount_minor'], $currency));
-                }
-                $interval ??= $price->interval?->value;
-                $intervalCount ??= $price->interval_count;
-                if ($ongoing !== null) {
-                    $nextChargeAt = $nextChargeAt === null ? $ongoing->end : min($nextChargeAt, $ongoing->end);
-                }
-            }
-
-            $contents[] = [
+        return new PricedRow(
+            content: [
                 'product_id' => $price->product_id,
                 'price_id' => $price->id,
                 'quantity' => $qty,
@@ -122,15 +119,46 @@ final class CheckoutPricer
                 'covers' => $covers?->toArray(),
                 'addons' => $addons,
                 'options' => $options,
-            ];
+            ],
+            line: new QuoteLine($label, $kind, $qty, $rowDueNow, $this->tax->resolve($rowDueNow, $terms->taxContext)->amount, covers: $covers),
+            dueNow: $rowDueNow,
+            recurring: $recurring,
+            interval: $price->isRecurring() ? $price->interval?->value : null,
+            intervalCount: $price->isRecurring() ? $price->interval_count : null,
+            nextChargeAt: $price->isRecurring() ? $ongoing?->end : null,
+            estimated: $usage,
+        );
+    }
 
-            $lines[] = new QuoteLine($label, $kind, $qty, $rowDueNow, $this->tax->resolve($rowDueNow, $taxContext)->amount, covers: $covers);
-        }
+    /**
+     * Fold the priced rows into the quote and the frozen cart totals.
+     *
+     * @param  list<PricedRow>  $rows
+     */
+    private function freeze(array $rows, CheckoutTerms $terms): FrozenCart
+    {
+        $zero = $terms->zero();
 
+        $subtotal = array_reduce($rows, fn (Money $c, PricedRow $r) => $c->plus($r->dueNow), $zero);
+        $recurring = array_reduce($rows, fn (Money $c, PricedRow $r) => $c->plus($r->recurring), $zero);
+        $lines = array_map(fn (PricedRow $r): QuoteLine => $r->line, $rows);
         $taxTotal = array_reduce($lines, fn (Money $c, QuoteLine $l) => $c->plus($l->tax), $zero);
 
+        $interval = null;
+        $intervalCount = null;
+        $nextChargeAt = null;
+        $estimated = false;
+        foreach ($rows as $row) {
+            $interval ??= $row->interval;
+            $intervalCount ??= $row->intervalCount;
+            $estimated = $estimated || $row->estimated;
+            if ($row->nextChargeAt !== null) {
+                $nextChargeAt = $nextChargeAt === null ? $row->nextChargeAt : min($nextChargeAt, $row->nextChargeAt);
+            }
+        }
+
         $quote = new Quote(
-            currency: $currency,
+            currency: $terms->currency,
             dueNowSubtotal: $subtotal,
             dueNowTax: $taxTotal,
             dueNowTotal: $subtotal->plus($taxTotal),
@@ -143,7 +171,7 @@ final class CheckoutPricer
         );
 
         return new FrozenCart(
-            contents: $contents,
+            contents: array_map(fn (PricedRow $r): array => $r->content, $rows),
             subtotalMinor: $subtotal->getMinorAmount()->toInt(),
             taxMinor: $taxTotal->getMinorAmount()->toInt(),
             totalMinor: $subtotal->plus($taxTotal)->getMinorAmount()->toInt(),
@@ -161,8 +189,9 @@ final class CheckoutPricer
      *
      * @return array{0:Money,1:LineKind,2:?Period,3:?Period,4:bool} due-now, kind, covers, ongoing, isUsage
      */
-    private function priceBase(Price $price, float $qty, CarbonImmutable $at, AnchorMode $anchorMode, ?int $anchorDay, FirstPeriodPolicy $firstPeriod, bool $trialing, Money $zero): array
+    private function priceBase(Price $price, float $qty, CheckoutTerms $terms): array
     {
+        $zero = $terms->zero();
         $full = $price->amountFor($qty);
 
         if ($price->pricing_model->isUsageBased()) {
@@ -173,9 +202,9 @@ final class CheckoutPricer
             return [$full, LineKind::OneOff, null, null, false];
         }
 
-        $plan = $this->planner->plan($at, $price->recurrence(), $anchorMode, $anchorDay, $firstPeriod);
+        $plan = $this->planner->plan($terms->at, $price->recurrence(), $terms->anchorMode, $terms->anchorDay, $terms->firstPeriod);
 
-        if ($trialing) {
+        if ($terms->trialing()) {
             // Trial: reserve nothing now; the ongoing period drives the first renewal.
             return [$zero, LineKind::Recurring, null, $plan->ongoing, false];
         }
@@ -202,12 +231,12 @@ final class CheckoutPricer
      * @param  array{price:Price,group:?string,qty:float}  $addon
      * @return array{product_id:string,price_id:string,group_key:?string,quantity:float,amount_minor:int}
      */
-    private function priceAddon(array $addon, Money $base, bool $trialing, Money $zero): array
+    private function priceAddon(array $addon, Money $base, CheckoutTerms $terms): array
     {
         $price = $addon['price'];
         $qty = $addon['qty'];
         $full = $price->isRelative() ? $price->amountOfBase($base) : $price->amountForQuantity($qty);
-        $dueNow = $trialing ? $zero : $full;
+        $dueNow = $terms->trialing() ? $terms->zero() : $full;
 
         return [
             'product_id' => $price->product_id,
@@ -225,13 +254,14 @@ final class CheckoutPricer
      * @param  array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}  $option
      * @return array{key:string,value:string,label:?string,type:string,price_id:?string,quantity:float,min_qty:?float,max_qty:?float,amount_minor:int,setup_minor:int}
      */
-    private function priceOption(array $option, bool $trialing, Money $zero): array
+    private function priceOption(array $option, CheckoutTerms $terms): array
     {
+        $zero = $terms->zero();
         $price = $option['price'] ?? null;
         $qty = $option['qty'];
 
         $recurring = $price !== null ? $price->amountForQuantity($qty) : $zero;
-        $dueNow = $trialing ? $zero : $recurring;
+        $dueNow = $terms->trialing() ? $zero : $recurring;
         $setup = $price !== null && $price->hasSetupFee() ? $price->setupFee() : $zero;
 
         return [
