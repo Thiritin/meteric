@@ -13,7 +13,6 @@ use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\BillingMode;
-use Meteric\Enums\ChargeState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\ItemState;
@@ -258,7 +257,7 @@ final class SubscriptionManager
                     if ($invoice !== null) {
                         app(Meteric::class)->creditNote($invoice, $unused, 'Downgrade refund: '.($item->price->product->name ?? 'plan'));
                     } else {
-                        $this->prorationCharge($item, $sub, LineKind::Credit, $unused->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
+                        $this->prorationCharge($item, LineKind::Credit, $unused->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
                     }
                 }
             }
@@ -310,8 +309,8 @@ final class SubscriptionManager
                 $unusedOld = $this->prorator->for($period, $at, $item->price->amountFor($qty))->amount();
                 $proratedNew = $this->prorator->for($period, $at, $newPrice->amountFor($qty))->amount();
 
-                $this->prorationCharge($item, $sub, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
-                $this->prorationCharge($item, $sub, LineKind::Prorated, $proratedNew, 'Upgrade '.($newPrice->product->name ?? 'plan'));
+                $this->prorationCharge($item, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
+                $this->prorationCharge($item, LineKind::Prorated, $proratedNew, 'Upgrade '.($newPrice->product->name ?? 'plan'));
             }
 
             $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
@@ -334,7 +333,7 @@ final class SubscriptionManager
 
             if ($creditOld && $period !== null) {
                 $unusedOld = $this->prorator->for($period, $at, $item->price->amountFor($qty))->amount();
-                $this->prorationCharge($item, $sub, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
+                $this->prorationCharge($item, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
             }
 
             $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
@@ -470,25 +469,15 @@ final class SubscriptionManager
         return $count;
     }
 
-    private function prorationCharge(SubscriptionItem $item, Subscription $sub, LineKind $kind, Money $amount, string $desc): void
+    private function prorationCharge(SubscriptionItem $item, LineKind $kind, Money $amount, string $desc): void
     {
-        Models::query(Charge::class)->create([
-            'account_id' => $sub->account_id,
-            'subscription_id' => $sub->id,
-            'origin_type' => 'subscription_item',
-            'origin_id' => $item->id,
+        Charge::pendingForItem($item, [
             'kind' => $kind,
-            'billing_mode' => $item->billingMode(),
-            'state' => ChargeState::Pending,
-            'title' => $item->lineTitle(),
-            'group' => $item->group,
-            'line_group' => $item->id,
             'description' => $desc,
             'quantity' => $item->quantity,
             'unit' => $item->price->interval?->value,
             'unit_minor' => $amount->getMinorAmount()->toInt(),
             'amount_minor' => $amount->getMinorAmount()->toInt(),
-            'currency' => $sub->currency,
             'covers' => $item->current_period,
             'idempotency_key' => 'prorate_'.Str::uuid()->toString(),
         ]);

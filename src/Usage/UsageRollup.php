@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Enums\Aggregation;
 use Meteric\Enums\BillingMode;
-use Meteric\Enums\ChargeState;
 use Meteric\Enums\LineKind;
 use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
@@ -58,10 +57,9 @@ final class UsageRollup
      */
     public function rollup(SubscriptionItem $item, Period $period): array
     {
-        $sub = $item->subscription;
         $created = [];
 
-        return DB::transaction(function () use ($item, $sub, $period, &$created): array {
+        return DB::transaction(function () use ($item, $period, &$created): array {
             // Discover dimensions from the usage itself, not the item's current product —
             // so usage recorded before a plan change (different product) still rolls up.
             $dimensionIds = Models::query(UsageRecord::class)->unbilled()
@@ -102,18 +100,10 @@ final class UsageRollup
                 }
 
                 $amount = $dimension->amountFor($used);
-                $charge = Models::query(Charge::class)->create([
-                    'account_id' => $sub->account_id,
-                    'subscription_id' => $sub->id,
-                    'origin_type' => 'subscription_item',
-                    'origin_id' => $item->id,
+                $charge = Charge::pendingForItem($item, [
                     'dimension_id' => $dimension->id,
                     'kind' => LineKind::Usage,
                     'billing_mode' => BillingMode::InArrears,
-                    'state' => ChargeState::Pending,
-                    'title' => $item->lineTitle(),
-                    'group' => $item->group,
-                    'line_group' => $item->id,
                     'description' => sprintf("%s: %s %s\n%s", ucfirst($dimension->key), $this->trim($used), $dimension->unit, $period->label()),
                     'quantity' => $dimension->billedUnits($used),  // blocks when block_size set, else overage units
                     'unit' => $dimension->unit,                    // GB, hours, ...
