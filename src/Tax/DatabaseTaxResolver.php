@@ -62,9 +62,9 @@ final class DatabaseTaxResolver implements TaxResolver
 
         $fraction = $rate->rateFraction();
         $base = $context->taxInclusive
-            ? $net->dividedBy(1 + $fraction, RoundingMode::HALF_UP)
+            ? $net->dividedBy((string) (1 + $fraction), RoundingMode::HALF_UP)
             : $net;
-        $tax = $base->multipliedBy($fraction, RoundingMode::HALF_UP);
+        $tax = $base->multipliedBy((string) $fraction, RoundingMode::HALF_UP);
 
         $label = $rate->label ?? sprintf('VAT %s%% (%s)', round($fraction * 100, 2), $country);
 

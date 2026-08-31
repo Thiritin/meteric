@@ -30,6 +30,6 @@ final class Prorator
         // off by a minor unit.
         $ratio = $this->for($period, $changeAt, $newFull)->ratio();
 
-        return $newFull->minus($oldFull)->multipliedBy($ratio, $this->rounding);
+        return $newFull->minus($oldFull)->multipliedBy((string) $ratio, $this->rounding);
     }
 }

@@ -15,10 +15,10 @@ final class FlatRateTaxResolver implements TaxResolver
     public function resolve(Money $net, TaxContext $context): TaxResult
     {
         $base = $context->taxInclusive
-            ? $net->dividedBy(1 + $this->rate, RoundingMode::HALF_UP)
+            ? $net->dividedBy((string) (1 + $this->rate), RoundingMode::HALF_UP)
             : $net;
 
-        $tax = $base->multipliedBy($this->rate, RoundingMode::HALF_UP);
+        $tax = $base->multipliedBy((string) $this->rate, RoundingMode::HALF_UP);
 
         return new TaxResult($this->rate, $tax, sprintf('Tax %s%%', $this->rate * 100));
     }

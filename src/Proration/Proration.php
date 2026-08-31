@@ -42,7 +42,7 @@ final class Proration
     /** Prorated amount for the remaining portion (positive = charge). */
     public function amount(): Money
     {
-        return $this->fullAmount->multipliedBy($this->ratio(), $this->rounding);
+        return $this->fullAmount->multipliedBy((string) $this->ratio(), $this->rounding);
     }
 
     /** Credit for the unused portion if the item is removed at the change instant. */

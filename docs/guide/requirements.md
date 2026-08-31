@@ -1,7 +1,7 @@
 # Requirements
 
 - PHP 8.3+ with the `bcmath` extension (exact money maths, no float fallback)
-- Laravel 12
+- Laravel 12 or 13
 - PostgreSQL 16+
 
 Meteric is PostgreSQL-only by design. It uses `tstzrange`, `btree_gist`,

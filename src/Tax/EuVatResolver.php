@@ -59,10 +59,10 @@ final class EuVatResolver implements TaxResolver
         }
 
         $base = $context->taxInclusive
-            ? $net->dividedBy(1 + $rate, RoundingMode::HALF_UP)
+            ? $net->dividedBy((string) (1 + $rate), RoundingMode::HALF_UP)
             : $net;
 
-        $tax = $base->multipliedBy($rate, RoundingMode::HALF_UP);
+        $tax = $base->multipliedBy((string) $rate, RoundingMode::HALF_UP);
 
         return new TaxResult($rate, $tax, sprintf('VAT %s%% (%s)', round($rate * 100), $country));
     }

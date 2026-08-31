@@ -171,7 +171,7 @@ class Price extends MetericModel
             return Money::ofMinor(0, $base->getCurrency());
         }
 
-        return $base->multipliedBy($this->percent / 100, RoundingMode::HALF_UP);
+        return $base->multipliedBy((string) ($this->percent / 100), RoundingMode::HALF_UP);
     }
 
     /**
