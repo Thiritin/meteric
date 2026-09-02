@@ -14,7 +14,10 @@ use Meteric\Quoting\QuoteLine;
  */
 final readonly class PricedRow
 {
-    /** @param array<string,mixed> $content */
+    /**
+     * @param  array<string,mixed>  $content
+     * @param  list<QuoteLine>  $discountLines
+     */
     public function __construct(
         public array $content,
         public QuoteLine $line,
@@ -25,5 +28,9 @@ final readonly class PricedRow
         public ?CarbonImmutable $nextChargeAt,
         public bool $estimated,
         public ?QuoteLine $setupLine = null,
+        public array $discountLines = [],
+        public ?Money $recurringDiscount = null,
+        public ?CarbonImmutable $discountUntil = null,
+        public bool $discountOpenEnded = false,
     ) {}
 }

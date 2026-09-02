@@ -11,6 +11,7 @@ use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Enums\AnchorMode;
+use Meteric\Enums\DiscountTarget;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\LineKind;
 use Meteric\Models\Price;
@@ -30,7 +31,7 @@ use Meteric\Tax\TaxContext;
  *  product_id, price_id, quantity, label, group, resource_type, resource_id,
  *  amount_minor (frozen due-now base amount), setup_minor (the base price's
  *  one-time setup fee), kind (frozen LineKind), covers [iso,iso]|null,
- *  addons[], options[].
+ *  addons[], options[], discounts[].
  */
 final class CheckoutPricer
 {
@@ -41,7 +42,7 @@ final class CheckoutPricer
     ) {}
 
     /**
-     * @param  list<array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}>}>  $cart
+     * @param  list<array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}>,discounts?:list<DiscountSpec>}>  $cart
      */
     public function price(
         array $cart,
@@ -64,7 +65,7 @@ final class CheckoutPricer
      * Price one cart row: the frozen base amount plus its addons and options,
      * the display line with tax, and the deltas the cart totals fold up.
      *
-     * @param  array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}>}  $row
+     * @param  array{price:Price,qty:float,resource:?Model,label:?string,group:?string,addons:list<array{price:Price,group:?string,qty:float}>,options:list<array{key:string,value:string,type:string,price:?Price,qty:float,min:?float,max:?float,label:?string}>,discounts?:list<DiscountSpec>}  $row
      */
     private function priceRow(array $row, CheckoutTerms $terms): PricedRow
     {
@@ -113,6 +114,8 @@ final class CheckoutPricer
 
         $label = $row['label'] ?? $price->product->name ?? 'Item';
 
+        $discounts = $this->priceDiscounts($row['discounts'] ?? [], $rowDueNow, $rowSetup, $recurring, $price, $ongoing, $terms);
+
         return new PricedRow(
             content: [
                 'product_id' => $price->product_id,
@@ -128,9 +131,10 @@ final class CheckoutPricer
                 'covers' => $covers?->toArray(),
                 'addons' => $addons,
                 'options' => $options,
+                'discounts' => $discounts['frozen'],
             ],
             line: new QuoteLine($label, $kind, $qty, $rowDueNow, $this->tax->resolve($rowDueNow, $terms->taxContext)->amount, covers: $covers),
-            dueNow: $rowDueNow->plus($rowSetup),
+            dueNow: $rowDueNow->plus($rowSetup)->minus($discounts['off']),
             recurring: $recurring,
             interval: $price->isRecurring() ? $price->interval?->value : null,
             intervalCount: $price->isRecurring() ? $price->interval_count : null,
@@ -139,7 +143,96 @@ final class CheckoutPricer
             setupLine: $rowSetup->isPositive()
                 ? new QuoteLine($label.' setup', LineKind::Setup, 1, $rowSetup, $this->tax->resolve($rowSetup, $terms->taxContext)->amount)
                 : null,
+            discountLines: $discounts['lines'],
+            recurringDiscount: $discounts['recurring'],
+            discountUntil: $discounts['until'],
+            discountOpenEnded: $discounts['open_ended'],
         );
+    }
+
+    /**
+     * Price a row's discounts. Each applies to what is left after the ones
+     * before it, so a stack can zero a line but never invert it, and the frozen
+     * `reduce_minor` is the figure the converter raises as a charge.
+     *
+     * `recurring` is what comes off a full ongoing period once the first billed
+     * one has passed, and `until` the end of the last period a finite discount
+     * covers: AGB §6.12 needs the regular price and the switchover date beside
+     * the promotional one.
+     *
+     * @param  list<DiscountSpec>  $specs
+     * @return array{frozen:list<array<string,mixed>>,lines:list<QuoteLine>,off:Money,recurring:Money,until:?CarbonImmutable,open_ended:bool}
+     */
+    private function priceDiscounts(array $specs, Money $rowDueNow, Money $rowSetup, Money $recurring, Price $price, ?Period $ongoing, CheckoutTerms $terms): array
+    {
+        $zero = $terms->zero();
+        $frozen = [];
+        $lines = [];
+        $off = $zero;
+        $lineLeft = $rowDueNow;
+        $setupLeft = $rowSetup;
+        $recurringLeft = $recurring;
+        $recurringOff = $zero;
+        $until = null;
+        $openEnded = false;
+
+        foreach ($specs as $spec) {
+            if ($spec->target === DiscountTarget::Setup) {
+                $take = $spec->reduce($setupLeft);
+                $setupLeft = $setupLeft->minus($take);
+            } else {
+                $take = $spec->reduce($lineLeft);
+                $lineLeft = $lineLeft->minus($take);
+
+                // The first billed period is spent at checkout, so a one-term
+                // discount does not reach the ongoing price at all.
+                if ($spec->terms === null || $spec->terms > 1) {
+                    $recurringOff = $recurringOff->plus($spec->reduce($recurringLeft));
+                    $recurringLeft = $recurring->minus($recurringOff);
+
+                    if ($spec->terms === null) {
+                        $openEnded = true;
+                    } else {
+                        $end = $this->lastDiscounted($spec->terms, $price, $ongoing);
+                        $until = $until === null || ($end !== null && $end > $until) ? $end : $until;
+                    }
+                }
+            }
+
+            $off = $off->plus($take);
+            $frozen[] = $spec->toArray() + ['reduce_minor' => $take->getMinorAmount()->toInt()];
+
+            if ($take->isPositive()) {
+                $negative = $take->negated();
+                $lines[] = new QuoteLine($spec->label, LineKind::Discount, 1, $negative, $this->tax->resolve($negative, $terms->taxContext)->amount);
+            }
+        }
+
+        return [
+            'frozen' => $frozen,
+            'lines' => $lines,
+            'off' => $off,
+            'recurring' => $recurringOff,
+            'until' => $openEnded ? null : $until,
+            'open_ended' => $openEnded,
+        ];
+    }
+
+    /** End of the last period a discount of `$terms` billed periods covers. */
+    private function lastDiscounted(int $terms, Price $price, ?Period $ongoing): ?CarbonImmutable
+    {
+        if ($ongoing === null || ! $price->isRecurring()) {
+            return null;
+        }
+
+        $recurrence = $price->recurrence();
+        $end = $ongoing->end;
+
+        for ($i = 1; $i < $terms; $i++) {
+            $end = $recurrence->nextEnd($end);
+        }
+
+        return $end;
     }
 
     /**
@@ -161,6 +254,9 @@ final class CheckoutPricer
                 $lines[] = $row->setupLine;
                 $setup = $setup->plus($row->setupLine->amount);
             }
+            foreach ($row->discountLines as $discountLine) {
+                $lines[] = $discountLine;
+            }
         }
         $taxTotal = array_reduce($lines, fn (Money $c, QuoteLine $l) => $c->plus($l->tax), $zero);
 
@@ -168,10 +264,18 @@ final class CheckoutPricer
         $intervalCount = null;
         $nextChargeAt = null;
         $estimated = false;
+        $recurringDiscount = $zero;
+        $discountUntil = null;
+        $openEnded = false;
         foreach ($rows as $row) {
             $interval ??= $row->interval;
             $intervalCount ??= $row->intervalCount;
             $estimated = $estimated || $row->estimated;
+            $recurringDiscount = $recurringDiscount->plus($row->recurringDiscount ?? $zero);
+            $openEnded = $openEnded || $row->discountOpenEnded;
+            if ($row->discountUntil !== null) {
+                $discountUntil = $discountUntil === null ? $row->discountUntil : max($discountUntil, $row->discountUntil);
+            }
             if ($row->nextChargeAt !== null) {
                 $nextChargeAt = $nextChargeAt === null ? $row->nextChargeAt : min($nextChargeAt, $row->nextChargeAt);
             }
@@ -189,6 +293,8 @@ final class CheckoutPricer
             lines: $lines,
             estimated: $estimated,
             dueNowSetup: $setup,
+            recurringDiscount: $recurringDiscount,
+            discountUntil: $openEnded ? null : $discountUntil,
         );
 
         return new FrozenCart(

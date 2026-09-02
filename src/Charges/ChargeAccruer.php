@@ -8,10 +8,12 @@ use Brick\Money\Money;
 use Illuminate\Support\Facades\DB;
 use Meteric\Anchoring\BillingPlan;
 use Meteric\Anchoring\PlannedPeriod;
+use Meteric\Enums\DiscountTarget;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
+use Meteric\Models\Discount;
 use Meteric\Models\Price;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
@@ -46,7 +48,7 @@ final class ChargeAccruer
 
                 $amount = $pp->prorated ? $this->prorate($pp, $price, $full) : $full;
 
-                $created[] = Charge::pendingForItem($item, [
+                $period = [Charge::pendingForItem($item, [
                     'kind' => $pp->kind,
                     'description' => $pp->period->label(),    // the service period, on its own line
                     'quantity' => $item->quantity,
@@ -56,12 +58,18 @@ final class ChargeAccruer
                     'amount_minor' => $amount->getMinorAmount()->toInt(),
                     'covers' => $pp->period,
                     'idempotency_key' => $this->key($item, $pp),
-                ]);
+                ])];
 
                 // Configurable options and addons recur with the item: bill each
                 // for the same period. Gated by the base reservation above, so a
                 // re-run of an already-billed period skips these too.
-                $created = array_merge($created, $this->billExtras($item, $pp->period));
+                $period = array_merge($period, $this->billExtras($item, $pp->period));
+
+                // A discount comes off what the period actually billed, so it
+                // is raised last and reads the figures above it.
+                $period = array_merge($period, $this->billDiscounts($item, $pp->period, $period));
+
+                $created = array_merge($created, $period);
             }
 
             $item->forceFill(['current_period' => $plan->ongoing])->save();
@@ -129,6 +137,69 @@ final class ChargeAccruer
                 'covers' => $period,
                 'idempotency_key' => 'addon_'.substr(hash('sha256', $addon->id.$period->toRange()), 0, 34),
             ]);
+        }
+
+        return $created;
+    }
+
+    /**
+     * Negative `discount` charges for the item's active discounts, one per
+     * discount, in the item's own line group so the invoice nests them under
+     * the thing they reduce and the period's tax falls with them.
+     *
+     * The base is what this period billed, and each discount applies to what is
+     * left after the ones before it, so a stack can zero a period but never
+     * invert it. A period that billed nothing raises none and spends no term.
+     *
+     * @param  list<Charge>  $billed  the charges this period just raised
+     * @return list<Charge>
+     */
+    private function billDiscounts(SubscriptionItem $item, Period $period, array $billed): array
+    {
+        $remaining = 0;
+        foreach ($billed as $charge) {
+            $remaining += $charge->amount_minor;
+        }
+
+        if ($remaining <= 0) {
+            return [];
+        }
+
+        $currency = $item->subscription->currency;
+        $created = [];
+
+        $discounts = Models::query(Discount::class)
+            ->where('item_id', $item->id)
+            ->active()
+            ->forTarget(DiscountTarget::Line)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($discounts as $discount) {
+            if (! $discount->hasTermsLeft()) {
+                continue;
+            }
+
+            $off = $discount->reduce(Money::ofMinor($remaining, $currency))->getMinorAmount()->toInt();
+            $discount->consume();
+
+            if ($off <= 0) {
+                continue;
+            }
+
+            $created[] = Charge::pendingForItem($item, [
+                'origin_type' => 'discount',
+                'origin_id' => $discount->id,
+                'kind' => LineKind::Discount,
+                'description' => $discount->label,
+                'quantity' => 1,
+                'amount_minor' => -$off,
+                'covers' => $period,
+                'idempotency_key' => 'disc_'.substr(hash('sha256', $discount->id.$period->toRange()), 0, 35),
+            ]);
+
+            $remaining -= $off;
         }
 
         return $created;

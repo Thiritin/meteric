@@ -78,6 +78,12 @@ class Subscription extends MetericModel
         return $this->hasMany(Models::for(Charge::class), 'subscription_id');
     }
 
+    /** @return HasMany<Discount, $this> */
+    public function discounts(): HasMany
+    {
+        return $this->hasMany(Models::for(Discount::class), 'subscription_id');
+    }
+
     public function isBillable(): bool
     {
         return $this->state->isBillable();

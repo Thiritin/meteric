@@ -19,6 +19,7 @@ use Meteric\Models\Price;
 use Meteric\Models\ProductAddon;
 use Meteric\Models\ProductOptionValue;
 use Meteric\Pricing\CheckoutPricer;
+use Meteric\Pricing\DiscountSpec;
 use Meteric\Pricing\FrozenCart;
 use Meteric\Quoting\Quote;
 use Meteric\Support\Models;
@@ -153,7 +154,21 @@ final class OrderBuilder
             'group' => $group,
             'addons' => [],
             'options' => [],
+            'discounts' => [],
         ];
+
+        return $this;
+    }
+
+    /**
+     * Attach a discount to the item most recently added. It is priced into the
+     * quote and frozen with the line, so the order total is already net of it,
+     * and materializing the line turns it into a standing `Discount` that the
+     * accruer spends one billed period at a time.
+     */
+    public function discount(DiscountSpec $spec): self
+    {
+        $this->items[$this->currentKey()]['discounts'][] = $spec;
 
         return $this;
     }

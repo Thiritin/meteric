@@ -8,6 +8,7 @@ use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Meteric\Contracts\InvoiceDriver;
+use Meteric\Enums\DiscountState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\UpgradePolicy;
@@ -16,6 +17,7 @@ use Meteric\Models\Addon;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
+use Meteric\Models\Discount;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
 use Meteric\Models\ItemOption;
@@ -27,6 +29,7 @@ use Meteric\Models\Refund;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Models\UsageRecord;
+use Meteric\Pricing\DiscountSpec;
 use Meteric\Quoting\QuoteBuilder;
 use Meteric\Subscriptions\ItemManager;
 use Meteric\Subscriptions\OrderBuilder;
@@ -279,6 +282,39 @@ final class Meteric
     public function materializeLine(Order $order, string $group, Subscription $subscription, ?Model $resource = null, ?CarbonImmutable $at = null): SubscriptionItem
     {
         return app(OrderManager::class)->materializeLine($order, $group, $subscription, $resource, $at);
+    }
+
+    /**
+     * Put a standing discount on a subscription item. It is spent one billed
+     * period at a time from the next accrual: the period the item is in has
+     * already been charged, and a charge that is on an invoice is not moved by
+     * adding a discount behind it. Freeze one on an order line with
+     * `OrderBuilder::discount()` to have the first period discounted too.
+     */
+    public function applyDiscount(SubscriptionItem $item, DiscountSpec $spec): Discount
+    {
+        return Models::query(Discount::class)->create([
+            'subscription_id' => $item->subscription_id,
+            'item_id' => $item->id,
+            'kind' => $spec->kind,
+            'percent' => $spec->percent,
+            'amount_minor' => $spec->amountMinor,
+            'currency' => $spec->currency,
+            'target' => $spec->target,
+            'label' => $spec->label,
+            'terms_total' => $spec->terms,
+            'terms_used' => 0,
+            'state' => DiscountState::Active,
+            'metadata' => $spec->metadata,
+        ]);
+    }
+
+    /** Stop a discount before its terms are spent. Periods already billed stay as billed. */
+    public function cancelDiscount(Discount $discount): Discount
+    {
+        $discount->cancel();
+
+        return $discount;
     }
 
     /** Cancel a pending order. No-op once terminal. */

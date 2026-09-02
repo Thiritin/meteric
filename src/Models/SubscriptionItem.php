@@ -83,6 +83,12 @@ class SubscriptionItem extends MetericModel
         return $this->hasMany(Models::for(ItemOption::class), 'item_id');
     }
 
+    /** @return HasMany<Discount, $this> */
+    public function discounts(): HasMany
+    {
+        return $this->hasMany(Models::for(Discount::class), 'item_id');
+    }
+
     /** @return HasMany<UsageRecord, $this> */
     public function usageRecords(): HasMany
     {

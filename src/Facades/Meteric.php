@@ -25,6 +25,8 @@ use Meteric\Models\Payment;
  * @method static \Meteric\Models\Order confirmOrder(\Meteric\Models\Order $order)
  * @method static \Meteric\Models\Order cancelOrder(\Meteric\Models\Order $order)
  * @method static int expireOrders(?\Carbon\CarbonImmutable $at = null)
+ * @method static \Meteric\Models\Discount applyDiscount(\Meteric\Models\SubscriptionItem $item, \Meteric\Pricing\DiscountSpec $spec)
+ * @method static \Meteric\Models\Discount cancelDiscount(\Meteric\Models\Discount $discount)
  * @method static array renew(\Meteric\Models\Subscription $sub, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\SubscriptionItem changePlan(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Meteric\Enums\DowngradePolicy $downgrade = null, ?\Meteric\Enums\UpgradePolicy $upgrade = null, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\Subscription cancel(\Meteric\Models\Subscription $sub, string|\Carbon\CarbonImmutable $at = 'period_end', ?\Carbon\CarbonImmutable $when = null, array $meta = [])

@@ -49,6 +49,7 @@ export default defineConfig({
           { text: 'Orders', link: '/usage/orders' },
           { text: 'Usage billing', link: '/usage/usage-billing' },
           { text: 'Addons and options', link: '/usage/addons-and-options' },
+          { text: 'Discounts', link: '/usage/discounts' },
           { text: 'Invoicing', link: '/usage/invoicing' },
           { text: 'Tax', link: '/usage/tax' },
           { text: 'Events and hooks', link: '/usage/extending' },

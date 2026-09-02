@@ -29,12 +29,23 @@ final class Quote
         public readonly array $lines,
         public readonly bool $estimated = false,
         public readonly ?Money $dueNowSetup = null,
+        public readonly ?Money $recurringDiscount = null,
+        public readonly ?CarbonImmutable $discountUntil = null,
     ) {}
 
     /** The one-time setup fees inside the due-now subtotal. */
     public function setupTotal(): Money
     {
         return $this->dueNowSetup ?? Money::ofMinor(0, $this->currency);
+    }
+
+    /**
+     * What a discount takes off each ongoing period while it lasts.
+     * `recurringTotal` stays the regular price, so a checkout can show both.
+     */
+    public function recurringDiscountTotal(): Money
+    {
+        return $this->recurringDiscount ?? Money::ofMinor(0, $this->currency);
     }
 
     /** @return array<string,mixed> */
@@ -52,6 +63,8 @@ final class Quote
                 'interval' => $this->interval,
                 'interval_count' => $this->intervalCount,
                 'total_minor' => $this->recurringTotal->getMinorAmount()->toInt(),
+                'discount_minor' => $this->recurringDiscountTotal()->getMinorAmount()->toInt(),
+                'discount_until' => $this->discountUntil?->toIso8601String(),
                 'next_charge_at' => $this->nextChargeAt?->toIso8601String(),
             ],
             'lines' => array_map(static fn (QuoteLine $l) => $l->toArray(), $this->lines),

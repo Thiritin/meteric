@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Contracts\Clock;
+use Meteric\Enums\DiscountState;
+use Meteric\Enums\DiscountTarget;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\OrderState;
@@ -24,6 +26,7 @@ use Meteric\Exceptions\LineNotMaterializable;
 use Meteric\Meteric;
 use Meteric\Models\Addon;
 use Meteric\Models\Charge;
+use Meteric\Models\Discount;
 use Meteric\Models\Invoice;
 use Meteric\Models\ItemOption;
 use Meteric\Models\Order;
@@ -31,6 +34,7 @@ use Meteric\Models\Payment;
 use Meteric\Models\Price;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
+use Meteric\Pricing\DiscountSpec;
 use Meteric\Support\Models;
 use Meteric\Support\Period;
 
@@ -353,6 +357,38 @@ final class OrderManager
             if ((int) ($opt['setup_minor'] ?? 0) > 0) {
                 $this->charge($item, 'item_option', $option->id, LineKind::Setup, (int) $opt['setup_minor'],
                     ucfirst((string) $opt['key']).' setup', null, 1);
+            }
+        }
+
+        // A frozen discount becomes a standing row plus its first period's
+        // negative charge. The order total was already net of it, so the charge
+        // is what makes the invoice agree with what was collected. Orders frozen
+        // before discounts existed carry none.
+        foreach ($content['discounts'] ?? [] as $frozen) {
+            $spec = DiscountSpec::fromArray($frozen);
+            $off = (int) ($frozen['reduce_minor'] ?? 0);
+            $spent = $off > 0 && $spec->target === DiscountTarget::Line ? 1 : 0;
+
+            $discount = Models::query(Discount::class)->create([
+                'subscription_id' => $sub->id,
+                'item_id' => $item->id,
+                'kind' => $spec->kind,
+                'percent' => $spec->percent,
+                'amount_minor' => $spec->amountMinor,
+                'currency' => $spec->currency,
+                'target' => $spec->target,
+                'label' => $spec->label,
+                'terms_total' => $spec->terms,
+                'terms_used' => $spent,
+                'state' => $spec->terms !== null && $spent >= $spec->terms
+                    ? DiscountState::Exhausted
+                    : DiscountState::Active,
+                'metadata' => $spec->metadata,
+            ]);
+
+            if ($off > 0) {
+                $this->charge($item, 'discount', $discount->id, LineKind::Discount, -$off,
+                    $spec->label, $spec->target === DiscountTarget::Line ? $covers : null, 1);
             }
         }
 
