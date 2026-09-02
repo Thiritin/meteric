@@ -70,6 +70,14 @@ Pay an order in full and materialize its subscription and paid invoice.
 
 Convert a zero-total order with no payment, e.g. a fully trialed signup.
 
+#### `materializeLine(Order $order, string $group, Subscription $subscription, ?Model $resource = null, ?CarbonImmutable $at = null): SubscriptionItem`
+
+Materialize one frozen line, by group, onto a subscription the host owns: the
+item, its addons and options, and that line's frozen charges. For hosts that
+want one subscription per line. Throws `LineNotMaterializable` for a base price
+that cannot renew exactly as an item. See
+[One subscription per line](/usage/orders#one-subscription-per-line).
+
 #### `cancelOrder(Order $order): Order`
 
 Cancel a pending order. No-op once terminal.

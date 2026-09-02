@@ -167,6 +167,48 @@ class ProvisionOnStart
 }
 ```
 
+### One subscription per line
+
+`payOrder()` and `confirmOrder()` build one subscription for the whole cart. A
+host that wants one subscription per line, so a renewal or a cancellation acts
+on a single service, materializes the lines itself and records the conversion
+on its own:
+
+```php
+$sub = Subscription::create([...]);   // the host's own row, same currency as the order
+
+$item = Meteric::materializeLine($order, 'hosting', $sub, resource: $service);
+```
+
+`materializeLine(Order $order, string $group, Subscription $subscription, ?Model $resource = null, ?CarbonImmutable $at = null): SubscriptionItem`
+takes the frozen line whose `group` matches and creates its item, its `Addon`
+rows and its `ItemOption` rows on the given subscription, then accrues that
+line's frozen charges: the first period, the base setup, each addon, each option
+and each option setup. The money is the frozen money; nothing is repriced. The
+service window is recomputed at `$at` (default now) under the order's anchor
+and first-period settings, and the subscription's `current_period` is set or
+shortened to end with it. `$resource` wins over the resource frozen on the
+line. Nothing else about the order moves: its state, `subscription_id` and
+`invoice_id` stay for the host to write.
+
+It is idempotent on the group: a line already on the subscription is returned
+unchanged. It throws `InvalidArgumentException` for an unknown group or a
+currency mismatch, and `LogicException` for a canceled or expired order.
+
+#### What renews exactly, and what does not
+
+An item renews through `SubscriptionItem::periodAmount()`, which is
+`Price::amountFor(qty)` and nothing more. Relative pricing, `included_qty`,
+`block_size` and `cap_minor` are applied only by `amountOfBase()` and
+`amountForQuantity()`, which addons and options bill through. So:
+
+- A line's addons and options renew exactly, because they become `Addon` and
+  `ItemOption` rows on the item and the accruer prices them with the full engine.
+- A **base line** whose price is relative, or has an allowance, block size or
+  cap, would renew at the wrong figure as an item. `materializeLine()` refuses it
+  with `Meteric\Exceptions\LineNotMaterializable` rather than approximating. Book
+  such a price as an addon of the line it belongs to instead.
+
 ### Zero-total orders
 
 A fully trialed signup owes nothing now. Confirm it without a payment:

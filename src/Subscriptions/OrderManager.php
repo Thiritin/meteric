@@ -6,6 +6,7 @@ namespace Meteric\Subscriptions;
 
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Anchoring\PeriodPlanner;
@@ -18,6 +19,7 @@ use Meteric\Events\OrderCanceled;
 use Meteric\Events\OrderExpired;
 use Meteric\Events\OrderPaid;
 use Meteric\Events\SubscriptionStarted;
+use Meteric\Exceptions\LineNotMaterializable;
 use Meteric\Meteric;
 use Meteric\Models\Addon;
 use Meteric\Models\Charge;
@@ -91,6 +93,69 @@ final class OrderManager
         return $order;
     }
 
+    /**
+     * Materialize one frozen line (the entry whose `group` matches) onto a
+     * subscription the caller owns, for hosts that want one subscription per
+     * line rather than the single one convert() builds. Creates the item, its
+     * Addon and ItemOption rows, and accrues the frozen charges (first period,
+     * setup, addons, options) for that line only. Nothing else about the order
+     * moves: the caller records its own conversion. Idempotent on the group:
+     * a line already on the subscription is returned unchanged.
+     *
+     * @throws LineNotMaterializable when the base price is relative, or carries an
+     *                               allowance, block size or cap; an item renews
+     *                               through amountFor() and would drift from the
+     *                               frozen figure. Addons inside the line are fine:
+     *                               they renew as Addon rows through the full engine.
+     */
+    public function materializeLine(Order $order, string $group, Subscription $sub, ?Model $resource = null, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        if ($order->state->isTerminal() && ! $order->isConverted()) {
+            throw new \LogicException("Order {$order->id} is {$order->state->value} and cannot be materialized.");
+        }
+        if ($sub->currency !== $order->currency) {
+            throw new \InvalidArgumentException("Subscription currency {$sub->currency} does not match order currency {$order->currency}.");
+        }
+
+        $content = null;
+        foreach ($order->contents as $entry) {
+            if (($entry['group'] ?? null) === $group) {
+                $content = $entry;
+                break;
+            }
+        }
+        if ($content === null) {
+            throw new \InvalidArgumentException("Order {$order->id} has no line in group {$group}.");
+        }
+
+        $price = Models::query(Price::class)->find($content['price_id']);
+        if ($price === null) {
+            throw new \RuntimeException("Order price {$content['price_id']} no longer resolves.");
+        }
+        $this->guardRenewable($price, $content);
+
+        return DB::transaction(function () use ($order, $group, $sub, $resource, $at, $content): SubscriptionItem {
+            $existing = $sub->items()->where('group', $group)->first();
+            if ($existing !== null) {
+                return $existing;
+            }
+
+            $when = $at ?? $this->clock->now();
+            $signup = $sub->trial_end ?? $when;
+
+            $item = $this->materializeItem($sub, $order, $content, $signup, $resource);
+
+            $end = $item->current_period->end;
+            $period = $sub->current_period;
+            $sub->forceFill(['current_period' => $period === null
+                ? new Period($when, $end)
+                : new Period($period->start, min($period->end, $end)),
+            ])->save();
+
+            return $item;
+        });
+    }
+
     /** Expire every pending order past its expiry. Returns the count. Idempotent. */
     public function expireDue(?CarbonImmutable $at = null): int
     {
@@ -147,7 +212,7 @@ final class OrderManager
 
             $ends = [];
             foreach ($locked->contents as $content) {
-                $ends[] = $this->materializeItem($sub, $locked, $content, $signup);
+                $ends[] = $this->materializeItem($sub, $locked, $content, $signup)->current_period->end;
             }
 
             if ($ends !== []) {
@@ -187,11 +252,11 @@ final class OrderManager
      * Build one subscription item plus its addons and options from a frozen cart
      * entry, accruing a pending Charge per piece using the captured amounts. The
      * period is recomputed at conversion time so the service window is fresh, but
-     * the money is the frozen money. Returns the item's period end.
+     * the money is the frozen money. A resource passed in wins over the frozen one.
      *
      * @param  array<string,mixed>  $content
      */
-    private function materializeItem(Subscription $sub, Order $order, array $content, CarbonImmutable $signup): CarbonImmutable
+    private function materializeItem(Subscription $sub, Order $order, array $content, CarbonImmutable $signup, ?Model $resource = null): SubscriptionItem
     {
         $price = Models::query(Price::class)->find($content['price_id']);
         if ($price === null) {
@@ -204,8 +269,8 @@ final class OrderManager
             'subscription_id' => $sub->id,
             'product_id' => $content['product_id'],
             'price_id' => $price->id,
-            'resource_type' => $content['resource_type'] ?? null,
-            'resource_id' => $content['resource_id'] ?? null,
+            'resource_type' => $resource?->getMorphClass() ?? $content['resource_type'] ?? null,
+            'resource_id' => $resource !== null ? (string) $resource->getKey() : ($content['resource_id'] ?? null),
             'label' => $content['label'] ?? null,
             'group' => $content['group'] ?? null,
             'quantity' => $content['quantity'],
@@ -262,7 +327,27 @@ final class OrderManager
             }
         }
 
-        return $covers->end;
+        return $item;
+    }
+
+    /**
+     * A base line renews through SubscriptionItem::periodAmount(), which is
+     * amountFor(qty) and nothing more. A price that only prices correctly
+     * through amountOfBase() or amountForQuantity() would renew at the wrong
+     * figure, so it is refused rather than approximated.
+     *
+     * @param  array<string,mixed>  $content
+     */
+    private function guardRenewable(Price $price, array $content): void
+    {
+        $label = $content['label'] ?? $content['group'] ?? $price->id;
+
+        if ($price->isRelative()) {
+            throw new LineNotMaterializable("Line {$label} has a relative base price; book it as an addon of the line it is a percentage of.");
+        }
+        if ($price->included_qty > 0 || $price->block_size !== null || $price->cap_minor !== null) {
+            throw new LineNotMaterializable("Line {$label} has an allowance, block size or cap on its base price; an item cannot renew it exactly.");
+        }
     }
 
     /** Recompute the first service window at conversion time (period only, not money). */

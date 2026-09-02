@@ -18,6 +18,7 @@ use Meteric\Events\OrderCreated;
 use Meteric\Events\OrderExpired;
 use Meteric\Events\OrderPaid;
 use Meteric\Events\SubscriptionStarted;
+use Meteric\Exceptions\LineNotMaterializable;
 use Meteric\Facades\Meteric;
 use Meteric\Models\Addon;
 use Meteric\Models\BillingAccount;
@@ -421,4 +422,126 @@ it('quotes a customer with no billing account yet without creating one', functio
     expect($quote->dueNowSubtotal->getMinorAmount()->toInt())->toBe(1000)
         ->and($quote->dueNowTax->getMinorAmount()->toInt())->toBe(190)
         ->and(BillingAccount::count())->toBe(0);
+});
+
+function orderLineBasket(BillingAccount $acc): Order
+{
+    $base = orderSetupPrice(1000, 2500);
+    $optPrice = Price::create([
+        'product_id' => $base->product_id, 'currency' => 'EUR', 'purpose' => 'option', 'amount_minor' => 200,
+        'setup_fee_minor' => 300, 'pricing_model' => 'fixed', 'interval' => 'month', 'interval_count' => 1,
+    ]);
+
+    return Meteric::createOrder()
+        ->account($acc)
+        ->firstPeriod(FirstPeriodPolicy::FullPeriod)
+        ->add($base, 1, label: 'srv1', group: 'l0')
+        ->addon(orderRelativeAddonPrice(20), group: 'backup')
+        ->option('ips', '2', 'quantity', $optPrice, 2, label: 'Extra IPs')
+        ->add(orderYearlyPrice(12000), 1, label: 'example.com', group: 'l1')
+        ->create();
+}
+
+function orderLineSubscription(BillingAccount $acc): Subscription
+{
+    return Subscription::create([
+        'account_id' => $acc->id, 'customer_type' => 'user', 'customer_id' => '1', 'currency' => 'EUR',
+        'state' => SubscriptionState::Active, 'anchor_mode' => 'signup', 'first_period' => 'full_period',
+    ]);
+}
+
+it('materializes one frozen line onto a host subscription with its frozen charges', function () {
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
+    $acc = orderAccount();
+    $order = orderLineBasket($acc);
+    $sub = orderLineSubscription($acc);
+    $resource = new class extends Model
+    {
+        public function getKey()
+        {
+            return 7;
+        }
+
+        public function getMorphClass()
+        {
+            return 'service';
+        }
+    };
+
+    $item = Meteric::materializeLine($order, 'l0', $sub, $resource);
+
+    expect($item->subscription_id)->toBe($sub->id)
+        ->and($item->group)->toBe('l0')
+        ->and($item->resource_type)->toBe('service')
+        ->and($item->resource_id)->toBe('7')
+        ->and($sub->fresh()->current_period->end->toIso8601String())->toBe('2026-07-01T00:00:00+00:00')
+        ->and($sub->items()->count())->toBe(1)
+        ->and(Addon::where('item_id', $item->id)->count())->toBe(1)
+        ->and(ItemOption::where('item_id', $item->id)->where('key', 'ips')->exists())->toBeTrue()
+        ->and(Order::findOrFail($order->id)->state)->toBe(OrderState::Pending);
+
+    // base 1000, setup 2500, backup 200, ips 400, ips setup 300; the yearly line is untouched.
+    $charges = Charge::where('subscription_id', $sub->id)->get();
+    expect($charges->sum('amount_minor'))->toBe(4400)
+        ->and($charges->where('kind', LineKind::Setup)->pluck('amount_minor')->sort()->values()->all())->toBe([300, 2500])
+        ->and($charges->where('kind', LineKind::Addon)->first()->amount_minor)->toBe(200)
+        ->and($charges->where('kind', LineKind::Option)->first()->amount_minor)->toBe(400)
+        ->and(Charge::count())->toBe(5);
+
+    // Idempotent on the group.
+    $again = Meteric::materializeLine($order, 'l0', $sub);
+    expect($again->id)->toBe($item->id)
+        ->and(Charge::count())->toBe(5);
+
+    // The next cycle renews base, addon and option through the engine, no setup.
+    Meteric::renew($sub->fresh(), CarbonImmutable::parse('2026-07-01T00:00:00Z'));
+    $july = Charge::whereRaw("lower(covers) = '2026-07-01 00:00:00+00'")->get();
+    expect($july->sum('amount_minor'))->toBe(1600)
+        ->and(Charge::where('kind', LineKind::Setup->value)->count())->toBe(2);
+});
+
+it('materializes lines with the frozen money after a catalog change', function () {
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
+    $acc = orderAccount();
+    $order = orderLineBasket($acc);
+    Price::query()->update(['amount_minor' => 99999]);
+
+    $item = Meteric::materializeLine($order, 'l1', orderLineSubscription($acc));
+
+    expect(Charge::where('origin_id', $item->id)->first()->amount_minor)->toBe(12000)
+        ->and($item->current_period->end->toIso8601String())->toBe('2027-06-01T00:00:00+00:00');
+});
+
+it('refuses to materialize a line whose base price cannot renew exactly', function () {
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
+    $acc = orderAccount();
+    $blocks = orderMonthlyPrice(500);
+    $blocks->forceFill(['block_size' => 50])->save();
+
+    $order = Meteric::createOrder()->account($acc)
+        ->add(orderRelativeAddonPrice(20), 1, group: 'rel')
+        ->add($blocks, 120, group: 'blk')
+        ->create();
+    $sub = orderLineSubscription($acc);
+
+    expect(fn () => Meteric::materializeLine($order, 'rel', $sub))->toThrow(LineNotMaterializable::class, 'relative')
+        ->and(fn () => Meteric::materializeLine($order, 'blk', $sub))->toThrow(LineNotMaterializable::class, 'block')
+        ->and(fn () => Meteric::materializeLine($order, 'nope', $sub))->toThrow(InvalidArgumentException::class, 'no line')
+        ->and($sub->items()->count())->toBe(0)
+        ->and(Charge::count())->toBe(0);
+});
+
+it('refuses to materialize a line of a canceled order or onto another currency', function () {
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
+    $acc = orderAccount();
+    $order = orderLineBasket($acc);
+    $usd = Subscription::create([
+        'account_id' => $acc->id, 'customer_type' => 'user', 'customer_id' => '1', 'currency' => 'USD',
+        'state' => SubscriptionState::Active, 'anchor_mode' => 'signup', 'first_period' => 'full_period',
+    ]);
+
+    expect(fn () => Meteric::materializeLine($order, 'l0', $usd))->toThrow(InvalidArgumentException::class, 'currency');
+
+    Meteric::cancelOrder($order);
+    expect(fn () => Meteric::materializeLine($order->fresh(), 'l0', orderLineSubscription($acc)))->toThrow(LogicException::class);
 });

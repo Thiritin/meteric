@@ -245,6 +245,12 @@ final class Meteric
         return app(OrderManager::class)->confirm($order);
     }
 
+    /** Materialize one frozen order line (by group) onto a subscription the host owns. */
+    public function materializeLine(Order $order, string $group, Subscription $subscription, ?Model $resource = null, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        return app(OrderManager::class)->materializeLine($order, $group, $subscription, $resource, $at);
+    }
+
     /** Cancel a pending order. No-op once terminal. */
     public function cancelOrder(Order $order): Order
     {
