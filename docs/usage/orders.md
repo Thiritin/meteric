@@ -81,7 +81,8 @@ $order = Meteric::createOrder($customer)
 `bookAddon()` throws `InvalidArgumentException` when the addon is not offered
 with the line's product, has no price on the line's term, or the quantity is
 outside `min_qty` / `max_qty`. `chooseOption()` checks the option's bounds the
-same way. See [Addon catalog](/usage/addons-and-options#addon-catalog) and
+same way. Both refuse a row withdrawn from sale (`active` false on the addon,
+the value or its option) with `Meteric\Exceptions\CatalogRowInactive`. See [Addon catalog](/usage/addons-and-options#addon-catalog) and
 [Catalog options](/usage/addons-and-options#catalog-options).
 
 ### Quoting the cart

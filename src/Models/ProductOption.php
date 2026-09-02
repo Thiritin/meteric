@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Meteric\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Meteric\Enums\OptionType;
@@ -17,6 +18,7 @@ use Meteric\Support\Models;
  * @property ?string $label
  * @property OptionType $type
  * @property bool $required
+ * @property bool $active
  * @property ?float $min_qty
  * @property ?float $max_qty
  */
@@ -28,15 +30,28 @@ class ProductOption extends MetericModel
 
     protected $guarded = [];
 
+    protected $attributes = ['active' => true];
+
     protected function casts(): array
     {
         return [
             'type' => OptionType::class,
             'required' => 'boolean',
+            'active' => 'boolean',
             'min_qty' => 'float',
             'max_qty' => 'float',
             'sort' => 'integer',
         ];
+    }
+
+    /**
+     * Values still on sale, in sort order.
+     *
+     * @return Collection<int, ProductOptionValue>
+     */
+    public function activeValues(): Collection
+    {
+        return $this->values->where('active', true)->values();
     }
 
     /** @return BelongsTo<Product, $this> */
@@ -66,7 +81,7 @@ class ProductOption extends MetericModel
             'required' => $this->required,
             'min' => $this->min_qty,
             'max' => $this->max_qty,
-            'values' => $this->values->map(fn (ProductOptionValue $v): array => $v->toDisplay($qty))->all(),
+            'values' => $this->activeValues()->map(fn (ProductOptionValue $v): array => $v->toDisplay($qty))->all(),
         ];
     }
 }

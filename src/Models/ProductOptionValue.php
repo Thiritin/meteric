@@ -15,6 +15,7 @@ use Meteric\Support\Models;
  * @property string $value
  * @property ?string $label
  * @property ?string $price_id
+ * @property bool $active
  */
 class ProductOptionValue extends MetericModel
 {
@@ -24,11 +25,20 @@ class ProductOptionValue extends MetericModel
 
     protected $guarded = [];
 
+    protected $attributes = ['active' => true];
+
     protected function casts(): array
     {
         return [
+            'active' => 'boolean',
             'sort' => 'integer',
         ];
+    }
+
+    /** On sale: the value and the option it belongs to are both active. */
+    public function isBookable(): bool
+    {
+        return $this->active && $this->option->active;
     }
 
     /** @return BelongsTo<ProductOption, $this> */

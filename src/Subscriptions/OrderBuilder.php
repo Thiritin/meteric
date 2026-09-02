@@ -12,6 +12,7 @@ use Meteric\Enums\AnchorMode;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\OrderState;
 use Meteric\Events\OrderCreated;
+use Meteric\Exceptions\CatalogRowInactive;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Order;
 use Meteric\Models\Price;
@@ -177,6 +178,9 @@ final class OrderBuilder
         if ($addon->product_id !== $term->product_id) {
             throw new \InvalidArgumentException("Addon {$addon->addon->slug} is not offered with product {$term->product->slug}.");
         }
+        if (! $addon->active) {
+            throw new CatalogRowInactive("Addon {$addon->addon->slug} is no longer offered with product {$term->product->slug}.");
+        }
         $this->guardBounds($addon->addon->slug, $qty, $addon->min_qty, $addon->max_qty);
 
         $price = $addon->priceFor($term);
@@ -211,6 +215,9 @@ final class OrderBuilder
     public function chooseOption(ProductOptionValue $value, float $qty = 1): self
     {
         $option = $value->option;
+        if (! $value->isBookable()) {
+            throw new CatalogRowInactive("Option {$option->key} value {$value->value} is no longer offered.");
+        }
         $this->guardBounds($option->key, $qty, $option->min_qty, $option->max_qty);
 
         return $this->option(

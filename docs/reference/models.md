@@ -157,15 +157,15 @@ Mid-cycle item extras.
 The addon catalog: which addon products a base product may be booked with. See
 [Addon catalog](/usage/addons-and-options#addon-catalog).
 
-- **`meteric_product_addons`:** `product_id`, `addon_product_id`, `group_key`, `required`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `addon()` (the addon `Product`); helpers `priceFor(Price $term): ?Price` (the addon's price on the base term, `addon` purpose first, then `recurring`), `toDisplay(Price $term, float $qty = 1, ?Money $base = null): ?array` (render-ready row, null when unpriced on the term).
+- **`meteric_product_addons`:** `product_id`, `addon_product_id`, `group_key`, `required`, `active`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `addon()` (the addon `Product`); helpers `priceFor(Price $term): ?Price` (the addon's price on the base term, `addon` purpose first, then `recurring`), `toDisplay(Price $term, float $qty = 1, ?Money $base = null): ?array` (render-ready row, null when unpriced on the term). An inactive row is not listed and cannot be booked.
 
 ## ProductOption / ProductOptionValue
 
 A product's declared configurable options (the catalog). See
 [Catalog options](/usage/addons-and-options#catalog-options).
 
-- **ProductOption (`meteric_product_options`):** `product_id`, `key`, `label`, `type` (`OptionType`), `required`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `values()`; helper `toDisplay(float $qty = 1): array` (option meta plus each value priced at `$qty`).
-- **ProductOptionValue (`meteric_product_option_values`):** `option_id`, `value`, `label`, `price_id`, `sort`; relationships `option()`, `price()`; helpers `amountFor(float $qty = 1): ?Money` (charge at a quantity, null when free), `toDisplay(float $qty = 1): array` (render-ready value row with pricing knobs).
+- **ProductOption (`meteric_product_options`):** `product_id`, `key`, `label`, `type` (`OptionType`), `required`, `active`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `values()`; helpers `activeValues(): Collection` (values still on sale), `toDisplay(float $qty = 1): array` (option meta plus each active value priced at `$qty`).
+- **ProductOptionValue (`meteric_product_option_values`):** `option_id`, `value`, `label`, `price_id`, `active`, `sort`; relationships `option()`, `price()`; helpers `isBookable(): bool` (the value and its option are both active), `amountFor(float $qty = 1): ?Money` (charge at a quantity, null when free), `toDisplay(float $qty = 1): array` (render-ready value row with pricing knobs). See [Withdrawing from sale](/usage/addons-and-options#withdrawing-from-sale).
 
 ## BillingPeriod
 

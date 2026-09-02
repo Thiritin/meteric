@@ -254,6 +254,24 @@ Book one on an order with `bookAddon()`; it resolves the same price, carries the
 group key over, and checks the quantity against the bounds. See
 [Orders](/usage/orders#from-the-catalog).
 
+### Withdrawing from sale
+
+`ProductOption`, `ProductOptionValue` and `ProductAddon` carry an `active` flag,
+default true. Set it false to withdraw a row without deleting it:
+
+- `optionCatalog()` lists active options only, each with its active values only,
+  and leaves out an option that has no active value left. `addonCatalog()` lists
+  active addons only.
+- `OrderBuilder::chooseOption()`, `OrderBuilder::bookAddon()` and
+  `Meteric::chooseOption()` refuse an inactive row with
+  `Meteric\Exceptions\CatalogRowInactive`. A value is bookable only when it and
+  its option are both active; `ProductOptionValue::isBookable()` says which.
+- Live items already referencing the row are untouched: their `ItemOption` and
+  `Addon` rows keep renewing through the price they point at.
+
+Closing the value's `Price` with `valid_to` does not withdraw it: `chooseOption`
+books the price the value points at directly. Use `active` for that.
+
 ## Catalog options
 
 `setOption` is the imperative path. A product can also *declare* its options up

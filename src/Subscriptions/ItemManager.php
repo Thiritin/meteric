@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
+use Meteric\Exceptions\CatalogRowInactive;
 use Meteric\Models\Addon;
 use Meteric\Models\Charge;
 use Meteric\Models\ItemOption;
@@ -144,6 +145,9 @@ final class ItemManager
     public function chooseOption(SubscriptionItem $item, ProductOptionValue $value, float $qty = 1, ?CarbonImmutable $at = null): ItemOption
     {
         $option = $value->option;
+        if (! $value->isBookable()) {
+            throw new CatalogRowInactive("Option {$option->key} value {$value->value} is no longer offered.");
+        }
 
         return $this->setOption(
             $item, $option->key, $value->value, $option->type->value,

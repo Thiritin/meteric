@@ -67,15 +67,17 @@ class Product extends MetericModel
 
     /**
      * The configurable-option catalog as render-ready data for a checkout or
-     * upgrade/downgrade form: every option with its values priced at $qty. JSON
-     * encode it straight to the frontend.
+     * upgrade/downgrade form: every active option that still has an active
+     * value, values priced at $qty. JSON encode it straight to the frontend.
      *
      * @return list<array<string,mixed>>
      */
     public function optionCatalog(float $qty = 1): array
     {
-        return $this->options()->with('values.price')->get()
+        return $this->options()->where('active', true)->with('values.price')->get()
+            ->filter(fn (ProductOption $o): bool => $o->activeValues()->isNotEmpty())
             ->map(fn (ProductOption $o): array => $o->toDisplay($qty))
+            ->values()
             ->all();
     }
 
@@ -87,7 +89,8 @@ class Product extends MetericModel
 
     /**
      * The bookable addons priced on one of this product's terms, as render-ready
-     * data for a checkout form. Addons with no price for that term are left out.
+     * data for a checkout form. Inactive addons and addons with no price for
+     * that term are left out.
      *
      * @return list<array<string,mixed>>
      */
@@ -97,7 +100,7 @@ class Product extends MetericModel
             throw new \InvalidArgumentException("Price {$term->id} does not belong to product {$this->slug}.");
         }
 
-        return $this->addons()->with('addon')->get()
+        return $this->addons()->where('active', true)->with('addon')->get()
             ->map(fn (ProductAddon $a): ?array => $a->toDisplay($term, $qty))
             ->filter()
             ->values()

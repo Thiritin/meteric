@@ -19,6 +19,7 @@ use Meteric\Support\Models;
  * @property string $addon_product_id
  * @property ?string $group_key
  * @property bool $required
+ * @property bool $active
  * @property ?float $min_qty
  * @property ?float $max_qty
  */
@@ -30,10 +31,13 @@ class ProductAddon extends MetericModel
 
     protected $guarded = [];
 
+    protected $attributes = ['active' => true];
+
     protected function casts(): array
     {
         return [
             'required' => 'boolean',
+            'active' => 'boolean',
             'min_qty' => 'float',
             'max_qty' => 'float',
             'sort' => 'integer',
