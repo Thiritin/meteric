@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Meteric\Pricing;
 
+use Meteric\Quoting\Quote;
+
 /**
  * The priced, frozen result of a checkout cart: the `contents` array (written
  * verbatim to the Order) plus the order-level totals and a quote snapshot for
@@ -22,6 +24,7 @@ final class FrozenCart
         public readonly int $taxMinor,
         public readonly int $totalMinor,
         public readonly int $recurringTotalMinor,
+        public readonly Quote $quote,
         public readonly array $quoteSnapshot,
     ) {}
 }

@@ -50,13 +50,66 @@ provisioning (`'1024'`) and a display `label` (`'1 GB RAM'`) side by side.
 - `firstPeriod(FirstPeriodPolicy $policy)`: how the first partial period is billed.
 - `trialDays(int $days)`: trial length. A trial defers the first charge and starts the subscription `Trialing`.
 - `at(CarbonImmutable $at)`: price as of a fixed instant (deterministic).
+- `tax(TaxContext $context)`: price under an explicit tax context instead of the account's profile.
 - `expiresIn(?int $minutes)`: override the pending TTL. Null leaves the configured default.
 - `add(Price $price, float $qty = 1, ?Model $resource = null, ?string $label = null, ?string $group = null)`: open a cart line. `resource` links the line to a host model; `group` tags it for grouped display.
 - `addon(Price $price, ?string $group = null, float $qty = 1)`: attach an addon to the current line.
+- `bookAddon(ProductAddon $addon, float $qty = 1)`: attach a catalog addon to the current line, priced on that line's term.
 - `option(string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?float $min = null, ?float $max = null, ?string $label = null)`: attach a configurable option to the current line.
+- `chooseOption(ProductOptionValue $value, float $qty = 1)`: attach a catalog option value to the current line.
+- `quote(): Quote`: price the cart as `create()` would and return the quote. Persists nothing.
 - `create(): Order`: freeze the cart, store a pending order, fire `OrderCreated`.
 
-`create()` throws if the cart is empty or the priced total is negative.
+`create()` and `quote()` throw if the cart is empty; `create()` also throws if
+the priced total is negative.
+
+### From the catalog
+
+`bookAddon()` and `chooseOption()` build the cart from what the product
+declares, so the order carries exactly what the catalog offered.
+
+```php
+$term = $vps->priceFor('EUR', PricePurpose::Recurring, Interval::Year);
+
+$order = Meteric::createOrder($customer)
+    ->add($term, 1, label: 'web1')
+    ->bookAddon($backupsAddon)          // ProductAddon: price on the yearly term, group key, bounds
+    ->chooseOption($ipv4Value, qty: 4)  // ProductOptionValue: key, type, price, bounds, label
+    ->create();
+```
+
+`bookAddon()` throws `InvalidArgumentException` when the addon is not offered
+with the line's product, has no price on the line's term, or the quantity is
+outside `min_qty` / `max_qty`. `chooseOption()` checks the option's bounds the
+same way. See [Addon catalog](/usage/addons-and-options#addon-catalog) and
+[Catalog options](/usage/addons-and-options#catalog-options).
+
+### Quoting the cart
+
+`quote()` runs the same pricer as `create()` on the same cart and returns the
+`Quote` without writing a row, so a checkout page renders exactly the figures
+the order will freeze. Tax comes from `tax()`, else the customer's existing
+billing account; a customer with no account yet is quoted untaxed and none is
+created.
+
+```php
+$quote = Meteric::createOrder($customer)
+    ->add($term)
+    ->bookAddon($backupsAddon)
+    ->quote();
+
+$quote->dueNowTotal;     // Money, gross
+$quote->setupTotal();    // Money, the one-time setup fees inside due now
+$quote->toArray();       // the same shape create() stores in quote_snapshot
+```
+
+### Setup fees
+
+A `setup_fee_minor` on the base price, or on an option's price, is frozen with
+the order (`setup_minor` on the line and on the option) and charged once as a
+`setup` line when the order is paid. The quote lists it as its own line of kind
+`setup` and totals it under `due_now.setup_minor`. Renewals bill the recurring
+amounts only. Addon prices do not carry a setup fee through checkout.
 
 ## The order row
 

@@ -24,5 +24,6 @@ final readonly class PricedRow
         public ?int $intervalCount,
         public ?CarbonImmutable $nextChargeAt,
         public bool $estimated,
+        public ?QuoteLine $setupLine = null,
     ) {}
 }

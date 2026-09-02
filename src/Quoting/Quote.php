@@ -28,7 +28,14 @@ final class Quote
         public readonly ?CarbonImmutable $nextChargeAt,
         public readonly array $lines,
         public readonly bool $estimated = false,
+        public readonly ?Money $dueNowSetup = null,
     ) {}
+
+    /** The one-time setup fees inside the due-now subtotal. */
+    public function setupTotal(): Money
+    {
+        return $this->dueNowSetup ?? Money::ofMinor(0, $this->currency);
+    }
 
     /** @return array<string,mixed> */
     public function toArray(): array
@@ -37,6 +44,7 @@ final class Quote
             'currency' => $this->currency,
             'due_now' => [
                 'subtotal_minor' => $this->dueNowSubtotal->getMinorAmount()->toInt(),
+                'setup_minor' => $this->setupTotal()->getMinorAmount()->toInt(),
                 'tax_minor' => $this->dueNowTax->getMinorAmount()->toInt(),
                 'total_minor' => $this->dueNowTotal->getMinorAmount()->toInt(),
             ],

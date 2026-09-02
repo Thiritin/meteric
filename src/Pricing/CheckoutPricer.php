@@ -28,8 +28,9 @@ use Meteric\Tax\TaxContext;
  *
  * The returned shape per cart row:
  *  product_id, price_id, quantity, label, group, resource_type, resource_id,
- *  amount_minor (frozen due-now base amount), kind (frozen LineKind),
- *  covers [iso,iso]|null, addons[], options[].
+ *  amount_minor (frozen due-now base amount), setup_minor (the base price's
+ *  one-time setup fee), kind (frozen LineKind), covers [iso,iso]|null,
+ *  addons[], options[].
  */
 final class CheckoutPricer
 {
@@ -82,13 +83,20 @@ final class CheckoutPricer
             $row['options'],
         );
 
-        // Frozen due-now for the whole row: base + addons + options + setups.
+        // Frozen due-now for the whole row: base + addons + options, then the
+        // one-time setups (base and options) on top.
         $rowDueNow = $dueNow;
         foreach ($addons as $a) {
             $rowDueNow = $rowDueNow->plus(Money::ofMinor($a['amount_minor'], $terms->currency));
         }
         foreach ($options as $o) {
-            $rowDueNow = $rowDueNow->plus(Money::ofMinor($o['amount_minor'] + $o['setup_minor'], $terms->currency));
+            $rowDueNow = $rowDueNow->plus(Money::ofMinor($o['amount_minor'], $terms->currency));
+        }
+
+        $setup = $price->hasSetupFee() ? $price->setupFee() : $zero;
+        $rowSetup = $setup;
+        foreach ($options as $o) {
+            $rowSetup = $rowSetup->plus(Money::ofMinor($o['setup_minor'], $terms->currency));
         }
 
         // Ongoing per-period total (display only): full base + full extras.
@@ -115,18 +123,22 @@ final class CheckoutPricer
                 'resource_type' => $row['resource']?->getMorphClass(),
                 'resource_id' => $row['resource'] !== null ? (string) $row['resource']->getKey() : null,
                 'amount_minor' => $dueNow->getMinorAmount()->toInt(),
+                'setup_minor' => $setup->getMinorAmount()->toInt(),
                 'kind' => $kind->value,
                 'covers' => $covers?->toArray(),
                 'addons' => $addons,
                 'options' => $options,
             ],
             line: new QuoteLine($label, $kind, $qty, $rowDueNow, $this->tax->resolve($rowDueNow, $terms->taxContext)->amount, covers: $covers),
-            dueNow: $rowDueNow,
+            dueNow: $rowDueNow->plus($rowSetup),
             recurring: $recurring,
             interval: $price->isRecurring() ? $price->interval?->value : null,
             intervalCount: $price->isRecurring() ? $price->interval_count : null,
             nextChargeAt: $price->isRecurring() ? $ongoing?->end : null,
             estimated: $usage,
+            setupLine: $rowSetup->isPositive()
+                ? new QuoteLine($label.' setup', LineKind::Setup, 1, $rowSetup, $this->tax->resolve($rowSetup, $terms->taxContext)->amount)
+                : null,
         );
     }
 
@@ -141,7 +153,15 @@ final class CheckoutPricer
 
         $subtotal = array_reduce($rows, fn (Money $c, PricedRow $r) => $c->plus($r->dueNow), $zero);
         $recurring = array_reduce($rows, fn (Money $c, PricedRow $r) => $c->plus($r->recurring), $zero);
-        $lines = array_map(fn (PricedRow $r): QuoteLine => $r->line, $rows);
+        $setup = $zero;
+        $lines = [];
+        foreach ($rows as $row) {
+            $lines[] = $row->line;
+            if ($row->setupLine !== null) {
+                $lines[] = $row->setupLine;
+                $setup = $setup->plus($row->setupLine->amount);
+            }
+        }
         $taxTotal = array_reduce($lines, fn (Money $c, QuoteLine $l) => $c->plus($l->tax), $zero);
 
         $interval = null;
@@ -168,6 +188,7 @@ final class CheckoutPricer
             nextChargeAt: $nextChargeAt,
             lines: $lines,
             estimated: $estimated,
+            dueNowSetup: $setup,
         );
 
         return new FrozenCart(
@@ -176,6 +197,7 @@ final class CheckoutPricer
             taxMinor: $taxTotal->getMinorAmount()->toInt(),
             totalMinor: $subtotal->plus($taxTotal)->getMinorAmount()->toInt(),
             recurringTotalMinor: $recurring->getMinorAmount()->toInt(),
+            quote: $quote,
             quoteSnapshot: $quote->toArray(),
         );
     }

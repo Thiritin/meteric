@@ -23,6 +23,19 @@ $quote = Meteric::quote()
 
 `build()` returns a read-only `Quote`. Nothing is written to the database.
 
+`Meteric::quote()` prices base lines only. To quote a basket with addons,
+options and setup fees, build it on the order builder and call `quote()`
+instead of `create()`; it runs the same pricer the order freezes with. See
+[Quoting the cart](/usage/orders#quoting-the-cart).
+
+```php
+$quote = Meteric::createOrder($customer)
+    ->add($term)
+    ->bookAddon($backupsAddon)
+    ->chooseOption($ipv4Value, qty: 4)
+    ->quote();
+```
+
 ## Serializing for the frontend
 
 ```php
@@ -36,6 +49,7 @@ return $quote->toArray(); // or $quote->toJson()
     'currency' => 'EUR',
     'due_now' => [
         'subtotal_minor' => 1200,
+        'setup_minor' => 0,       // one-time setup fees inside the subtotal
         'tax_minor' => 228,
         'total_minor' => 1428,
     ],

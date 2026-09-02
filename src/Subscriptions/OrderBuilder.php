@@ -15,15 +15,21 @@ use Meteric\Events\OrderCreated;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Order;
 use Meteric\Models\Price;
+use Meteric\Models\ProductAddon;
+use Meteric\Models\ProductOptionValue;
 use Meteric\Pricing\CheckoutPricer;
+use Meteric\Pricing\FrozenCart;
+use Meteric\Quoting\Quote;
 use Meteric\Support\Models;
+use Meteric\Tax\TaxContext;
 
 /**
  * Fluent checkout creation. Mirrors SubscriptionBuilder, but instead of starting
  * a subscription it freezes the cart into a single pending Order row: contents +
  * computed minor amounts + a token. add() opens a new item; addon() and option()
- * attach to the item most recently added. No Subscription/Charge/Invoice exists
- * until the order is paid.
+ * attach to the item most recently added. quote() prices the same cart without
+ * persisting it, so what a checkout page shows is what create() freezes. No
+ * Subscription/Charge/Invoice exists until the order is paid.
  */
 final class OrderBuilder
 {
@@ -44,6 +50,8 @@ final class OrderBuilder
     private ?CarbonImmutable $at = null;
 
     private ?string $idempotencyKey = null;
+
+    private ?TaxContext $taxContext = null;
 
     private ?int $ttlMinutes;
 
@@ -118,6 +126,14 @@ final class OrderBuilder
         return $this;
     }
 
+    /** Price under an explicit tax context instead of the account's profile. */
+    public function tax(TaxContext $context): self
+    {
+        $this->taxContext = $context;
+
+        return $this;
+    }
+
     /** Minutes until a pending order expires. Null leaves the configured default. */
     public function expiresIn(?int $minutes): self
     {
@@ -149,6 +165,28 @@ final class OrderBuilder
         return $this;
     }
 
+    /**
+     * Book a catalog addon on the item most recently added: the addon's price is
+     * resolved for that item's currency and term, its group key carried over,
+     * and the quantity checked against the catalog bounds.
+     */
+    public function bookAddon(ProductAddon $addon, float $qty = 1): self
+    {
+        $term = $this->items[$this->currentKey()]['price'];
+
+        if ($addon->product_id !== $term->product_id) {
+            throw new \InvalidArgumentException("Addon {$addon->addon->slug} is not offered with product {$term->product->slug}.");
+        }
+        $this->guardBounds($addon->addon->slug, $qty, $addon->min_qty, $addon->max_qty);
+
+        $price = $addon->priceFor($term);
+        if ($price === null) {
+            throw new \InvalidArgumentException("Addon {$addon->addon->slug} has no {$term->currency} price for this term.");
+        }
+
+        return $this->addon($price, $addon->group_key, $qty);
+    }
+
     /** Attach a configurable option to the item most recently added (value + label both frozen). */
     public function option(string $key, string $value, string $type, ?Price $price = null, float $qty = 1, ?float $min = null, ?float $max = null, ?string $label = null): self
     {
@@ -166,26 +204,42 @@ final class OrderBuilder
         return $this;
     }
 
+    /**
+     * Select a catalog option value on the item most recently added. Reads the
+     * key, type, bounds and price off the catalog and checks the quantity.
+     */
+    public function chooseOption(ProductOptionValue $value, float $qty = 1): self
+    {
+        $option = $value->option;
+        $this->guardBounds($option->key, $qty, $option->min_qty, $option->max_qty);
+
+        return $this->option(
+            $option->key, $value->value, $option->type->value,
+            $value->price, $qty, $option->min_qty, $option->max_qty, $value->label ?? $value->value,
+        );
+    }
+
+    /**
+     * Price the cart as create() would and return the quote, persisting nothing.
+     * Tax comes from the explicit context, else the customer's existing account;
+     * a customer with no account yet is quoted untaxed.
+     */
+    public function quote(): Quote
+    {
+        $at = $this->at ?? $this->clock->now();
+        $account = $this->account ?? $this->findAccount();
+        $currency = $this->currency ?? $account->currency ?? config('meteric.currency', 'EUR');
+
+        return $this->price($at, $currency, $this->taxContext ?? $account?->taxContext() ?? new TaxContext)->quote;
+    }
+
     public function create(): Order
     {
-        if ($this->items === []) {
-            throw new \LogicException('An order needs at least one item.');
-        }
-
         $at = $this->at ?? $this->clock->now();
         $account = $this->account ?? $this->resolveAccount();
         $currency = $this->currency ?? $account->currency;
 
-        $priced = $this->pricer->price(
-            cart: $this->items,
-            currency: $currency,
-            at: $at,
-            anchorMode: $this->anchorMode,
-            anchorDay: $this->anchorDay,
-            firstPeriod: $this->firstPeriod,
-            trialDays: $this->trialDays,
-            taxContext: $account->taxContext(),
-        );
+        $priced = $this->price($at, $currency, $this->taxContext ?? $account->taxContext());
 
         if ($priced->totalMinor < 0) {
             throw new \InvalidArgumentException('An order total cannot be negative.');
@@ -217,6 +271,34 @@ final class OrderBuilder
         return $order;
     }
 
+    private function price(CarbonImmutable $at, string $currency, TaxContext $taxContext): FrozenCart
+    {
+        if ($this->items === []) {
+            throw new \LogicException('An order needs at least one item.');
+        }
+
+        return $this->pricer->price(
+            cart: $this->items,
+            currency: $currency,
+            at: $at,
+            anchorMode: $this->anchorMode,
+            anchorDay: $this->anchorDay,
+            firstPeriod: $this->firstPeriod,
+            trialDays: $this->trialDays,
+            taxContext: $taxContext,
+        );
+    }
+
+    private function guardBounds(string $what, float $qty, ?float $min, ?float $max): void
+    {
+        if ($min !== null && $qty < $min) {
+            throw new \InvalidArgumentException("{$what} quantity {$qty} is below the minimum {$min}.");
+        }
+        if ($max !== null && $qty > $max) {
+            throw new \InvalidArgumentException("{$what} quantity {$qty} is above the maximum {$max}.");
+        }
+    }
+
     private function currentKey(): int
     {
         if ($this->items === []) {
@@ -224,6 +306,19 @@ final class OrderBuilder
         }
 
         return array_key_last($this->items);
+    }
+
+    /** The customer's account if one exists; never creates one. */
+    private function findAccount(): ?BillingAccount
+    {
+        if ($this->customer === null) {
+            return null;
+        }
+
+        return Models::query(BillingAccount::class)
+            ->where('owner_type', $this->customer->getMorphClass())
+            ->where('owner_id', $this->customer->getKey())
+            ->first();
     }
 
     private function resolveAccount(): BillingAccount

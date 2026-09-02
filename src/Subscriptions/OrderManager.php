@@ -220,6 +220,12 @@ final class OrderManager
         $this->charge($item, 'subscription_item', $item->id, $kind, (int) $content['amount_minor'],
             $item->lineTitle(), $covers, (float) $content['quantity']);
 
+        // Orders frozen before setup_minor existed carry no key and owe nothing here.
+        if ((int) ($content['setup_minor'] ?? 0) > 0) {
+            $this->charge($item, 'subscription_item', $item->id, LineKind::Setup, (int) $content['setup_minor'],
+                'Setup', null, 1);
+        }
+
         foreach ($content['addons'] ?? [] as $addon) {
             $addonModel = Models::query(Addon::class)->create([
                 'item_id' => $item->id,
