@@ -11,10 +11,13 @@ helper methods you actually call.
 `meteric_products`: a catalog entry.
 
 - **Columns:** `type`, `slug`, `name`, `pricing_model`, `is_proratable`, `config` (array).
-- **Relationships:** `prices()`, `meterDimensions()`, `billable()` (morph).
+- **Relationships:** `prices()`, `meterDimensions()`, `options()`, `addons()` (`ProductAddon` rows), `billable()` (morph).
 - **Config:** the keys the package reads are validated on write. `config['downgrade']` must be a valid `DowngradePolicy` value and `config['cancel_notice_days']` a non-negative integer, or the assignment throws `InvalidArgumentException`. Other keys (your own host settings) pass through untouched.
 - **Helpers:**
-  - `priceFor(string $currency, PricePurpose $purpose = Recurring): ?Price`: latest open price for a currency and purpose.
+  - `priceFor(string $currency, PricePurpose $purpose = Recurring, ?Interval $interval = null, ?int $intervalCount = null): ?Price`: latest open price for a currency and purpose, narrowed to one term when an interval is given.
+  - `terms(string $currency, PricePurpose $purpose = Recurring): Collection<Price>`: the current recurring prices, one per term, shortest first.
+  - `termCatalog(string $currency, float $qty = 1, PricePurpose $purpose = Recurring): array`: the terms as JSON-ready rows (`Price::toDisplay`). See [Terms](/usage/products-and-prices#terms).
+  - `addonCatalog(Price $term, float $qty = 1): array`: the bookable addons priced on `$term` as JSON-ready rows. See [Addon catalog](/usage/addons-and-options#addon-catalog).
   - `optionCatalog(float $qty = 1): array`: the configurable-option catalog as JSON-ready rows, values priced at `$qty`. See [Displaying options in a form](/usage/addons-and-options#displaying-options-in-a-form).
   - `isMetered(): bool`: true for `metered` / `hourly`.
   - `downgradePolicy(): DowngradePolicy`: from `config['downgrade']`, defaults to `Defer`.
@@ -37,6 +40,7 @@ helper methods you actually call.
   - `percentLabel(): string`: `percent` without trailing zeros, e.g. `"20"` or `"12.5"`.
   - `recurrence(): RecurrenceRule`, `isRecurring(): bool`.
   - `hasSetupFee(): bool`, `setupFee(): Money`, `cap(): ?Money`.
+  - `toDisplay(float $qty = 1): array`: JSON-ready row with the price at `$qty` and the raw pricing knobs.
 
 ## BillingAccount
 
@@ -147,6 +151,13 @@ Mid-cycle item extras.
 
 - **Addon (`meteric_addons`):** `quantity`, `state`, `group_key`, `metadata`; relationships `item()`, `product()`, `price()`.
 - **ItemOption (`meteric_item_options`):** `key`, `type` (`OptionType`), `value`, `quantity`, `min_qty`, `max_qty`; relationships `item()`, `price()`; helpers `boolValue(): bool`, `amount(): ?Money` (per-period recurring charge), `toDisplay(): array` (render-ready row for a service page).
+
+## ProductAddon
+
+The addon catalog: which addon products a base product may be booked with. See
+[Addon catalog](/usage/addons-and-options#addon-catalog).
+
+- **`meteric_product_addons`:** `product_id`, `addon_product_id`, `group_key`, `required`, `min_qty`, `max_qty`, `sort`; relationships `product()`, `addon()` (the addon `Product`); helpers `priceFor(Price $term): ?Price` (the addon's price on the base term, `addon` purpose first, then `recurring`), `toDisplay(Price $term, float $qty = 1, ?Money $base = null): ?array` (render-ready row, null when unpriced on the term).
 
 ## ProductOption / ProductOptionValue
 

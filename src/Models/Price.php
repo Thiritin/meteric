@@ -198,4 +198,32 @@ class Price extends MetericModel
 
         return $amount;
     }
+
+    /**
+     * Render-ready data for a checkout form: the price at $qty plus the raw
+     * pricing knobs so a client can recompute as the quantity changes.
+     *
+     * @return array<string,mixed>
+     */
+    public function toDisplay(float $qty = 1): array
+    {
+        $amount = $this->isRelative() ? Money::ofMinor(0, $this->currency) : $this->amountForQuantity($qty);
+
+        return [
+            'price_id' => $this->id,
+            'currency' => $this->currency,
+            'purpose' => $this->purpose->value,
+            'pricing_model' => $this->pricing_model->value,
+            'interval' => $this->interval?->value,
+            'interval_count' => $this->interval_count,
+            'amount_minor' => $amount->getMinorAmount()->toInt(),
+            'amount' => (string) $amount->getAmount(),
+            'unit_rate' => $this->unit_rate,
+            'percent' => $this->percent,
+            'included_qty' => $this->included_qty,
+            'block_size' => $this->block_size,
+            'tiers' => $this->tiers ?? [],
+            'setup_fee_minor' => $this->setup_fee_minor,
+        ];
+    }
 }

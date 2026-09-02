@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Meteric\Models;
 
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Meteric\Casts\ProductConfigCast;
 use Meteric\Enums\DowngradePolicy;
+use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
 use Meteric\Support\Models;
@@ -75,14 +79,85 @@ class Product extends MetericModel
             ->all();
     }
 
-    public function priceFor(string $currency, PricePurpose $purpose = PricePurpose::Recurring): ?Price
+    /** @return HasMany<ProductAddon, $this> */
+    public function addons(): HasMany
+    {
+        return $this->hasMany(Models::for(ProductAddon::class), 'product_id')->orderBy('sort');
+    }
+
+    /**
+     * The bookable addons priced on one of this product's terms, as render-ready
+     * data for a checkout form. Addons with no price for that term are left out.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function addonCatalog(Price $term, float $qty = 1): array
+    {
+        if ($term->product_id !== $this->id) {
+            throw new \InvalidArgumentException("Price {$term->id} does not belong to product {$this->slug}.");
+        }
+
+        return $this->addons()->with('addon')->get()
+            ->map(fn (ProductAddon $a): ?array => $a->toDisplay($term, $qty))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The current price for a currency and purpose. Pass an interval to pick
+     * one term when a product carries several (monthly and yearly, say); without
+     * it the newest current price wins whatever its term.
+     */
+    public function priceFor(string $currency, PricePurpose $purpose = PricePurpose::Recurring, ?Interval $interval = null, ?int $intervalCount = null): ?Price
+    {
+        return $this->currentPrices($currency, $purpose)
+            ->when($interval !== null, fn (Builder $q) => $q
+                ->where('interval', $interval?->value)
+                ->where('interval_count', $intervalCount ?? 1))
+            ->latest('valid_from')
+            ->first();
+    }
+
+    /**
+     * The terms this product is sold on in a currency: one current recurring
+     * price per interval, shortest term first.
+     *
+     * @return Collection<int, Price>
+     */
+    public function terms(string $currency, PricePurpose $purpose = PricePurpose::Recurring): Collection
+    {
+        $epoch = CarbonImmutable::create(2000, 1, 1, 0, 0, 0, 'UTC');
+
+        return $this->currentPrices($currency, $purpose)
+            ->whereNotNull('interval')
+            ->whereNotNull('interval_count')
+            ->orderByDesc('valid_from')
+            ->get()
+            ->unique(fn (Price $p): string => $p->interval?->value.':'.$p->interval_count)
+            ->sortBy(fn (Price $p): int => $p->recurrence()->nextEnd($epoch)->getTimestamp())
+            ->values();
+    }
+
+    /**
+     * The terms as render-ready data for a checkout form, each priced at $qty.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function termCatalog(string $currency, float $qty = 1, PricePurpose $purpose = PricePurpose::Recurring): array
+    {
+        return $this->terms($currency, $purpose)
+            ->map(fn (Price $p): array => $p->toDisplay($qty))
+            ->all();
+    }
+
+    /** @return HasMany<Price, $this> */
+    private function currentPrices(string $currency, PricePurpose $purpose): HasMany
     {
         return $this->prices()
             ->whereNull('valid_to')
             ->where('currency', $currency)
-            ->where('purpose', $purpose->value)
-            ->latest('valid_from')
-            ->first();
+            ->where('purpose', $purpose->value);
     }
 
     public function isMetered(): bool

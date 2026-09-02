@@ -15,7 +15,7 @@ it('runs all migrations and creates the core tables', function () {
     foreach ([
         'billing_accounts', 'products', 'prices',
         'meter_dimensions', 'subscriptions', 'subscription_items',
-        'addons', 'item_options',
+        'addons', 'item_options', 'product_addons',
         'usage_records', 'billing_periods', 'charges',
         'invoices', 'invoice_lines', 'credit_notes',
         'payments', 'payment_allocations', 'ledger',

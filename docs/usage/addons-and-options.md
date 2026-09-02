@@ -205,6 +205,55 @@ If the option's price has a `setup_fee_minor`, a one-time `setup` line is charge
 once, when the option is first added. Later quantity changes on the same option
 do not re-charge it.
 
+## Addon catalog
+
+`addAddon` and `OrderBuilder::addon()` take any price. A product can also
+*declare* which addon products it may be booked with, so a checkout page lists
+them instead of hardcoding slugs.
+
+`ProductAddon` links a base product to an addon product: `group_key` (members
+of a group are mutually exclusive, the same key the booked `Addon` carries),
+`required`, `min_qty`, `max_qty`, `sort`. `Product::addons()` lists them.
+
+```php
+use Meteric\Models\ProductAddon;
+
+ProductAddon::create([
+    'product_id' => $vps->id,
+    'addon_product_id' => $backups->id,
+    'group_key' => 'backup',
+    'required' => true,
+]);
+
+ProductAddon::create([
+    'product_id' => $vps->id,
+    'addon_product_id' => $extraIp->id,
+    'min_qty' => 0,
+    'max_qty' => 8,
+]);
+```
+
+The catalog row carries no price. At checkout the addon product's own price is
+resolved for the base line's currency and term (`priceFor($term)`): an `addon`
+purpose price first, a `recurring` one second, always on the same interval as
+the base. An addon with no price on that term is not bookable on it.
+
+`Product::addonCatalog(Price $term, float $qty = 1)` renders the bookable addons
+for one term as JSON-ready rows: `product_id`, `slug`, `label`, `group_key`,
+`required`, `min`, `max`, plus the price fields of `Price::toDisplay()`
+(`price_id`, `amount_minor`, `amount`, `interval`, `setup_fee_minor`, …). Relative
+addons are priced against the term's base amount. Addons without a price on the
+term are left out.
+
+```php
+$term = $vps->priceFor('EUR', PricePurpose::Recurring, Interval::Year);
+$addons = $vps->addonCatalog($term);
+```
+
+Book one on an order with `bookAddon()`; it resolves the same price, carries the
+group key over, and checks the quantity against the bounds. See
+[Orders](/usage/orders#from-the-catalog).
+
 ## Catalog options
 
 `setOption` is the imperative path. A product can also *declare* its options up

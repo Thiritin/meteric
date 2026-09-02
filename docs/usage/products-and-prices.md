@@ -101,6 +101,45 @@ $renew = $product->priceFor('EUR', PricePurpose::Renew);
 purpose, so superseding a price is a matter of inserting a new row and closing
 the old one with `valid_to`.
 
+### Terms
+
+A product sold on several terms carries one recurring price per interval:
+monthly, quarterly, yearly. Pass the interval to `priceFor()` to pick one;
+without it the newest current price wins whatever its term.
+
+```php
+use Meteric\Enums\Interval;
+
+$monthly = $product->priceFor('EUR', PricePurpose::Recurring, Interval::Month);
+$quarterly = $product->priceFor('EUR', PricePurpose::Recurring, Interval::Month, 3);
+$yearly = $product->priceFor('EUR', PricePurpose::Recurring, Interval::Year);
+```
+
+`terms($currency)` lists the current recurring prices, one per term, shortest
+first. `termCatalog($currency, $qty)` renders the same list as JSON-ready rows
+for a term picker, each priced at `$qty`:
+
+```php
+$product->termCatalog('EUR');
+// [
+//   ['price_id' => …, 'interval' => 'month', 'interval_count' => 1,
+//    'amount_minor' => 1000, 'amount' => '10.00', 'currency' => 'EUR',
+//    'setup_fee_minor' => 2500, 'pricing_model' => 'fixed', …],
+//   ['price_id' => …, 'interval' => 'year', 'interval_count' => 1, …],
+// ]
+```
+
+Each row is `Price::toDisplay($qty)`: the price at the quantity plus the raw
+pricing knobs (`unit_rate`, `percent`, `included_qty`, `block_size`, `tiers`),
+so a client can recompute as the quantity changes.
+
+### Setup fee
+
+`setup_fee_minor` on a recurring price is a one-time fee owed with the first
+period. An [order](/usage/orders) freezes it beside the first period's amount
+and charges it once as a `setup` line when the order is paid; renewals never
+bill it again. A trial defers the recurring part and still owes the setup.
+
 ### Per-unit and sub-cent rates
 
 For per-unit, metered, and hourly pricing, set `unit_rate` instead of (or

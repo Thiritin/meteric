@@ -21,10 +21,10 @@ Conventions: all tables `meteric_*`, money = `*_minor BIGINT` + `currency
 CHAR(3)`, time = `timestamptz`, periods = `tstzrange [start, end)`. Morphs =
 `*_type TEXT` + `*_id` (uuid or bigint via text; host PK type configurable).
 
-> **Scope.** Six tables that ship in the migrations have no DDL here yet:
+> **Scope.** Seven tables that ship in the migrations have no DDL here yet:
 > `meteric_orders`, `meteric_product_options`, `meteric_product_option_values`,
-> `meteric_tax_rates`, `meteric_tax_registrations`, `meteric_invoice_numbers`.
-> Read `database/migrations/` for those.
+> `meteric_product_addons`, `meteric_tax_rates`, `meteric_tax_registrations`,
+> `meteric_invoice_numbers`. Read `database/migrations/` for those.
 
 ### Money precision rule
 
