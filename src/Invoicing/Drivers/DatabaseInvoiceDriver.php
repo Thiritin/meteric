@@ -18,6 +18,7 @@ use Meteric\Invoicing\IssuedCreditNote;
 use Meteric\Invoicing\IssuedInvoice;
 use Meteric\Invoicing\LineComposer;
 use Meteric\Models\CreditNote;
+use Meteric\Models\CreditNoteLine;
 use Meteric\Models\Invoice;
 use Meteric\Support\Models;
 use Meteric\Support\Pg;
@@ -108,9 +109,12 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
         $net = $draft->amount->getMinorAmount()->toInt();
         $subtotal = (int) $model->subtotal_minor;
         $taxTotal = (int) $model->tax_minor;
-        $creditTax = $subtotal > 0
-            ? BigDecimal::of($net)->multipliedBy($taxTotal)->dividedBy($subtotal, 0, RoundingMode::HALF_UP)->toInt()
-            : 0;
+        // Line-level drafts carry their own tax, each at its invoice line's rate.
+        $creditTax = match (true) {
+            $draft->lines !== [] => array_sum(array_column($draft->lines, 'tax_minor')),
+            $subtotal > 0 => BigDecimal::of($net)->multipliedBy($taxTotal)->dividedBy($subtotal, 0, RoundingMode::HALF_UP)->toInt(),
+            default => 0,
+        };
 
         $note = Models::query(CreditNote::class)->create([
             'invoice_id' => $model->id,
@@ -122,7 +126,21 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             'currency' => $draft->amount->getCurrency()->getCurrencyCode(),
             'number' => $this->nextNumber('CN'),
             'issued_at' => $this->now(),
+            'metadata' => $draft->meta,
         ]);
+
+        foreach ($draft->lines as $sort => $line) {
+            Models::query(CreditNoteLine::class)->create([
+                'credit_note_id' => $note->id,
+                'invoice_line_id' => $line['invoice_line_id'] ?? null,
+                'title' => $line['title'] ?? null,
+                'net_minor' => $line['net_minor'],
+                'tax_minor' => $line['tax_minor'],
+                'tax_rate' => $line['tax_rate'],
+                'gross_minor' => $line['net_minor'] + $line['tax_minor'],
+                'sort' => $sort,
+            ]);
+        }
 
         return new IssuedCreditNote(creditNoteId: $note->id, number: $note->number);
     }

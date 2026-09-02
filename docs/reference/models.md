@@ -123,8 +123,9 @@ can have a parent for consolidated billing.
 maps to invoices.
 
 - **Payment columns:** `account_id`, `amount_minor`, `currency`, `reference`, `received_at`.
-- **Payment relationships:** `account()`, `allocations()`. Helper: `amount(): Money`.
+- **Payment relationships:** `account()`, `allocations()`, `refunds()`. Helpers: `amount(): Money`, `refundedMinor(): int`, `refundable(): Money`.
 - **PaymentAllocation:** `payment_id`, `invoice_id`, `amount_minor`; relationships `payment()`, `invoice()`.
+- **Refund (`meteric_refunds`):** `payment_id`, `credit_note_id`, `amount_minor`, `currency`, `reference`, `refunded_at`, `metadata`; relationships `payment()`, `creditNote()`; helper `amount(): Money`. See [Recording a refund](/usage/invoicing#recording-a-refund).
 
 ## MeterDimension
 
@@ -185,4 +186,5 @@ The two tables behind the database tax driver. See [Tax](/usage/tax).
 
 ## CreditNote
 
-- **CreditNote (`meteric_credit_notes`):** `state`, `number`, `reason`, `amount_minor` (net), `tax_minor` (the invoice's blended VAT on that net), `currency`; relationship `invoice()`; helper `amount(): Money`. See [Credit notes and refunds](/usage/invoicing#credit-notes-and-refunds).
+- **CreditNote (`meteric_credit_notes`):** `state`, `number`, `reason`, `amount_minor` (net), `tax_minor` (the invoice's blended VAT on that net, or the sum of the lines' tax), `currency`, `metadata`; relationships `invoice()`, `lines()`, `refunds()`; helpers `amount(): Money`, `gross(): Money`. See [Credit notes and refunds](/usage/invoicing#credit-notes-and-refunds).
+- **CreditNoteLine (`meteric_credit_note_lines`):** `credit_note_id`, `invoice_line_id` (null for a single-amount note), `title`, `net_minor`, `tax_minor`, `tax_rate`, `gross_minor`, `sort`; relationships `creditNote()`, `invoiceLine()`; helpers `net(): Money`, `gross(): Money`. See [Credit note lines](/usage/invoicing#credit-note-lines).

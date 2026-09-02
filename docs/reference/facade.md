@@ -183,13 +183,25 @@ invoice, itemized per account.
 
 Record an inbound payment against an invoice and advance its state.
 
-#### `creditNote(Invoice $invoice, Money $amount, ?string $reason = null): CreditNote`
+#### `creditNote(Invoice $invoice, Money $amount, ?string $reason = null, array $meta = []): CreditNote`
 
 Issue a credit note reversing `$amount` (net) of an invoice. The driver mirrors
 the invoice's tax on top and fires `CreditNoteIssued`. Meteric does not refund;
 your gateway does. See [Credit notes and refunds](/usage/invoicing#credit-notes-and-refunds).
 
-#### `voidInvoice(Invoice $invoice): Invoice`
+#### `creditNoteLines(Invoice $invoice, array $lines, ?string $reason = null, array $meta = []): CreditNote`
+
+Issue a credit note line by line: each entry is `['invoice_line_id' => ..., 'net_minor' => ..., 'title' => ?]`,
+taxed as its invoice line was. Refuses a line above its remaining creditable net.
+See [Credit note lines](/usage/invoicing#credit-note-lines).
+
+#### `recordRefund(Payment $payment, Money $amount, ?CreditNote $creditNote = null, ?string $reference = null): Refund`
+
+Record money returned against a payment, up to its unrefunded remainder. The
+payment and its allocations do not change. See
+[Recording a refund](/usage/invoicing#recording-a-refund).
+
+#### `voidInvoice(Invoice $invoice, bool $voidCharges = false): Invoice`
 
 Void an unpaid invoice. Refuses once any payment exists; correct a paid or
 finalized invoice with a credit note instead. Returns each referenced charge to

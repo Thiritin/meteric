@@ -23,6 +23,7 @@ use Meteric\Models\Order;
 use Meteric\Models\Payment;
 use Meteric\Models\Price;
 use Meteric\Models\ProductOptionValue;
+use Meteric\Models\Refund;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Models\UsageRecord;
@@ -129,15 +130,32 @@ final class Meteric
     }
 
     /** Issue a credit note against an invoice (the accounting reversal). */
-    public function creditNote(Invoice $invoice, Money $amount, ?string $reason = null): CreditNote
+    public function creditNote(Invoice $invoice, Money $amount, ?string $reason = null, array $meta = []): CreditNote
     {
-        return $this->invoices->creditNote($invoice, $amount, $reason);
+        return $this->invoices->creditNote($invoice, $amount, $reason, $meta);
     }
 
-    /** Void an issued, unpaid invoice; its charges return to the billable pool. */
-    public function voidInvoice(Invoice $invoice): Invoice
+    /**
+     * Issue a credit note line by line, each taxed as its invoice line was.
+     *
+     * @param  list<array{invoice_line_id:string,net_minor:int,title?:?string}>  $lines
+     * @param  array<string,mixed>  $meta
+     */
+    public function creditNoteLines(Invoice $invoice, array $lines, ?string $reason = null, array $meta = []): CreditNote
     {
-        return $this->invoices->voidInvoice($invoice);
+        return $this->invoices->creditNoteLines($invoice, $lines, $reason, $meta);
+    }
+
+    /** Record money returned against a payment, optionally tied to a credit note. */
+    public function recordRefund(Payment $payment, Money $amount, ?CreditNote $creditNote = null, ?string $reference = null): Refund
+    {
+        return $this->invoices->recordRefund($payment, $amount, $creditNote, $reference);
+    }
+
+    /** Void an issued, unpaid invoice; its charges return to the billable pool, or are voided with it. */
+    public function voidInvoice(Invoice $invoice, bool $voidCharges = false): Invoice
+    {
+        return $this->invoices->voidInvoice($invoice, $voidCharges);
     }
 
     /** Open an empty editable Draft invoice (add lines by hand, then finalize). */

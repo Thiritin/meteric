@@ -262,13 +262,57 @@ use Brick\Money\Money;
 $note = Meteric::creditNote($invoice, Money::ofMinor($invoice->subtotal_minor, 'EUR'), 'Customer refund');
 ```
 
-`creditNote(Invoice $invoice, Money $amount, ?string $reason = null): CreditNote`
+`creditNote(Invoice $invoice, Money $amount, ?string $reason = null, array $meta = []): CreditNote`
 takes the **net** amount to credit. The driver adds the invoice's tax rate on top so
 the credit note reverses the same VAT the invoice charged, and fires a
 `CreditNoteIssued` event. A credit note mirrors the invoice's tax rate: a net 10.00
-EUR credit at 19% VAT comes to 11.90 EUR gross. The `CreditNote` model carries
-`amount_minor` (net), `tax_minor` (mirrored), `currency`, `number`, `reason`, and
-`state`.
+EUR credit at 19% VAT comes to 11.90 EUR gross. `$meta` is stored on the note's
+`metadata`. The `CreditNote` model carries `amount_minor` (net), `tax_minor`
+(mirrored), `currency`, `number`, `reason`, `metadata` and `state`, and `gross()`.
+
+### Credit note lines
+
+A single net amount is taxed at the invoice's blended rate. To reverse specific
+lines, each at the tax it actually carried, build the note line by line:
+
+```php
+$note = Meteric::creditNoteLines($invoice, [
+    ['invoice_line_id' => $vps->id, 'net_minor' => 500, 'title' => 'Half the VPS'],
+    ['invoice_line_id' => $storage->id, 'net_minor' => 2000],
+], 'Outage', ['ticket' => 42]);
+
+$note->lines;   // CreditNoteLine rows: invoice_line_id, title, net_minor, tax_minor, tax_rate, gross_minor
+```
+
+`creditNoteLines(Invoice $invoice, array $lines, ?string $reason = null, array $meta = []): CreditNote`.
+Each entry names an `invoice_line_id` on that invoice and a positive `net_minor`;
+`title` is optional and defaults to the invoice line's title. The line's tax is the
+invoice line's own tax in proportion (its `tax_minor` scaled to the credited net,
+rounded once), so a mixed-rate invoice credits exactly the VAT it charged. A line
+cannot be credited past its remaining net across every earlier non-void note on
+that invoice, and the invoice's cumulative net guard applies on top. Two entries
+for the same line in one call are summed before the check. Any refusal throws
+`InvalidArgumentException` and writes nothing.
+
+### Recording a refund
+
+`Payment` and `PaymentAllocation` are positive and never change. Money that goes
+back out is its own row:
+
+```php
+$refund = Meteric::recordRefund($payment, Money::ofMinor(1190, 'EUR'), $note, 're_123');
+
+$payment->refundedMinor();   // int, minor units returned so far
+$payment->refundable();      // Money still refundable
+$payment->refunds;           // Refund rows
+```
+
+`recordRefund(Payment $payment, Money $amount, ?CreditNote $creditNote = null, ?string $reference = null): Refund`
+records the gross amount returned, optionally tied to the credit note that
+justified it. It refuses more than the payment's unrefunded remainder, a currency
+mismatch, or a non-positive amount. The payment, its allocations and the invoice's
+`paid_minor` and state are left as they were: what came in and what went back out
+both stay readable. Moving the money is still your gateway's job.
 
 With the [Lexware Office driver](#lexware-office-lexoffice), `creditNote()` also
 POSTs a real credit-note document to lexoffice (`POST /v1/credit-notes?finalize=true`)
@@ -276,19 +320,25 @@ and stores its `external_id`.
 
 ### Void or credit note
 
-`Meteric::voidInvoice($invoice)` cancels an invoice issued in error, before any money
-moves. It works only on an unpaid invoice and refuses once any payment exists;
-correct a paid or finalized invoice with a credit note instead.
+`Meteric::voidInvoice($invoice, bool $voidCharges = false)` cancels an invoice
+issued in error, before any money moves. It works only on an unpaid invoice and
+refuses once any payment exists; correct a paid or finalized invoice with a credit
+note instead.
 
 ```php
-Meteric::voidInvoice($invoice);
+Meteric::voidInvoice($invoice);                     // charges return to pending, the next run re-bills them
+Meteric::voidInvoice($invoice, voidCharges: true);  // charges are voided with the document, nothing re-bills
 ```
 
-Voiding returns each charge the invoice billed to `pending`, so the next
-`invoicePending` re-bills it. A charge stays put if it still has a line on another
-non-void invoice (a re-issued copy), or if it is settled or soft-deleted. To re-bill
-onto a corrected document, copy the invoice first so the charges keep a live line,
-then void the original. See [Copy and re-issue](#copy-and-re-issue).
+By default voiding returns each charge the invoice billed to `pending`, so the next
+`invoicePending` re-bills it. That is the right thing for a wrong document over
+real work. It is the wrong thing for a cancellation where the work itself is
+written off: pass `voidCharges: true` and the charges are set to `void` instead,
+so nothing comes back on a later invoice. Either way a charge stays put if it
+still has a line on another non-void invoice (a re-issued copy), or if it is
+settled or soft-deleted. To re-bill onto a corrected document, copy the invoice
+first so the charges keep a live line, then void the original. See
+[Copy and re-issue](#copy-and-re-issue).
 
 Voiding routes through the driver, so the Lexware Office driver voids a draft that
 never reached the API and refuses a finalized one (use a credit note).

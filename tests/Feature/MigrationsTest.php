@@ -18,7 +18,7 @@ it('runs all migrations and creates the core tables', function () {
         'addons', 'item_options', 'product_addons',
         'usage_records', 'billing_periods', 'charges',
         'invoices', 'invoice_lines', 'credit_notes',
-        'payments', 'payment_allocations', 'ledger',
+        'payments', 'payment_allocations', 'ledger', 'credit_note_lines', 'refunds',
     ] as $name) {
         $table = Pg::table($name);
         expect(Schema::hasTable($table))->toBeTrue("missing table {$table}");

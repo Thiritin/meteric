@@ -6,6 +6,7 @@ namespace Meteric\Models;
 
 use Brick\Money\Money;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Meteric\Enums\CreditState;
 use Meteric\Support\Models;
 
@@ -41,8 +42,25 @@ class CreditNote extends MetericModel
         return $this->belongsTo(Models::for(Invoice::class), 'invoice_id');
     }
 
+    /** @return HasMany<CreditNoteLine, $this> */
+    public function lines(): HasMany
+    {
+        return $this->hasMany(Models::for(CreditNoteLine::class), 'credit_note_id')->orderBy('sort');
+    }
+
+    /** @return HasMany<Refund, $this> */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Models::for(Refund::class), 'credit_note_id');
+    }
+
     public function amount(): Money
     {
         return Money::ofMinor($this->amount_minor, $this->currency);
+    }
+
+    public function gross(): Money
+    {
+        return Money::ofMinor($this->amount_minor + $this->tax_minor, $this->currency);
     }
 }

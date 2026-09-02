@@ -42,8 +42,26 @@ class Payment extends MetericModel
         return $this->hasMany(Models::for(PaymentAllocation::class), 'payment_id');
     }
 
+    /** @return HasMany<Refund, $this> */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Models::for(Refund::class), 'payment_id');
+    }
+
     public function amount(): Money
     {
         return Money::ofMinor($this->amount_minor, $this->currency);
+    }
+
+    /** Minor units already returned against this payment. */
+    public function refundedMinor(): int
+    {
+        return (int) $this->refunds()->sum('amount_minor');
+    }
+
+    /** What may still be refunded: the payment less what went back already. */
+    public function refundable(): Money
+    {
+        return Money::ofMinor(max(0, $this->amount_minor - $this->refundedMinor()), $this->currency);
     }
 }

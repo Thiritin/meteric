@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Meteric\Invoicing;
 
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -23,10 +25,12 @@ use Meteric\Events\InvoiceVoided;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
+use Meteric\Models\CreditNoteLine;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
 use Meteric\Models\Payment;
 use Meteric\Models\PaymentAllocation;
+use Meteric\Models\Refund;
 use Meteric\Support\Models;
 use Throwable;
 
@@ -141,7 +145,7 @@ final class InvoiceManager
      * Issue a credit note against an invoice. This is the accounting reversal for
      * a correction or a refund. The actual money return is your gateway's job.
      */
-    public function creditNote(Invoice $invoice, Money $amount, ?string $reason = null): CreditNote
+    public function creditNote(Invoice $invoice, Money $amount, ?string $reason = null, array $meta = []): CreditNote
     {
         $net = $amount->getMinorAmount()->toInt();
         if ($net <= 0) {
@@ -151,9 +155,129 @@ final class InvoiceManager
             throw new \InvalidArgumentException("Credit currency {$amount->getCurrency()->getCurrencyCode()} does not match invoice currency {$invoice->currency}.");
         }
 
-        // A cumulative guard: the net credited across all notes for an invoice can
-        // never exceed the invoice's net. Without it an invoice can be credited
-        // repeatedly and refunded past what was billed.
+        $this->guardCreditable($invoice, $net);
+
+        return $this->issueCreditNote($invoice, new CreditNoteDraft($amount, $reason, $meta));
+    }
+
+    /**
+     * A credit note built line by line: each entry reverses part of one invoice
+     * line, taxed as that line was taxed (its own tax in proportion), so a
+     * mixed-rate invoice credits exactly the VAT it charged. A line cannot be
+     * credited past its remaining net across every earlier non-void note, and
+     * the invoice's cumulative guard still applies on top.
+     *
+     * @param  list<array{invoice_line_id:string,net_minor:int,title?:?string}>  $lines
+     * @param  array<string,mixed>  $meta  stored on the note's metadata
+     */
+    public function creditNoteLines(Invoice $invoice, array $lines, ?string $reason = null, array $meta = []): CreditNote
+    {
+        if ($lines === []) {
+            throw new \InvalidArgumentException('A line-level credit note needs at least one line.');
+        }
+
+        $invoiceLines = $invoice->lines()->get()->keyBy('id');
+        $requested = [];
+        foreach ($lines as $row) {
+            $id = (string) $row['invoice_line_id'];
+            if (! $invoiceLines->has($id)) {
+                throw new \InvalidArgumentException("Invoice line {$id} is not on invoice {$invoice->id}.");
+            }
+            if ((int) $row['net_minor'] <= 0) {
+                throw new \InvalidArgumentException('Credit note line amounts must be positive.');
+            }
+            $requested[$id] = ($requested[$id] ?? 0) + (int) $row['net_minor'];
+        }
+
+        foreach ($requested as $id => $net) {
+            /** @var InvoiceLine $line */
+            $line = $invoiceLines[$id];
+            $remaining = $line->amount_minor - $this->creditedOnLine($line);
+            if ($net > $remaining) {
+                throw new \InvalidArgumentException(
+                    "Credit of {$net} on line {$line->title} exceeds its remaining creditable net of {$remaining}."
+                );
+            }
+        }
+
+        $drafts = [];
+        $total = 0;
+        foreach ($lines as $row) {
+            /** @var InvoiceLine $line */
+            $line = $invoiceLines[(string) $row['invoice_line_id']];
+            $net = (int) $row['net_minor'];
+            $tax = $line->amount_minor > 0
+                ? BigDecimal::of($net)->multipliedBy($line->tax_minor)->dividedBy($line->amount_minor, 0, RoundingMode::HALF_UP)->toInt()
+                : 0;
+            $drafts[] = [
+                'invoice_line_id' => $line->id,
+                'title' => $row['title'] ?? $line->title,
+                'net_minor' => $net,
+                'tax_minor' => $tax,
+                'tax_rate' => (float) $line->tax_rate,
+            ];
+            $total += $net;
+        }
+
+        $this->guardCreditable($invoice, $total);
+
+        return $this->issueCreditNote($invoice, new CreditNoteDraft(Money::ofMinor($total, $invoice->currency), $reason, $meta, $drafts));
+    }
+
+    /**
+     * Record money returned against a payment: a refund row, nothing else. The
+     * payment and its allocations stay as they were. Refuses more than the
+     * payment's unrefunded remainder, so a payment can never be refunded twice.
+     */
+    public function recordRefund(Payment $payment, Money $amount, ?CreditNote $creditNote = null, ?string $reference = null): Refund
+    {
+        $minor = $amount->getMinorAmount()->toInt();
+        $currency = $amount->getCurrency()->getCurrencyCode();
+        if ($minor <= 0) {
+            throw new \InvalidArgumentException('Refund amount must be positive.');
+        }
+        if ($currency !== $payment->currency) {
+            throw new \InvalidArgumentException("Refund currency {$currency} does not match payment currency {$payment->currency}.");
+        }
+
+        return DB::transaction(function () use ($payment, $minor, $currency, $creditNote, $reference): Refund {
+            $locked = Models::query(Payment::class)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            $remaining = $locked->amount_minor - $locked->refundedMinor();
+            if ($minor > $remaining) {
+                throw new \InvalidArgumentException(
+                    "Refund of {$minor} exceeds the payment's unrefunded remainder of {$remaining}."
+                );
+            }
+
+            return Models::query(Refund::class)->create([
+                'payment_id' => $locked->id,
+                'credit_note_id' => $creditNote?->id,
+                'amount_minor' => $minor,
+                'currency' => $currency,
+                'reference' => $reference,
+            ]);
+        });
+    }
+
+    /** Net already credited against one invoice line across its non-void notes. */
+    private function creditedOnLine(InvoiceLine $line): int
+    {
+        return (int) Models::query(CreditNoteLine::class)
+            ->where('invoice_line_id', $line->id)
+            ->whereIn('credit_note_id', Models::query(CreditNote::class)
+                ->where('invoice_id', $line->invoice_id)
+                ->where('state', '!=', CreditState::Void->value)
+                ->select('id'))
+            ->sum('net_minor');
+    }
+
+    /**
+     * A cumulative guard: the net credited across all notes for an invoice can
+     * never exceed the invoice's net. Without it an invoice can be credited
+     * repeatedly and refunded past what was billed.
+     */
+    private function guardCreditable(Invoice $invoice, int $net): void
+    {
         $alreadyCredited = (int) Models::query(CreditNote::class)
             ->where('invoice_id', $invoice->id)
             ->where('state', '!=', CreditState::Void->value)
@@ -164,9 +288,12 @@ final class InvoiceManager
                 "Credit of {$net} exceeds the invoice's remaining creditable net of {$remaining} (net {$invoice->subtotal_minor}, already credited {$alreadyCredited})."
             );
         }
+    }
 
+    private function issueCreditNote(Invoice $invoice, CreditNoteDraft $draft): CreditNote
+    {
         $issued = new IssuedInvoice($invoice->id, $invoice->number, $invoice->external_id, $invoice->external_url);
-        $result = $this->driver->creditNote($issued, new CreditNoteDraft($amount, $reason));
+        $result = $this->driver->creditNote($issued, $draft);
         $note = Models::query(CreditNote::class)->findOrFail($result->creditNoteId);
         CreditNoteIssued::dispatch($note);
 
@@ -184,8 +311,12 @@ final class InvoiceManager
      * (pending) unless it still has a line on another non-void invoice, or it was
      * discarded (soft-deleted) or already settled. This is the never-lose-a-charge
      * half of the guarantee: voiding a wrong invoice re-bills its work.
+     *
+     * With $voidCharges the charges are voided instead of reverted, for a
+     * cancellation that must not re-bill: the work is written off with the
+     * document. Settled and discarded charges are left alone either way.
      */
-    public function voidInvoice(Invoice $invoice): Invoice
+    public function voidInvoice(Invoice $invoice, bool $voidCharges = false): Invoice
     {
         if ($invoice->paid_minor > 0) {
             throw new \LogicException('Cannot void an invoice with payments. Issue a credit note instead.');
@@ -195,14 +326,19 @@ final class InvoiceManager
         // nothing below runs and the invoice is left untouched.
         $this->driver->void(new IssuedInvoice($invoice->id, $invoice->number, $invoice->external_id, $invoice->external_url));
 
-        DB::transaction(function () use ($invoice): void {
+        DB::transaction(function () use ($invoice, $voidCharges): void {
             // Release the batch key so the same charge set can be re-billed onto
             // a fresh invoice once these charges revert to pending.
             $invoice->forceFill(['state' => InvoiceState::Void, 'idempotency_key' => null])->save();
 
             $chargeIds = $invoice->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
             foreach (Models::query(Charge::class)->withTrashed()->whereIn('id', $chargeIds)->get() as $charge) {
-                if (! $this->chargeHasLiveLine($charge)) {
+                if ($this->chargeHasLiveLine($charge)) {
+                    continue;
+                }
+                if ($voidCharges && ! $charge->trashed() && $charge->state !== ChargeState::Settled) {
+                    $charge->void();
+                } else {
                     $charge->revertToPending();
                 }
             }
