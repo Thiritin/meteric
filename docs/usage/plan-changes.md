@@ -61,7 +61,7 @@ plan takes effect and what happens to the unused value of the higher plan.
 |------|--------|
 | `Defer` (default for contracts) | Keep the current tier until the paid period ends, then renew lower. The change is stored as a pending change and applied at renewal. |
 | `Discard` | Swap to the lower plan immediately. The unused value of the higher plan is forfeited, no credit, no refund. |
-| `Credit` | Swap immediately and credit the unused old value as a pending negative charge that lands on the next invoice. No money moves, no document. |
+| `Credit` | Swap immediately and settle the rest of the cycle as one pending line: the unused old value less the new plan's prorated remainder, a negative `credit` that lands on the next invoice. No money moves, no document. |
 | `Refund` | Swap immediately and issue a credit note for the unused value of the invoice that billed the current period. A `CreditNoteIssued` listener in your app performs the actual refund. |
 
 ```php
@@ -76,6 +76,12 @@ Meteric::changePlan($item, $smallerPrice, DowngradePolicy::Credit);
 // Switch immediately, issue a credit note for the unused value.
 Meteric::changePlan($item, $smallerPrice, DowngradePolicy::Refund);
 ```
+
+`Credit` is the mirror of a prorated upgrade: the customer is on the cheaper
+plan for the rest of the cycle and pays for it. Downgrade a €30 plan to €10
+halfway through the month and the line is €15 unused less €5 owed, one `credit`
+of €5, rounded once. Equal prices write nothing. The next renewal bills the new
+plan in full.
 
 `Credit` and `Refund` differ in where the value goes. `Credit` writes a pending
 negative charge that reduces a later invoice: no money moves and no document is

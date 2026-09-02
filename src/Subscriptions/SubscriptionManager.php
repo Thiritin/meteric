@@ -321,9 +321,9 @@ final class SubscriptionManager
     }
 
     /**
-     * Swap the plan immediately. Optionally credit the unused old value (downgrade
-     * `credit`); plain discard does not. The credit is a pending charge on the next
-     * invoice.
+     * Swap the plan immediately. With creditOld (downgrade `credit`) the rest of
+     * the cycle is settled as one net pending line: the unused old value less the
+     * new plan's prorated remainder. Plain discard writes nothing.
      */
     private function switchNow(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at, bool $creditOld = false): SubscriptionItem
     {
@@ -333,8 +333,15 @@ final class SubscriptionManager
             $qty = (float) $item->quantity;
 
             if ($creditOld && $period !== null) {
-                $unusedOld = $this->prorator->for($period, $at, $item->price->amountFor($qty))->amount();
-                $this->prorationCharge($item, LineKind::Credit, $unusedOld->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
+                // Net of the swap for the rest of the cycle: the unused old value
+                // comes back, the new plan's remainder is owed. One rounding, one
+                // line, never both signs. Zero (equal prices) writes nothing.
+                $net = $this->prorator->swap($period, $at, $item->price->amountFor($qty), $newPrice->amountFor($qty));
+                if ($net->isNegative()) {
+                    $this->prorationCharge($item, LineKind::Credit, $net, 'Downgrade to '.($newPrice->product->name ?? 'plan'));
+                } elseif ($net->isPositive()) {
+                    $this->prorationCharge($item, LineKind::Prorated, $net, 'Change to '.($newPrice->product->name ?? 'plan'));
+                }
             }
 
             $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();

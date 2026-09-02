@@ -197,14 +197,14 @@ it('credits the unused value on a credit downgrade', function () {
     $item->setRelation('subscription', $sub);
     $item->setRelation('price', $large);
 
-    // Halfway through June: credit the unused half of the large plan (~-1500).
+    // Halfway through June: 15.00 of the large plan unused, 5.00 of the small plan owed, one net credit of 10.00.
     Meteric::changePlan($item, $small, DowngradePolicy::Credit, at: CarbonImmutable::parse('2026-06-16T00:00:00Z'));
 
     $charges = Charge::where('subscription_id', $sub->id)->get();
     expect($item->fresh()->price_id)->toBe($small->id)
-        ->and($charges)->toHaveCount(2)                       // base 3000 + credit
-        ->and($charges->where('amount_minor', -1500)->count())->toBe(1)
-        ->and((int) $charges->sum('amount_minor'))->toBe(1500);
+        ->and($charges)->toHaveCount(2)                       // base 3000 + net credit
+        ->and($charges->where('amount_minor', -1000)->count())->toBe(1)
+        ->and((int) $charges->sum('amount_minor'))->toBe(2000);
 });
 
 it('cancels immediately', function () {

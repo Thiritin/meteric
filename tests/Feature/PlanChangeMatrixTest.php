@@ -133,3 +133,37 @@ it('produces an itemized, readable invoice across base, option and addon', funct
         ->and($lines->firstWhere('kind', LineKind::Option)->description)->toBe('Slots')
         ->and($lines->firstWhere('kind', LineKind::Addon))->not->toBeNull();
 });
+
+it('credit downgrade nets the unused old value against the new remainder', function () {
+    $acc = pcmAccount();
+    $large = pcmPlan(3000);
+    $small = pcmPlan(1000);
+    $item = pcmItem($acc, $large);
+    $sub = $item->subscription;
+
+    // Halfway through June: 15.00 of the large plan unused, 5.00 of the small plan owed.
+    Meteric::changePlan($item, $small, DowngradePolicy::Credit, at: CarbonImmutable::parse('2026-06-16Z'));
+
+    $lines = Charge::where('subscription_id', $sub->id)->whereIn('kind', [LineKind::Credit->value, LineKind::Prorated->value])->get();
+    expect($lines)->toHaveCount(1)
+        ->and($lines->first()->kind)->toBe(LineKind::Credit)
+        ->and($lines->first()->amount_minor)->toBe(-1000)
+        ->and($lines->first()->description)->toBe('Downgrade to VPS 1000')
+        ->and($item->fresh()->price_id)->toBe($small->id);
+
+    // July renews at the small rate.
+    Meteric::renew($sub->fresh(), CarbonImmutable::parse('2026-07-01Z'));
+    expect(pcmJuly($sub)->where('kind', LineKind::Recurring->value)->first()->amount_minor)->toBe(1000);
+});
+
+it('credit downgrade to an equal price writes no line', function () {
+    $acc = pcmAccount();
+    $a = pcmPlan(2000);
+    $b = pcmPlan(2000);
+    $item = pcmItem($acc, $a);
+
+    Meteric::changePlan($item, $b, DowngradePolicy::Credit, at: CarbonImmutable::parse('2026-06-16Z'));
+
+    expect(Charge::whereIn('kind', [LineKind::Credit->value, LineKind::Prorated->value])->count())->toBe(0)
+        ->and($item->fresh()->price_id)->toBe($b->id);
+});
