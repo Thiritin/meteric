@@ -27,6 +27,21 @@ Switch an item's plan. Direction is detected from the price. `$upgrade` picks th
 upgrade policy, `$downgrade` the downgrade policy. See
 [Plan changes](/usage/plan-changes).
 
+#### `rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem`
+
+Move an item's period end, keeping its start. The subscription's period follows
+the earliest active item. With `$prorate`, the span between the old end and the
+new one is charged at the full period rate as one pending line: `Prorated` when
+extended, `Credit` when shortened. Throws `PeriodNotRebasable` for an inactive
+or one-off item, or an end not after the start. See
+[Rebase a period](/usage/subscriptions#rebase-a-period).
+
+#### `previewRebase(SubscriptionItem $item, CarbonImmutable $newEnd, ?CarbonImmutable $at = null): RebasePreview`
+
+What `rebasePeriod()` would write, without writing it: the target period, the
+line kind (`Prorated`, `Credit`, or null when the end does not move) and the
+absolute amount. Same guards.
+
 #### `cancel(Subscription $sub, string|CarbonImmutable $at = 'period_end', ?CarbonImmutable $when = null, array $meta = []): Subscription`
 
 Cancel at `'period_end'` (default), `'now'`, or a future term boundary. No

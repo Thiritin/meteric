@@ -141,6 +141,52 @@ use Meteric\Models\Subscription;
 Subscription::dueForRenewal(CarbonImmutable::now())->get();
 ```
 
+## Rebase a period
+
+Staff sometimes move a service's paid-until date by hand: a goodwill extension,
+a migration that shifts the anniversary, a term corrected after the fact.
+`rebasePeriod()` sets an item's current period to `[start, newEnd)`, keeping
+the start, and moves the subscription's period along with it (the earliest
+active item's period, the same rule renewals use).
+
+```php
+use Carbon\CarbonImmutable;
+
+$item = Meteric::rebasePeriod($item, CarbonImmutable::parse('2026-09-15'));
+```
+
+Without `$prorate` the dates move and no money does. With `$prorate` the span
+between the old end and the new one is charged at the item's full period rate
+as one pending line: kind `Prorated` when extended, `Credit` (negative) when
+shortened. The span is priced as whole cycles at the full amount plus the used
+part of the cycle the remainder starts, prorated through the configured unit.
+
+```php
+$item = Meteric::rebasePeriod($item, $newEnd, prorate: true);
+```
+
+Preview the figure before a person confirms it:
+
+```php
+$preview = Meteric::previewRebase($item, $newEnd);
+
+$preview->period;   // Period the item would move to
+$preview->kind;     // LineKind::Prorated, LineKind::Credit, or null when the end does not move
+$preview->amount;   // Money, absolute; a credit is written negated
+$preview->toArray();
+```
+
+`previewRebase()` writes nothing and runs the same guards. Both throw
+`Meteric\Exceptions\PeriodNotRebasable` when the item is not active, has no
+period, is not recurring, or `$newEnd` is not after the period start.
+
+Signatures:
+
+```php
+rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem
+previewRebase(SubscriptionItem $item, CarbonImmutable $newEnd, ?CarbonImmutable $at = null): RebasePreview
+```
+
 ## Cancel
 
 ```php

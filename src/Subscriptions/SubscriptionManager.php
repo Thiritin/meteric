@@ -26,6 +26,7 @@ use Meteric\Events\SubscriptionPastDue;
 use Meteric\Events\SubscriptionPaused;
 use Meteric\Events\SubscriptionRenewed;
 use Meteric\Events\SubscriptionResumed;
+use Meteric\Exceptions\PeriodNotRebasable;
 use Meteric\Meteric;
 use Meteric\Models\Charge;
 use Meteric\Models\Invoice;
@@ -467,6 +468,92 @@ final class SubscriptionManager
             });
 
         return $count;
+    }
+
+    /**
+     * Move an item's period end to $newEnd, keeping its start: [start, newEnd).
+     * The subscription's period follows the earliest active item. With $prorate
+     * the span between the old end and the new one is charged at the item's
+     * full period rate as one pending line: Prorated when extended, Credit
+     * when shortened. Without it the dates move and no money does.
+     *
+     * @throws PeriodNotRebasable when the item is not active, has no period,
+     *                            is not recurring, or $newEnd is not after the start
+     */
+    public function rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        $preview = $this->previewRebase($item, $newEnd, $at);
+
+        return DB::transaction(function () use ($item, $preview, $prorate): SubscriptionItem {
+            $item->forceFill(['current_period' => $preview->period])->save();
+
+            if ($prorate && $preview->kind !== null && $preview->amount->isPositive()) {
+                $amount = $preview->kind === LineKind::Credit ? $preview->amount->negated() : $preview->amount;
+                $verb = $preview->kind === LineKind::Credit ? 'Shortened ' : 'Extended ';
+                $this->prorationCharge($item, $preview->kind, $amount, $verb.($item->price->product->name ?? 'plan'));
+            }
+
+            $sub = $item->subscription;
+            $sub->forceFill(['current_period' => $this->earliestPeriod($sub)])->save();
+
+            return $item->refresh();
+        });
+    }
+
+    /** What rebasePeriod() would write, without writing it. Same guards. */
+    public function previewRebase(SubscriptionItem $item, CarbonImmutable $newEnd, ?CarbonImmutable $at = null): RebasePreview
+    {
+        $period = $item->current_period;
+
+        if ($item->state !== ItemState::Active) {
+            throw new PeriodNotRebasable("Item {$item->id} is {$item->state->value}; only an active item can be rebased.");
+        }
+        if ($period === null) {
+            throw new PeriodNotRebasable("Item {$item->id} has no current period.");
+        }
+        if (! $item->price->isRecurring()) {
+            throw new PeriodNotRebasable("Item {$item->id} is not recurring.");
+        }
+        if ($newEnd <= $period->start) {
+            throw new PeriodNotRebasable("New end {$newEnd->toIso8601String()} is not after the period start {$period->start->toIso8601String()}.");
+        }
+
+        $target = new Period($period->start, $newEnd);
+        $full = $item->periodAmount();
+
+        if ($newEnd > $period->end) {
+            return new RebasePreview($target, LineKind::Prorated, $this->spanAmount($item, new Period($period->end, $newEnd), $full));
+        }
+        if ($newEnd < $period->end) {
+            return new RebasePreview($target, LineKind::Credit, $this->spanAmount($item, new Period($newEnd, $period->end), $full));
+        }
+
+        return new RebasePreview($target, null, Money::ofMinor(0, $full->getCurrency()));
+    }
+
+    /**
+     * A span priced at the full period rate: whole cycles at the full amount,
+     * then the remainder as the used part of the cycle it starts, prorated
+     * through the configured unit so it matches every other proration.
+     */
+    private function spanAmount(SubscriptionItem $item, Period $span, Money $full): Money
+    {
+        $rule = $item->price->recurrence();
+        $amount = Money::ofMinor(0, $full->getCurrency());
+        $cursor = $span->start;
+
+        while ($rule->nextEnd($cursor) <= $span->end) {
+            $amount = $amount->plus($full);
+            $cursor = $rule->nextEnd($cursor);
+        }
+
+        if ($cursor < $span->end) {
+            $cycle = $rule->period($cursor);
+            $unused = $this->prorator->for($cycle, $span->end, $full)->amount();
+            $amount = $amount->plus($full->minus($unused));
+        }
+
+        return $amount;
     }
 
     private function prorationCharge(SubscriptionItem $item, LineKind $kind, Money $amount, string $desc): void

@@ -30,6 +30,7 @@ use Meteric\Quoting\QuoteBuilder;
 use Meteric\Subscriptions\ItemManager;
 use Meteric\Subscriptions\OrderBuilder;
 use Meteric\Subscriptions\OrderManager;
+use Meteric\Subscriptions\RebasePreview;
 use Meteric\Subscriptions\SubscriptionBuilder;
 use Meteric\Subscriptions\SubscriptionManager;
 use Meteric\Support\Models;
@@ -267,6 +268,18 @@ final class Meteric
     public function renew(Subscription $sub, ?CarbonImmutable $at = null): array
     {
         return app(SubscriptionManager::class)->renew($sub, $at);
+    }
+
+    /** Move an item's period end, keeping the start; optionally charge or credit the span at the full rate. */
+    public function rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        return app(SubscriptionManager::class)->rebasePeriod($item, $newEnd, $prorate, $at);
+    }
+
+    /** What rebasePeriod() would write, without writing it. */
+    public function previewRebase(SubscriptionItem $item, CarbonImmutable $newEnd, ?CarbonImmutable $at = null): RebasePreview
+    {
+        return app(SubscriptionManager::class)->previewRebase($item, $newEnd, $at);
     }
 
     /** Switch an item's plan. Upgrade → prorated charge now; downgrade → defer or discard. */
