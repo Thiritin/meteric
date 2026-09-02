@@ -93,6 +93,13 @@ want one subscription per line. Throws `LineNotMaterializable` for a base price
 that cannot renew exactly as an item. See
 [One subscription per line](/usage/orders#one-subscription-per-line).
 
+#### `completeOrder(Order $order, ?Subscription $subscription = null, array $meta = [], ?CarbonImmutable $at = null): Order`
+
+Close a pending order as converted without materializing anything: stamps
+`converted_at` and the subscription when given, merges `$meta` into the
+metadata, fires `OrderConverted`. Throws for an order that is not pending. See
+[Completing an order by other means](/usage/orders#completing-an-order-by-other-means).
+
 #### `cancelOrder(Order $order): Order`
 
 Cancel a pending order. No-op once terminal.

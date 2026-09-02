@@ -239,26 +239,29 @@ final class SubscriptionManager
     }
 
     /**
-     * Refund downgrade: swap now and issue a credit note for the unused value of
-     * the invoice that billed the current period (a refund document; a host
-     * listener moves the money). With nothing invoiced yet there is nothing to
-     * refund, so the unused value becomes a pending credit on the next invoice.
+     * Refund downgrade: swap now and issue a credit note for the net of the
+     * rest of the cycle, the unused old value less the cheaper plan's
+     * remainder, against the invoice that billed the current period (a refund
+     * document; a host listener moves the money). With nothing invoiced yet
+     * there is nothing to refund, so the net becomes a pending credit on the
+     * next invoice. Equal prices write nothing.
      */
     private function refundDowngrade(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at): SubscriptionItem
     {
         return DB::transaction(function () use ($item, $newPrice, $at): SubscriptionItem {
             $sub = $item->subscription;
             $period = $item->current_period;
+            $qty = (float) $item->quantity;
 
             if ($period !== null) {
-                $unused = $this->prorator->for($period, $at, $item->price->amountFor((float) $item->quantity))->amount();
+                $net = $this->prorator->swap($period, $at, $item->price->amountFor($qty), $newPrice->amountFor($qty));
 
-                if ($unused->isPositive()) {
+                if ($net->isNegative()) {
                     $invoice = $this->periodInvoice($item);
                     if ($invoice !== null) {
-                        app(Meteric::class)->creditNote($invoice, $unused, 'Downgrade refund: '.($item->price->product->name ?? 'plan'));
+                        app(Meteric::class)->creditNote($invoice, $net->abs(), 'Downgrade to '.($newPrice->product->name ?? 'plan'));
                     } else {
-                        $this->prorationCharge($item, LineKind::Credit, $unused->negated(), 'Unused '.($item->price->product->name ?? 'plan'));
+                        $this->prorationCharge($item, LineKind::Credit, $net, 'Downgrade to '.($newPrice->product->name ?? 'plan'));
                     }
                 }
             }

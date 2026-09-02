@@ -264,6 +264,17 @@ final class Meteric
         return app(OrderManager::class)->confirm($order);
     }
 
+    /**
+     * Close a pending order as converted without materializing anything, for a
+     * basket applied by other means (a reviewed plan change, say).
+     *
+     * @param  array<string,mixed>  $meta
+     */
+    public function completeOrder(Order $order, ?Subscription $subscription = null, array $meta = [], ?CarbonImmutable $at = null): Order
+    {
+        return app(OrderManager::class)->complete($order, $subscription, $meta, $at);
+    }
+
     /** Materialize one frozen order line (by group) onto a subscription the host owns. */
     public function materializeLine(Order $order, string $group, Subscription $subscription, ?Model $resource = null, ?CarbonImmutable $at = null): SubscriptionItem
     {

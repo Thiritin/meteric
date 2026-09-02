@@ -14,6 +14,7 @@ use Meteric\Enums\OrderState;
 use Meteric\Enums\PricingModel;
 use Meteric\Enums\SubscriptionState;
 use Meteric\Events\OrderCanceled;
+use Meteric\Events\OrderConverted;
 use Meteric\Events\OrderCreated;
 use Meteric\Events\OrderExpired;
 use Meteric\Events\OrderPaid;
@@ -544,4 +545,38 @@ it('refuses to materialize a line of a canceled order or onto another currency',
 
     Meteric::cancelOrder($order);
     expect(fn () => Meteric::materializeLine($order->fresh(), 'l0', orderLineSubscription($acc)))->toThrow(LogicException::class);
+});
+
+it('completes a pending order without materializing anything', function () {
+    Event::fake([OrderConverted::class]);
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
+    $acc = orderAccount();
+    $order = Meteric::createOrder()->account($acc)->add(orderMonthlyPrice(1000))->create();
+    $order->forceFill(['metadata' => ['source' => 'portal']])->save();
+    $sub = orderLineSubscription($acc);
+
+    $done = Meteric::completeOrder($order->fresh(), $sub, ['applied_by' => 'staff-7']);
+
+    expect($done->state)->toBe(OrderState::Converted)
+        ->and($done->subscription_id)->toBe($sub->id)
+        ->and($done->converted_at->toIso8601String())->toBe('2026-06-01T00:00:00+00:00')
+        ->and($done->paid_at)->toBeNull()
+        ->and($done->invoice_id)->toBeNull()
+        ->and($done->metadata)->toBe(['source' => 'portal', 'applied_by' => 'staff-7'])
+        ->and(Invoice::count())->toBe(0)
+        ->and(Charge::count())->toBe(0)
+        ->and($sub->items()->count())->toBe(0);
+    Event::assertDispatched(OrderConverted::class, fn ($e) => $e->order->id === $order->id && $e->subscription?->id === $sub->id);
+
+    expect(fn () => Meteric::completeOrder($done))->toThrow(LogicException::class, 'only a pending order');
+});
+
+it('fires OrderConverted when an order is paid', function () {
+    Event::fake([OrderConverted::class]);
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T00:00:00Z'));
+    $order = Meteric::createOrder()->account(orderAccount())->firstPeriod(FirstPeriodPolicy::FullPeriod)->add(orderMonthlyPrice(1000))->create();
+
+    Meteric::payOrder($order, Money::ofMinor($order->total_minor, 'EUR'));
+
+    Event::assertDispatched(OrderConverted::class, fn ($e) => $e->subscription !== null);
 });

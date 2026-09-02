@@ -16,6 +16,7 @@ use Meteric\Enums\LineKind;
 use Meteric\Enums\OrderState;
 use Meteric\Enums\SubscriptionState;
 use Meteric\Events\OrderCanceled;
+use Meteric\Events\OrderConverted;
 use Meteric\Events\OrderExpired;
 use Meteric\Events\OrderPaid;
 use Meteric\Events\SubscriptionStarted;
@@ -243,9 +244,37 @@ final class OrderManager
         if ($sub instanceof Subscription) {
             OrderPaid::dispatch($converted, $invoice, $payment);
             SubscriptionStarted::dispatch($converted, $sub, $invoice);
+            OrderConverted::dispatch($converted, $sub);
         }
 
         return $converted;
+    }
+
+    /**
+     * Close a pending order as converted without materializing anything: for a
+     * basket a person reviewed and applied by other means, a plan change put
+     * through changePlan() on an existing subscription, say. Stamps converted_at,
+     * the subscription when given, merges $meta into the order's metadata, and
+     * fires OrderConverted. Creates and invoices nothing.
+     *
+     * @param  array<string,mixed>  $meta
+     */
+    public function complete(Order $order, ?Subscription $subscription = null, array $meta = [], ?CarbonImmutable $at = null): Order
+    {
+        if (! $order->isPending()) {
+            throw new \LogicException("Order {$order->id} is {$order->state->value}; only a pending order can be completed.");
+        }
+
+        $order->forceFill([
+            'state' => OrderState::Converted,
+            'subscription_id' => $subscription?->id,
+            'converted_at' => $at ?? $this->clock->now(),
+            'metadata' => array_merge($order->metadata ?? [], $meta),
+        ])->save();
+
+        OrderConverted::dispatch($order, $subscription);
+
+        return $order;
     }
 
     /**

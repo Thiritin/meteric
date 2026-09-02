@@ -210,6 +210,22 @@ An item renews through `SubscriptionItem::periodAmount()`, which is
   with `Meteric\Exceptions\LineNotMaterializable` rather than approximating. Book
   such a price as an addon of the line it belongs to instead.
 
+### Completing an order by other means
+
+A basket does not always become a new subscription. Staff review a plan change
+order and apply it through `changePlan()` on the subscription the customer
+already has, say. Close the order without materializing anything:
+
+```php
+$order = Meteric::completeOrder($order, $subscription, ['applied_by' => $staffId]);
+```
+
+`completeOrder(Order $order, ?Subscription $subscription = null, array $meta = [], ?CarbonImmutable $at = null): Order`
+moves a pending order to `Converted`, stamps `converted_at` and, when given,
+`subscription_id`, merges `$meta` into the order's `metadata`, and fires
+`OrderConverted`. It creates no subscription, charge or invoice, and throws
+`LogicException` for an order that is not pending.
+
 ### Zero-total orders
 
 A fully trialed signup owes nothing now. Confirm it without a payment:
@@ -247,6 +263,7 @@ $count = Meteric::expireOrders();
 | --- | --- | --- |
 | `OrderCreated` | `create()` stores a pending order | `Order` |
 | `OrderPaid` | an order is paid or confirmed | `Order`, `?Invoice`, `?Payment` |
+| `OrderConverted` | an order reaches `converted`, through payment, confirmation or `completeOrder()` | `Order`, `?Subscription` |
 | `SubscriptionStarted` | an order materializes its subscription | `Order`, `Subscription`, `?Invoice` |
 | `OrderCanceled` | a pending order is canceled | `Order` |
 | `OrderExpired` | a pending order passes its TTL | `Order` |

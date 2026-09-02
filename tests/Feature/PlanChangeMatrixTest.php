@@ -12,6 +12,7 @@ use Meteric\Enums\UpgradePolicy;
 use Meteric\Facades\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
+use Meteric\Models\CreditNote;
 use Meteric\Models\Price;
 use Meteric\Models\Product;
 use Meteric\Models\Subscription;
@@ -166,4 +167,34 @@ it('credit downgrade to an equal price writes no line', function () {
 
     expect(Charge::whereIn('kind', [LineKind::Credit->value, LineKind::Prorated->value])->count())->toBe(0)
         ->and($item->fresh()->price_id)->toBe($b->id);
+});
+
+it('refund downgrade credits the net of the remainder by credit note', function () {
+    $acc = pcmAccount();
+    $large = pcmPlan(3000);
+    $small = pcmPlan(1000);
+    $item = pcmItem($acc, $large);
+    $sub = $item->subscription;
+    $invoice = Meteric::invoicePending($acc);
+
+    Meteric::changePlan($item, $small, DowngradePolicy::Refund, at: CarbonImmutable::parse('2026-06-16Z'));
+
+    $note = CreditNote::where('invoice_id', $invoice->id)->firstOrFail();
+    expect($note->amount_minor)->toBe(1000)
+        ->and($note->reason)->toBe('Downgrade to VPS 1000')
+        ->and(Charge::whereIn('kind', [LineKind::Credit->value, LineKind::Prorated->value])->count())->toBe(0)
+        ->and($item->fresh()->price_id)->toBe($small->id);
+});
+
+it('refund downgrade with nothing invoiced writes the net as a pending credit', function () {
+    $acc = pcmAccount();
+    $large = pcmPlan(3000);
+    $small = pcmPlan(1000);
+    $item = pcmItem($acc, $large);
+
+    Meteric::changePlan($item, $small, DowngradePolicy::Refund, at: CarbonImmutable::parse('2026-06-16Z'));
+
+    $credit = Charge::where('kind', LineKind::Credit->value)->firstOrFail();
+    expect($credit->amount_minor)->toBe(-1000)
+        ->and(CreditNote::count())->toBe(0);
 });

@@ -123,7 +123,7 @@ it('refund downgrade issues a credit note against the billed invoice', function 
     $note = $invoice->fresh()->creditNotes()->first();
     expect($item->fresh()->price_id)->toBe($small->id)
         ->and($note)->not->toBeNull()
-        ->and($note->amount_minor)->toBe(1500);   // half of the 3000 large plan
+        ->and($note->amount_minor)->toBe(1000);   // 15.00 unused large less 5.00 owed on the small plan
     Event::assertDispatched(CreditNoteIssued::class);
 });
 
