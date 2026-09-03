@@ -19,6 +19,7 @@ use Meteric\Support\Period;
  * @property string $subscription_id
  * @property string $product_id
  * @property string $price_id
+ * @property ?string $price_override_id
  * @property ?string $label
  * @property ?string $group
  * @property float $quantity
@@ -60,10 +61,56 @@ class SubscriptionItem extends MetericModel
         return $this->belongsTo(Models::for(Product::class), 'product_id');
     }
 
-    /** @return BelongsTo<Price, $this> */
+    /**
+     * The catalog price the item is on. Read `$item->price` rather than this
+     * relation: the accessor below returns the override where one is set, which
+     * is what every calculation in the package is expected to see.
+     *
+     * @return BelongsTo<Price, $this>
+     */
     public function price(): BelongsTo
     {
         return $this->belongsTo(Models::for(Price::class), 'price_id');
+    }
+
+    /**
+     * A price belonging to this item alone, billing an amount its product does
+     * not publish. Null for almost every item.
+     *
+     * @return BelongsTo<Price, $this>
+     */
+    public function priceOverride(): BelongsTo
+    {
+        return $this->belongsTo(Models::for(Price::class), 'price_override_id');
+    }
+
+    /**
+     * **The price this item actually bills, and the reason an override is a
+     * price row rather than an amount column.**
+     *
+     * `$item->price` is read in two dozen places across the managers, the
+     * accruer, the prorator and checkout, and every one of them keeps working
+     * unchanged because this returns the override where there is one. Had the
+     * override been an amount on the item, each of those call sites would have
+     * had to remember to consult it, and the one that forgot would be a silent
+     * money bug - the relative addon prices computing against `periodAmount()`
+     * most quietly of all.
+     *
+     * `price_id` still names the plan the item is on, which is what makes the
+     * override reset on a plan change: moving the item to another price clears
+     * the column beside it.
+     */
+    public function getPriceAttribute(): ?Price
+    {
+        return $this->price_override_id === null
+            ? $this->getRelationValue('price')
+            : $this->getRelationValue('priceOverride');
+    }
+
+    /** Whether this item bills a price of its own rather than its product's. */
+    public function hasPriceOverride(): bool
+    {
+        return $this->price_override_id !== null;
     }
 
     public function resource(): MorphTo

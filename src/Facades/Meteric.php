@@ -29,6 +29,8 @@ use Meteric\Models\Payment;
  * @method static \Meteric\Models\Discount cancelDiscount(\Meteric\Models\Discount $discount)
  * @method static array renew(\Meteric\Models\Subscription $sub, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\SubscriptionItem changePlan(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Meteric\Enums\DowngradePolicy $downgrade = null, ?\Meteric\Enums\UpgradePolicy $upgrade = null, ?\Carbon\CarbonImmutable $at = null)
+ * @method static \Meteric\Models\SubscriptionItem overridePrice(\Meteric\Models\SubscriptionItem $item, int $amountMinor)
+ * @method static \Meteric\Models\SubscriptionItem clearPriceOverride(\Meteric\Models\SubscriptionItem $item)
  * @method static \Meteric\Models\SubscriptionItem switchTerm(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Subscriptions\TermSwitchPreview previewTermSwitch(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\Subscription cancel(\Meteric\Models\Subscription $sub, string|\Carbon\CarbonImmutable $at = 'period_end', ?\Carbon\CarbonImmutable $when = null, array $meta = [])

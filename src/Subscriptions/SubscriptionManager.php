@@ -194,7 +194,14 @@ final class SubscriptionManager
             return;
         }
 
-        $item->forceFill(['price_id' => $change['price_id'], 'pending_change' => null])->save();
+        // A deferred change landing: the item moves onto another price, so a
+        // bespoke amount set against the old one goes with it. See
+        // `SubscriptionItem::getPriceAttribute()`.
+        $item->forceFill([
+            'price_id' => $change['price_id'],
+            'price_override_id' => null,
+            'pending_change' => null,
+        ])->save();
         $item->load('price');
     }
 
@@ -219,7 +226,14 @@ final class SubscriptionManager
         // refund. A change is rate-forward: swap the price, the rest of the cycle
         // bills at the new rate. Proration policies apply only to prepaid items.
         if ($item->billingMode() === BillingMode::InArrears) {
-            $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+            // The override belongs to the price it was set against, so moving
+            // to another price drops it rather than carrying a bespoke amount
+            // onto a plan nobody agreed it for.
+            $item->forceFill([
+                'price_id' => $newPrice->id,
+                'product_id' => $newPrice->product_id,
+                'price_override_id' => null,
+            ])->save();
 
             return $item->refresh();
         }
@@ -271,7 +285,14 @@ final class SubscriptionManager
                 }
             }
 
-            $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+            // The override belongs to the price it was set against, so moving
+            // to another price drops it rather than carrying a bespoke amount
+            // onto a plan nobody agreed it for.
+            $item->forceFill([
+                'price_id' => $newPrice->id,
+                'product_id' => $newPrice->product_id,
+                'price_override_id' => null,
+            ])->save();
 
             return $item->refresh();
         });
@@ -322,7 +343,14 @@ final class SubscriptionManager
                 $this->prorationCharge($item, LineKind::Prorated, $proratedNew, 'Upgrade '.($newPrice->product->name ?? 'plan'));
             }
 
-            $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+            // The override belongs to the price it was set against, so moving
+            // to another price drops it rather than carrying a bespoke amount
+            // onto a plan nobody agreed it for.
+            $item->forceFill([
+                'price_id' => $newPrice->id,
+                'product_id' => $newPrice->product_id,
+                'price_override_id' => null,
+            ])->save();
 
             return $item->refresh();
         });
@@ -352,7 +380,14 @@ final class SubscriptionManager
                 }
             }
 
-            $item->forceFill(['price_id' => $newPrice->id, 'product_id' => $newPrice->product_id])->save();
+            // The override belongs to the price it was set against, so moving
+            // to another price drops it rather than carrying a bespoke amount
+            // onto a plan nobody agreed it for.
+            $item->forceFill([
+                'price_id' => $newPrice->id,
+                'product_id' => $newPrice->product_id,
+                'price_override_id' => null,
+            ])->save();
 
             return $item->refresh();
         });
@@ -495,6 +530,47 @@ final class SubscriptionManager
      * @throws PeriodNotRebasable when the item is not active, has no period,
      *                            is not recurring, or $newEnd is not after the start
      */
+    /**
+     * Bill this item a bespoke amount instead of what its product publishes.
+     *
+     * The override is a price row of its own (`Price::asOverride()`), a copy of
+     * the catalog price with a different amount, so everything that reads
+     * `$item->price` sees a price behaving exactly like the one it replaces:
+     * the same product, interval, billing mode and pricing model, priced
+     * differently. Proration, plan swaps, the accruer and relative addon prices
+     * all pick it up without knowing an override exists.
+     *
+     * **Setting one does not move money.** It changes what the *next* accrual
+     * bills; the running period was already charged at whatever it was charged.
+     * A caller that wants the difference settled mid-period rebases or prorates
+     * on top, deliberately.
+     *
+     * Overriding twice replaces the amount and leaves the previous override row
+     * in place: an invoice line written against it has to keep resolving.
+     */
+    public function overridePrice(SubscriptionItem $item, int $amountMinor): SubscriptionItem
+    {
+        $base = $item->price()->first()
+            ?? throw new \InvalidArgumentException('That item has no price to override.');
+
+        return DB::transaction(function () use ($item, $base, $amountMinor): SubscriptionItem {
+            $item->forceFill(['price_override_id' => $base->asOverride($amountMinor)->id])->save();
+
+            return $item->refresh();
+        });
+    }
+
+    /**
+     * Back to the product's own price. The override row is kept, never deleted:
+     * charges and invoice lines already written against it must still resolve.
+     */
+    public function clearPriceOverride(SubscriptionItem $item): SubscriptionItem
+    {
+        $item->forceFill(['price_override_id' => null])->save();
+
+        return $item->refresh();
+    }
+
     public function rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem
     {
         $preview = $this->previewRebase($item, $newEnd, $at);

@@ -337,6 +337,18 @@ final class Meteric
     }
 
     /** Move an item's period end, keeping the start; optionally charge or credit the span at the full rate. */
+    /** Bill one item a bespoke amount instead of its product's published price. */
+    public function overridePrice(SubscriptionItem $item, int $amountMinor): SubscriptionItem
+    {
+        return app(SubscriptionManager::class)->overridePrice($item, $amountMinor);
+    }
+
+    /** Back to the product's own price; the override row is kept for history. */
+    public function clearPriceOverride(SubscriptionItem $item): SubscriptionItem
+    {
+        return app(SubscriptionManager::class)->clearPriceOverride($item);
+    }
+
     public function rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem
     {
         return app(SubscriptionManager::class)->rebasePeriod($item, $newEnd, $prorate, $at);

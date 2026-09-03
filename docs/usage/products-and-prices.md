@@ -199,3 +199,53 @@ base items, configurable options (slots, extra IPs), and addons.
 
 See also: [Build a web hosting company's billing](/recipes/web-hosting-company)
 for a full catalog (plans, setup fees, domains, addons, volume-priced IPs).
+
+## Price overrides: one item, a bespoke amount
+
+A subscription item can bill an amount its product does not publish.
+
+```php
+Meteric::overridePrice($item, 600);   // this item bills 6.00, whatever the plan says
+Meteric::clearPriceOverride($item);   // back to the product's price
+```
+
+The override is **a price row of its own**, not an amount column on the item.
+`Price::asOverride()` copies the catalog price and changes one field, so the override
+carries the same product, currency, interval, billing mode, purpose and pricing model as
+the price it replaces, and behaves identically in every calculation that reads it.
+`SubscriptionItem::price` resolves to it, so proration, plan swaps, the accruer, checkout
+and the relative addon prices that compute against the item's base all pick it up without
+knowing overrides exist.
+
+**That is the whole reason for the shape.** `$item->price->amountFor(...)` is read at two
+dozen places across the managers, the accruer, the prorator and the pricers. An amount
+column would have had to be honoured at every one of them, and the call site that forgot
+would be a silent money bug - the relative addon prices most quietly of all, since an
+override changes what every percentage addon computes against.
+
+**An override is not a catalog price**, and the difference is enforced rather than left to
+convention. `prices.scope` is `catalog` or `override`; `Price::query()->catalog()` is what
+every listing, report, export and selection filters on, and `Product::currentPrices()` -
+which `priceFor()` and the addon resolution run through - applies it. An override is
+therefore never offered for sale, never grandfathered, never replaced by the catalog's
+price-replacement flow, and never listed beside the prices a product sells at.
+
+From the outside this looks like the other design, the one where you write a bespoke price
+into the catalog and keep it out of listings by remembering to. It is not that design.
+Convention fails at the next listing somebody adds; a flag does not, provided the flag is
+actually consulted - which is why `catalog()` exists as a query scope rather than as a
+`where` clause copied around.
+
+**It resets on a plan change.** `price_id` still names the plan the item is on, and moving
+the item onto another price clears `price_override_id` beside it. An amount agreed against
+one plan does not silently follow the customer onto another.
+
+**The override row is kept, never deleted.** Clearing an override drops the reference and
+leaves the price row in place, and the foreign key is `restrictOnDelete`. A charge or an
+invoice line written against an override has to resolve years later; a deleted price under
+an archived invoice is the kind of thing that breaks a document nobody looks at until an
+audit.
+
+**Setting an override does not move money.** It changes what the next accrual bills; the
+running period was already charged at whatever it was charged. A caller that wants the
+difference settled mid-period rebases or prorates on top of it, deliberately.

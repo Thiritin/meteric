@@ -154,10 +154,21 @@ class Product extends MetericModel
             ->all();
     }
 
-    /** @return HasMany<Price, $this> */
+    /**
+     * The prices this product currently sells at.
+     *
+     * `catalog()` is what keeps a per-item override out of every selection that
+     * runs through here - `priceFor()`, the addon resolution, the order path.
+     * An override is a price row on this product by design, so that it behaves
+     * identically in every calculation, which is exactly why it has to be
+     * excluded here by the flag rather than left to each caller to notice.
+     *
+     * @return HasMany<Price, $this>
+     */
     private function currentPrices(string $currency, PricePurpose $purpose): HasMany
     {
         return $this->prices()
+            ->catalog()
             ->whereNull('valid_to')
             ->where('currency', $currency)
             ->where('purpose', $purpose->value);

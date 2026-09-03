@@ -6,11 +6,13 @@ namespace Meteric\Models;
 
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Casts\MoneyCast;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
+use Meteric\Enums\PriceScope;
 use Meteric\Enums\PricingModel;
 use Meteric\Pricing\Tiers;
 use Meteric\Support\Models;
@@ -25,6 +27,7 @@ use Meteric\Support\RecurrenceRule;
  * @property Money $amount
  * @property ?string $unit_rate high-precision per-unit rate (major units, sub-cent)
  * @property PricePurpose $purpose
+ * @property PriceScope $scope
  * @property PricingModel $pricing_model
  * @property ?Interval $interval
  * @property ?int $interval_count
@@ -51,6 +54,7 @@ class Price extends MetericModel
             'amount_minor' => 'integer',
             'unit_rate' => 'string',   // numeric(20,8) — preserve precision
             'purpose' => PricePurpose::class,
+            'scope' => PriceScope::class,
             'pricing_model' => PricingModel::class,
             'interval' => Interval::class,
             'interval_count' => 'integer',
@@ -67,6 +71,50 @@ class Price extends MetericModel
             'valid_to' => 'immutable_datetime',
             'metadata' => 'array',
         ];
+    }
+
+    /**
+     * Catalog prices only: what a product actually sells at.
+     *
+     * **Every listing, report and export of prices goes through this.** A price
+     * with `scope = override` belongs to one subscription item and is not on
+     * sale; excluding it by convention in each query is how one query
+     * eventually forgets and quotes a customer someone else's bespoke price.
+     *
+     * @param  Builder<Price>  $query
+     */
+    public function scopeCatalog(Builder $query): void
+    {
+        $query->where('scope', PriceScope::Catalog->value);
+    }
+
+    /**
+     * A copy of this price billing a different amount, belonging to one item
+     * rather than to the catalog.
+     *
+     * Everything else is copied deliberately - the product, the interval, the
+     * billing mode, the purpose, the model - so an override behaves exactly as
+     * the price it replaces in every calculation that reads it. Only the amount
+     * differs, which is the whole point and the only thing that may.
+     */
+    public function asOverride(int $amountMinor): Price
+    {
+        return static::query()->create([
+            ...$this->only([
+                'product_id', 'currency', 'unit_rate', 'purpose', 'pricing_model',
+                'interval', 'interval_count', 'billing_mode', 'setup_fee_minor',
+                'cap_minor', 'min_charge_minor', 'included_qty', 'block_size',
+                'percent', 'tiers', 'tax_inclusive',
+            ]),
+            'amount_minor' => $amountMinor,
+            'scope' => PriceScope::Override->value,
+            'metadata' => ['overrides_price_id' => $this->id],
+        ]);
+    }
+
+    public function isOverride(): bool
+    {
+        return $this->scope === PriceScope::Override;
     }
 
     /** @return BelongsTo<Product, $this> */
