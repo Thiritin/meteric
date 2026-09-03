@@ -254,3 +254,42 @@ it('re-bills an addon every renewal', function () {
     expect($julyAddon)->not->toBeNull()
         ->and($julyAddon->amount_minor)->toBe(300);
 });
+
+/**
+ * A choice option changes price when its value changes, so the delta is
+ * between the two values' prices and not between two quantities of the new
+ * one. A free-to-paid switch charges, paid-to-free credits.
+ */
+it('prices a choice option by the value it moves between', function () {
+    $acc = optAccount();
+    $base = optBasePrice();
+    $sub = optSub($acc, $base);
+    $item = $sub->items()->first();
+
+    $option = ProductOption::create([
+        'product_id' => $base->product_id, 'key' => 'game', 'label' => 'Game', 'type' => OptionType::Choice,
+    ]);
+    $paid = Price::create([
+        'product_id' => $base->product_id, 'currency' => 'EUR', 'purpose' => 'option',
+        'pricing_model' => 'fixed', 'amount_minor' => 500, 'interval' => 'month', 'interval_count' => 1,
+    ]);
+    $free = ProductOptionValue::create(['option_id' => $option->id, 'value' => '1', 'label' => 'Minecraft']);
+    $premium = ProductOptionValue::create(['option_id' => $option->id, 'value' => '13', 'label' => 'Rust', 'price_id' => $paid->id]);
+
+    Meteric::chooseOption($item, $free, 1, CarbonImmutable::parse('2026-06-01Z'));
+
+    expect(Charge::where('kind', LineKind::Option)->count())->toBe(0);
+
+    // Free to paid: a full period remains, so the whole 5.00 is charged.
+    Meteric::chooseOption($item, $premium, 1, CarbonImmutable::parse('2026-06-01Z'));
+
+    $charge = Charge::where('kind', LineKind::Option)->sole();
+
+    expect($charge->amount_minor)->toBe(500);
+
+    // Paid back to free: the unused part comes back as a credit.
+    Meteric::chooseOption($item, $free, 1, CarbonImmutable::parse('2026-06-01Z'));
+
+    expect(Charge::where('kind', LineKind::Credit)->sole()->amount_minor)->toBe(-500)
+        ->and($item->fresh()->options()->where('key', 'game')->first()->price_id)->toBeNull();
+});

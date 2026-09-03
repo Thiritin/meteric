@@ -113,25 +113,37 @@ final class ItemManager
             $existing = $item->options()->where('key', $key)->first();
             $oldQty = (float) ($existing->quantity ?? 0);
 
+            // What the option costs now, and what it cost before. The old total
+            // comes from the price the option was actually on, not from the new
+            // price at the old quantity: a choice option changes price when its
+            // value changes, and reading the old total off the new price would
+            // find no difference and charge nothing.
+            $was = $existing?->price?->amountForQuantity($oldQty);
+            $now = $price?->amountForQuantity($qty);
+
             $option = Models::query(ItemOption::class)->updateOrCreate(
                 ['item_id' => $item->id, 'key' => $key],
                 ['type' => $type, 'value' => $value, 'label' => $label, 'price_id' => $price?->id, 'quantity' => $qty, 'min_qty' => $min, 'max_qty' => $max],
             );
 
-            if ($price !== null) {
-                // One-time setup fee, charged once when the option is first added.
-                if ($existing === null && $price->hasSetupFee()) {
-                    $this->charge($item, 'item_option', $option->id, LineKind::Setup, $price->setupFee(), ucfirst($key).' setup', covers: false);
-                }
+            // One-time setup fee, charged once when the option is first added.
+            if ($price !== null && $existing === null && $price->hasSetupFee()) {
+                $this->charge($item, 'item_option', $option->id, LineKind::Setup, $price->setupFee(), ucfirst($key).' setup', covers: false);
+            }
 
-                // Price the difference between the new and old totals (correct for
-                // volume tiers, allowance, and blocks), then prorate it.
-                $delta = $price->amountForQuantity($qty)->minus($price->amountForQuantity($oldQty));
-                if (! $delta->isZero()) {
-                    $prorated = $this->prorate($item, $delta->abs(), $at);
-                    $up = $delta->isPositive();
-                    $this->charge($item, 'item_option', $option->id, $up ? LineKind::Option : LineKind::Credit, $up ? $prorated : $prorated->negated(), ucfirst($key));
-                }
+            // The difference between the two totals (correct for volume tiers,
+            // allowance, and blocks), prorated over what is left of the cycle.
+            $delta = match (true) {
+                $now !== null && $was !== null => $now->minus($was),
+                $now !== null => $now,
+                $was !== null => $was->negated(),
+                default => null,
+            };
+
+            if ($delta !== null && ! $delta->isZero()) {
+                $prorated = $this->prorate($item, $delta->abs(), $at);
+                $up = $delta->isPositive();
+                $this->charge($item, 'item_option', $option->id, $up ? LineKind::Option : LineKind::Credit, $up ? $prorated : $prorated->negated(), ucfirst($key));
             }
 
             return $option;

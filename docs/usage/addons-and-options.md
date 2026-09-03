@@ -116,11 +116,14 @@ setOption(
 ): ItemOption
 ```
 
-When you pass a `price`, Meteric prorates the *delta* against the previous
-quantity for the current cycle. Raising slots from 16 to 32 charges the prorated
-16-slot increase; lowering it credits the prorated difference. With no price, the
-option is stored without a charge, useful for `choice` and `toggle` settings that
-do not change the bill. Read a toggle back with `$option->boolValue()`.
+Meteric prorates the *delta* between what the option cost and what it now costs
+for the current cycle. Raising slots from 16 to 32 charges the prorated 16-slot
+increase; lowering it credits the prorated difference. The old total is read off
+the price the option was actually on, so a `choice` option whose value moves from
+a free one to a paid one is charged, and moving back credits the unused part.
+With no price on either side the option is stored without a charge, useful for
+`choice` and `toggle` settings that do not change the bill. Read a toggle back
+with `$option->boolValue()`.
 
 `$min` and `$max` bound a quantity option. A `qty` below `$min` or above `$max`
 throws `InvalidArgumentException` before anything is written.
