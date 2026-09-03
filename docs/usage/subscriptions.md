@@ -187,6 +187,11 @@ rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = fa
 previewRebase(SubscriptionItem $item, CarbonImmutable $newEnd, ?CarbonImmutable $at = null): RebasePreview
 ```
 
+Moving an item to another term mid-period is a different operation:
+`rebasePeriod()` moves an end and charges the span at the item's own rate,
+while [`switchTerm()`](/usage/plan-changes#term-changes) settles the running
+period and opens a new one on the new price's term.
+
 ## Cancel
 
 ```php

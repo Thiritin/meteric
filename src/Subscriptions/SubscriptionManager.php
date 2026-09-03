@@ -13,6 +13,7 @@ use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\BillingMode;
+use Meteric\Enums\ChargeState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\ItemState;
@@ -27,7 +28,9 @@ use Meteric\Events\SubscriptionPaused;
 use Meteric\Events\SubscriptionRenewed;
 use Meteric\Events\SubscriptionResumed;
 use Meteric\Exceptions\PeriodNotRebasable;
+use Meteric\Exceptions\TermNotSwitchable;
 use Meteric\Meteric;
+use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
 use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
@@ -37,6 +40,7 @@ use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
 use Meteric\Support\Models;
 use Meteric\Support\Period;
+use Meteric\Usage\UsageRollup;
 
 /** Lifecycle operations on existing subscriptions: renew, change plan, cancel. */
 final class SubscriptionManager
@@ -45,6 +49,7 @@ final class SubscriptionManager
         private Clock $clock,
         private Prorator $prorator,
         private ChargeAccruer $accruer,
+        private UsageRollup $usage,
     ) {}
 
     /**
@@ -508,6 +513,162 @@ final class SubscriptionManager
 
             return $item->refresh();
         });
+    }
+
+    /**
+     * Switch an item onto another term mid-period: settle the running period
+     * and open a new one from $at on the new price's term.
+     *
+     * A plan change prorates inside the period it is in and leaves the term
+     * alone, which is the wrong shape for monthly to yearly. This closes the
+     * running period at $at instead:
+     *
+     *  1. The closing window's metered usage is rolled up, so it is billed with
+     *     the period it belongs to rather than carried into the new one.
+     *  2. What the closing window was billed and will not deliver comes back as
+     *     one `Unused <plan>` credit. It is the unused fraction of everything
+     *     the window billed, the period, its options, its addons and its
+     *     discounts, because the new period bills all of them again.
+     *  3. The item moves to the new price and the new period is accrued whole
+     *     from $at on the new term.
+     *
+     * Every figure is pending, so the caller decides when to invoice. No
+     * document is produced here.
+     *
+     * @throws TermNotSwitchable
+     */
+    public function switchTerm(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        $at ??= $this->clock->now();
+        $preview = $this->previewTermSwitch($item, $newPrice, $at);
+        $oldName = $item->price->product->name ?? 'plan';
+
+        return DB::transaction(function () use ($item, $newPrice, $at, $preview, $oldName): SubscriptionItem {
+            $this->usage->rollup($item, $preview->closing);
+
+            if ($preview->unused->isPositive()) {
+                $this->prorationCharge($item, LineKind::Credit, $preview->unused->negated(), 'Unused '.$oldName);
+            }
+
+            // The closing window keeps its guard, shortened to what it actually
+            // covers. Without this the window already billed still overlaps the
+            // period opening inside it, and the new period would reserve
+            // nothing and bill nothing.
+            $this->closeReservations($item, $at);
+
+            $item->forceFill([
+                'price_id' => $newPrice->id,
+                'product_id' => $newPrice->product_id,
+                'pending_change' => null,
+            ])->save();
+            $item->refresh()->load('price');
+
+            $this->accruer->accrue($item, new BillingPlan(
+                [new PlannedPeriod($preview->opening, LineKind::Recurring)],
+                $preview->opening,
+            ));
+
+            $sub = $item->subscription;
+            $sub->forceFill(['current_period' => $this->earliestPeriod($sub)])->save();
+
+            return $item->refresh();
+        });
+    }
+
+    /** What switchTerm() would write, without writing it. Same guards. */
+    public function previewTermSwitch(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): TermSwitchPreview
+    {
+        $at ??= $this->clock->now();
+        $period = $item->current_period;
+
+        if ($item->state !== ItemState::Active) {
+            throw new TermNotSwitchable("Item {$item->id} is {$item->state->value}; only an active item can switch term.");
+        }
+        if ($period === null) {
+            throw new TermNotSwitchable("Item {$item->id} has no current period.");
+        }
+        if (! $item->price->isRecurring() || ! $newPrice->isRecurring()) {
+            throw new TermNotSwitchable("Item {$item->id} switches term between recurring prices only.");
+        }
+        if (! $period->contains($at)) {
+            throw new TermNotSwitchable("{$at->toIso8601String()} is outside the item's current period; there is no running period to settle.");
+        }
+
+        $closing = new Period($period->start, $at);
+        $opening = $newPrice->recurrence()->period($at);
+
+        if ($this->periodBilledFrom($item, $opening, $at)) {
+            throw new TermNotSwitchable("Item {$item->id} has a period already billed inside {$opening->toRange()}.");
+        }
+
+        $currency = $item->subscription->currency;
+        $billed = $this->billedForWindow($item, $period);
+        $unused = $billed->isPositive()
+            ? $this->prorator->for($period, $at, $billed)->amount()
+            : Money::ofMinor(0, $currency);
+
+        $usage = Money::ofMinor(0, $currency);
+        $usageLines = [];
+
+        foreach ($this->usage->rate($item, $closing) as $rated) {
+            $usage = $usage->plus($rated['amount']);
+            $usageLines[] = [
+                'dimension' => $rated['dimension']->key,
+                'used' => (float) $rated['used'],
+                'unit' => $rated['dimension']->unit,
+                'amount_minor' => $rated['amount']->getMinorAmount()->toInt(),
+            ];
+        }
+
+        return new TermSwitchPreview(
+            $closing,
+            $opening,
+            $unused,
+            $usage,
+            $this->accruer->quote($item, $newPrice, $opening),
+            $usageLines,
+        );
+    }
+
+    /**
+     * What the item's window has been billed: the period, its options, its
+     * addons and its discounts, and never metered usage, which pays for what
+     * has already happened and is not unused.
+     */
+    private function billedForWindow(SubscriptionItem $item, Period $window): Money
+    {
+        $minor = (int) Models::query(Charge::class)
+            ->where('line_group', $item->id)
+            ->where('state', '<>', ChargeState::Void->value)
+            ->where('kind', '<>', LineKind::Usage->value)
+            ->whereRaw('covers && ?::tstzrange', [$window->toRange()])
+            ->sum('amount_minor');
+
+        return Money::ofMinor($minor, $item->subscription->currency);
+    }
+
+    /** Whether a window the item has already billed starts on or after $at. */
+    private function periodBilledFrom(SubscriptionItem $item, Period $window, CarbonImmutable $at): bool
+    {
+        return Models::query(BillingPeriod::class)
+            ->where('item_id', $item->id)
+            ->whereNull('dimension_id')
+            ->whereRaw('lower(covers) >= ?', [$at])
+            ->whereRaw('covers && ?::tstzrange', [$window->toRange()])
+            ->exists();
+    }
+
+    /** Shorten every billed window that runs past $at to end there, so what follows is open to bill. */
+    private function closeReservations(SubscriptionItem $item, CarbonImmutable $at): void
+    {
+        $rows = Models::query(BillingPeriod::class)
+            ->where('item_id', $item->id)
+            ->whereRaw('lower(covers) < ? and upper(covers) > ?', [$at, $at])
+            ->get();
+
+        foreach ($rows as $row) {
+            $row->forceFill(['covers' => new Period($row->covers->start, $at)])->save();
+        }
     }
 
     /** What rebasePeriod() would write, without writing it. Same guards. */

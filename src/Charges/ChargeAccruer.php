@@ -11,9 +11,11 @@ use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Enums\DiscountTarget;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
+use Meteric\Models\Addon;
 use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
 use Meteric\Models\Discount;
+use Meteric\Models\ItemOption;
 use Meteric\Models\Price;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Proration\Prorator;
@@ -88,15 +90,11 @@ final class ChargeAccruer
     {
         $created = [];
 
-        foreach ($item->options as $option) {
-            if ($option->price_id === null) {
-                continue;
-            }
-            $price = $option->price;
-            $amount = $price->amountForQuantity((float) $option->quantity);
+        foreach ($this->optionAmounts($item) as ['option' => $option, 'amount' => $amount]) {
             if ($amount->isZero()) {
                 continue;
             }
+            $price = $option->price;
 
             $created[] = Charge::pendingForItem($item, [
                 'origin_type' => 'item_option',
@@ -113,13 +111,11 @@ final class ChargeAccruer
             ]);
         }
 
-        foreach ($item->addons()->where('state', ItemState::Active->value)->get() as $addon) {
-            $price = $addon->price;
-            $relative = $price->isRelative();
-            $amount = $relative ? $price->amountOfBase($item->periodAmount()) : $price->amountForQuantity((float) $addon->quantity);
+        foreach ($this->addonAmounts($item, $item->periodAmount()) as ['addon' => $addon, 'amount' => $amount, 'relative' => $relative]) {
             if ($amount->isZero()) {
                 continue;
             }
+            $price = $addon->price;
             $amountMinor = $amount->getMinorAmount()->toInt();
 
             $created[] = Charge::pendingForItem($item, [
@@ -165,23 +161,9 @@ final class ChargeAccruer
             return [];
         }
 
-        $currency = $item->subscription->currency;
         $created = [];
 
-        $discounts = Models::query(Discount::class)
-            ->where('item_id', $item->id)
-            ->active()
-            ->forTarget(DiscountTarget::Line)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get();
-
-        foreach ($discounts as $discount) {
-            if (! $discount->hasTermsLeft()) {
-                continue;
-            }
-
-            $off = $discount->reduce(Money::ofMinor($remaining, $currency))->getMinorAmount()->toInt();
+        foreach ($this->reductions($item, $remaining) as ['discount' => $discount, 'off' => $off]) {
             $discount->consume();
 
             if ($off <= 0) {
@@ -198,11 +180,120 @@ final class ChargeAccruer
                 'covers' => $period,
                 'idempotency_key' => 'disc_'.substr(hash('sha256', $discount->id.$period->toRange()), 0, 35),
             ]);
-
-            $remaining -= $off;
         }
 
         return $created;
+    }
+
+    /**
+     * What accruing one period at $price would bill this item: the period
+     * itself, its options and addons, less its discounts. Writes nothing and
+     * spends no discount term, so a preview can quote what accrue() will then
+     * charge from the same arithmetic.
+     */
+    public function quote(SubscriptionItem $item, Price $price, Period $period): Money
+    {
+        $base = $price->amountFor((float) $item->quantity);
+        $total = $base;
+
+        foreach ($this->optionAmounts($item) as ['amount' => $amount]) {
+            $total = $total->plus($amount);
+        }
+
+        foreach ($this->addonAmounts($item, $base) as ['amount' => $amount]) {
+            $total = $total->plus($amount);
+        }
+
+        $minor = $total->getMinorAmount()->toInt();
+
+        if ($minor <= 0) {
+            return $total;
+        }
+
+        foreach ($this->reductions($item, $minor) as ['off' => $off]) {
+            $total = $total->minus(Money::ofMinor(max(0, $off), $total->getCurrency()));
+        }
+
+        return $total;
+    }
+
+    /**
+     * The item's configurable options priced for one period.
+     *
+     * @return list<array{option:ItemOption,amount:Money}>
+     */
+    private function optionAmounts(SubscriptionItem $item): array
+    {
+        $priced = [];
+
+        foreach ($item->options as $option) {
+            if ($option->price_id === null) {
+                continue;
+            }
+
+            $priced[] = ['option' => $option, 'amount' => $option->price->amountForQuantity((float) $option->quantity)];
+        }
+
+        return $priced;
+    }
+
+    /**
+     * The item's active addons priced for one period. A relative addon is a
+     * percentage of $base, the period's own base amount.
+     *
+     * @return list<array{addon:Addon,amount:Money,relative:bool}>
+     */
+    private function addonAmounts(SubscriptionItem $item, Money $base): array
+    {
+        $priced = [];
+
+        foreach ($item->addons()->where('state', ItemState::Active->value)->get() as $addon) {
+            $relative = $addon->price->isRelative();
+
+            $priced[] = [
+                'addon' => $addon,
+                'amount' => $relative ? $addon->price->amountOfBase($base) : $addon->price->amountForQuantity((float) $addon->quantity),
+                'relative' => $relative,
+            ];
+        }
+
+        return $priced;
+    }
+
+    /**
+     * What the item's line discounts take off a period that billed $remaining,
+     * in order, each applied to what is left after the ones before it. A
+     * discount with no terms left is not offered and spends nothing.
+     *
+     * @return list<array{discount:Discount,off:int}>
+     */
+    private function reductions(SubscriptionItem $item, int $remaining): array
+    {
+        $currency = $item->subscription->currency;
+        $offs = [];
+
+        $discounts = Models::query(Discount::class)
+            ->where('item_id', $item->id)
+            ->active()
+            ->forTarget(DiscountTarget::Line)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($discounts as $discount) {
+            if (! $discount->hasTermsLeft()) {
+                continue;
+            }
+
+            $off = $discount->reduce(Money::ofMinor($remaining, $currency))->getMinorAmount()->toInt();
+            $offs[] = ['discount' => $discount, 'off' => $off];
+
+            if ($off > 0) {
+                $remaining -= $off;
+            }
+        }
+
+        return $offs;
     }
 
     /**

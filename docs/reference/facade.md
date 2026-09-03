@@ -27,6 +27,19 @@ Switch an item's plan. Direction is detected from the price. `$upgrade` picks th
 upgrade policy, `$downgrade` the downgrade policy. See
 [Plan changes](/usage/plan-changes).
 
+#### `switchTerm(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): SubscriptionItem`
+
+Settle the running period and open a new one from `$at` on the new price's term.
+The closing window's usage is rolled up, what it was billed and will not deliver
+comes back as one `Unused <plan>` credit, and the new period is accrued whole.
+Throws `TermNotSwitchable`. See [Term changes](/usage/plan-changes#term-changes).
+
+#### `previewTermSwitch(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): TermSwitchPreview`
+
+What `switchTerm()` would write, without writing it: the closing and opening
+periods, the unused credit, the closing window's rated usage with a line per
+dimension, the new period's amount, and their total. Same guards.
+
 #### `rebasePeriod(SubscriptionItem $item, CarbonImmutable $newEnd, bool $prorate = false, ?CarbonImmutable $at = null): SubscriptionItem`
 
 Move an item's period end, keeping its start. The subscription's period follows

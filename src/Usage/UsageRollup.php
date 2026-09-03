@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Meteric\Usage;
 
+use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Enums\Aggregation;
@@ -60,27 +62,12 @@ final class UsageRollup
         $created = [];
 
         return DB::transaction(function () use ($item, $period, &$created): array {
-            // Discover dimensions from the usage itself, not the item's current product —
-            // so usage recorded before a plan change (different product) still rolls up.
-            $dimensionIds = Models::query(UsageRecord::class)->unbilled()
-                ->where('item_id', $item->id)
-                ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
-                ->distinct()->pluck('dimension_id');
+            foreach ($this->rate($item, $period) as $rated) {
+                /** @var MeterDimension $dimension */
+                $dimension = $rated['dimension'];
+                $records = $rated['records'];
+                $used = $rated['used'];
 
-            foreach ($dimensionIds as $dimensionId) {
-                $dimension = Models::query(MeterDimension::class)->findOrFail($dimensionId);
-                $records = Models::query(UsageRecord::class)->unbilled()
-                    ->where('item_id', $item->id)
-                    ->where('dimension_id', $dimension->id)
-                    ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
-                    ->orderBy('occurred_at')   // so 'last' aggregation takes the latest report
-                    ->get();
-
-                if ($records->isEmpty()) {
-                    continue;
-                }
-
-                $used = $this->aggregate($records->pluck('quantity')->all(), $dimension->aggregation);
                 if (! $this->reserve($item, $dimension->id, $period)) {
                     // Window already billed for this dimension. Attach these
                     // late-arriving records to the existing window charge so they
@@ -99,7 +86,7 @@ final class UsageRollup
                     continue;
                 }
 
-                $amount = $dimension->amountFor($used);
+                $amount = $rated['amount'];
                 $charge = Charge::pendingForItem($item, [
                     'dimension_id' => $dimension->id,
                     'kind' => LineKind::Usage,
@@ -130,6 +117,51 @@ final class UsageRollup
 
             return $created;
         });
+    }
+
+    /**
+     * What the window's unbilled usage is worth, per dimension, writing
+     * nothing. rollup() bills exactly this, so a preview and the charge that
+     * follows it are one calculation.
+     *
+     * Dimensions are discovered from the usage itself, not the item's current
+     * product, so usage recorded before a plan change still rates.
+     *
+     * @return list<array{dimension:MeterDimension,records:Collection<int,UsageRecord>,used:float,amount:Money}>
+     */
+    public function rate(SubscriptionItem $item, Period $period): array
+    {
+        $dimensionIds = Models::query(UsageRecord::class)->unbilled()
+            ->where('item_id', $item->id)
+            ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
+            ->distinct()->pluck('dimension_id');
+
+        $rated = [];
+
+        foreach ($dimensionIds as $dimensionId) {
+            $dimension = Models::query(MeterDimension::class)->findOrFail($dimensionId);
+            $records = Models::query(UsageRecord::class)->unbilled()
+                ->where('item_id', $item->id)
+                ->where('dimension_id', $dimension->id)
+                ->whereRaw('occurred_at >= ? AND occurred_at < ?', [$period->start, $period->end])
+                ->orderBy('occurred_at')   // so 'last' aggregation takes the latest report
+                ->get();
+
+            if ($records->isEmpty()) {
+                continue;
+            }
+
+            $used = $this->aggregate($records->pluck('quantity')->all(), $dimension->aggregation);
+
+            $rated[] = [
+                'dimension' => $dimension,
+                'records' => $records,
+                'used' => $used,
+                'amount' => $dimension->amountFor($used),
+            ];
+        }
+
+        return $rated;
     }
 
     private function dimension(SubscriptionItem $item, string $key): MeterDimension

@@ -99,6 +99,7 @@ final class MetericServiceProvider extends ServiceProvider
             clock: $app->make(Clock::class),
             prorator: $app->make(Prorator::class),
             accruer: $app->make(ChargeAccruer::class),
+            usage: $app->make(UsageRollup::class),
         ));
 
         $this->app->singleton(ItemManager::class, fn ($app) => new ItemManager(

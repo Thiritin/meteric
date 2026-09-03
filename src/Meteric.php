@@ -37,6 +37,7 @@ use Meteric\Subscriptions\OrderManager;
 use Meteric\Subscriptions\RebasePreview;
 use Meteric\Subscriptions\SubscriptionBuilder;
 use Meteric\Subscriptions\SubscriptionManager;
+use Meteric\Subscriptions\TermSwitchPreview;
 use Meteric\Support\Models;
 use Meteric\Support\Period;
 use Meteric\Tax\Vies\Vies;
@@ -345,6 +346,18 @@ final class Meteric
     public function previewRebase(SubscriptionItem $item, CarbonImmutable $newEnd, ?CarbonImmutable $at = null): RebasePreview
     {
         return app(SubscriptionManager::class)->previewRebase($item, $newEnd, $at);
+    }
+
+    /** Settle the running period and open a new one from $at on the new price's term. */
+    public function switchTerm(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): SubscriptionItem
+    {
+        return app(SubscriptionManager::class)->switchTerm($item, $newPrice, $at);
+    }
+
+    /** What switchTerm() would write, without writing it. */
+    public function previewTermSwitch(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): TermSwitchPreview
+    {
+        return app(SubscriptionManager::class)->previewTermSwitch($item, $newPrice, $at);
     }
 
     /** Switch an item's plan. Upgrade → prorated charge now; downgrade → defer or discard. */
