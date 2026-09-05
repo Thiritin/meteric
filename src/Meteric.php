@@ -7,11 +7,13 @@ namespace Meteric;
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Meteric\Accounts\AccountTransfer;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\DiscountState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\UpgradePolicy;
+use Meteric\Exceptions\AccountNotTransferable;
 use Meteric\Invoicing\InvoiceManager;
 use Meteric\Models\Addon;
 use Meteric\Models\BillingAccount;
@@ -465,5 +467,25 @@ final class Meteric
     public function rollupUsage(SubscriptionItem $item, Period $period): array
     {
         return app(UsageRollup::class)->rollup($item, $period);
+    }
+
+    /**
+     * Move every billing record from one account to another: subscriptions,
+     * invoices, orders, charges, payments and the ledger, plus the customer
+     * morph frozen on the first three.
+     *
+     * For the host app that has decided two accounts are one customer. It moves
+     * an ownership link and nothing else - no amount, no currency, no document
+     * number and no state - so an issued invoice keeps its number, its lines and
+     * its seal. Refuses the same account twice, an unsaved account, two
+     * currencies, and an account that still has sub-accounts.
+     *
+     * @return array<string, int> rows moved, by table
+     *
+     * @throws AccountNotTransferable
+     */
+    public function transferAccount(BillingAccount $from, BillingAccount $to): array
+    {
+        return app(AccountTransfer::class)->move($from, $to);
     }
 }

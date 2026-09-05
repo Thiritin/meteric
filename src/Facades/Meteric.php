@@ -56,6 +56,7 @@ use Meteric\Models\Payment;
  * @method static ?\Meteric\Support\Period billingCycle(\Meteric\Models\SubscriptionItem $item)
  * @method static \Meteric\Models\UsageRecord recordUsage(\Meteric\Models\SubscriptionItem $item, string $dimension, float $quantity, ?\Carbon\CarbonImmutable $occurredAt = null, ?string $key = null)
  * @method static array rollupUsage(\Meteric\Models\SubscriptionItem $item, \Meteric\Support\Period $period)
+ * @method static array transferAccount(BillingAccount $from, BillingAccount $to)
  * @method static InvoiceDriver driver()
  *
  * @see \Meteric\Meteric
