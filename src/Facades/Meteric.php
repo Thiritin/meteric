@@ -44,6 +44,7 @@ use Meteric\Models\Payment;
  * @method static Invoice draftInvoice(BillingAccount $account, ?string $currency = null)
  * @method static Invoice copyInvoice(Invoice $source)
  * @method static \Meteric\Models\InvoiceLine addLine(Invoice $invoice, string $title, Money $amount, ?string $description = null, ?string $group = null, \Meteric\Enums\LineKind $kind = \Meteric\Enums\LineKind::OneOff)
+ * @method static \Meteric\Models\InvoiceLine addManualLine(Invoice $invoice, \Meteric\Invoicing\ManualLine $line)
  * @method static \Meteric\Models\InvoiceLine addSubLine(\Meteric\Models\InvoiceLine $parent, string $title, Money $amount, ?string $description = null, \Meteric\Enums\LineKind $kind = \Meteric\Enums\LineKind::Option)
  * @method static void removeLine(\Meteric\Models\InvoiceLine $line)
  * @method static Invoice finalizeInvoice(Invoice $draft)

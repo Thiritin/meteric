@@ -95,6 +95,45 @@ Meteric::removeLine($line);   // cascades its sub-lines
 - `removeLine(InvoiceLine $line): void` deletes a line and cascades its sub-lines.
   If the line was a charge's last live line, the charge returns to `pending`.
 
+### Lines somebody typed
+
+`addLine()` takes a finished amount, which is what an automatic charge has. A
+person writing an invoice by hand states a quantity, a unit price and sometimes a
+discount, and the amount falls out of those. `addManualLine()` takes those
+instead and prices the line here, so there is one implementation of what a line
+costs:
+
+```php
+use Brick\Money\Money;
+use Meteric\Invoicing\ManualLine;
+
+Meteric::addManualLine($draft, new ManualLine(
+    title: 'Consulting',
+    description: 'October',
+    quantity: 3.0,
+    unit: 'hour',
+    unitPrice: Money::of('80.00', 'EUR'),
+    discountPercent: 10.0,
+));
+
+Meteric::addManualLine($draft, ManualLine::text('Everything below is covered by the retainer.'));
+```
+
+- **The multiplication is rounded once**, at the line total, in decimal. Rounding
+  the unit price first and multiplying after makes a ten-of-something line
+  disagree with the unit price printed beside it by a cent. `unit_minor` is the
+  unit price brought back to the currency's own minor unit for display; the total
+  is computed from the unrounded figure.
+- **`priceIsGross: true` reads the unit price as tax inclusive.** It is converted
+  to net once, using the rate this invoice's own tax context resolves to, so the
+  same intent typed either way produces the same document. A zero-rated document
+  divides by one and the two are identical.
+- **`discountPercent` is per cent off that line**, applied before rounding, and
+  kept on the line's `metadata` as `discount_percent` so a document can print it.
+- **`ManualLine::text()` writes a line carrying words and no money**, stored with
+  `LineKind::Text`, a zero amount and no tax. It enters no total; it exists so a
+  document reads as it was written.
+
 Finalize the draft with:
 
 ```php

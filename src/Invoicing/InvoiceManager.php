@@ -444,6 +444,34 @@ final class InvoiceManager
     }
 
     /**
+     * Add a line somebody typed, priced by the engine.
+     *
+     * The caller states quantity, unit price and discount; the amount is
+     * computed here so there is one implementation of what a line costs. The
+     * multiplication happens in decimal and is rounded **once**, to the
+     * currency's minor unit, at the line total: rounding the unit price first
+     * and multiplying after makes a ten-of-something line disagree with its own
+     * unit price by a cent.
+     *
+     * A gross unit price is converted to net first, using the rate this
+     * invoice's own tax context resolves to, so the same intent typed either
+     * way produces the same document.
+     */
+    public function addManualLine(Invoice $invoice, ManualLine $line): InvoiceLine
+    {
+        if ($invoice->state !== InvoiceState::Draft) {
+            throw new \LogicException('Can only add lines to a draft invoice.');
+        }
+
+        return DB::transaction(function () use ($invoice, $line): InvoiceLine {
+            $written = $this->writeTypedLine($invoice, $line);
+            $this->recomputeTotals($invoice);
+
+            return $written;
+        });
+    }
+
+    /**
      * Add a manual sub-line nested under an existing line on a Draft invoice.
      * Recomputes the totals (every line, parent and child, counts toward them).
      */
@@ -687,6 +715,102 @@ final class InvoiceManager
             'currency' => $invoice->currency,
             'sort' => $next,
         ]);
+    }
+
+    /**
+     * The line as typed, priced and stored.
+     *
+     * A line carrying no money is written with a zero amount and no tax, which
+     * is what keeps it out of every total without `recomputeTotals` having to
+     * know the kind exists.
+     */
+    private function writeTypedLine(Invoice $invoice, ManualLine $line): InvoiceLine
+    {
+        $currency = $invoice->currency;
+        $next = (int) ($invoice->lines()->max('sort') ?? -1) + 1;
+
+        $common = [
+            'invoice_id' => $invoice->id,
+            'charge_id' => null,
+            'parent_id' => null,
+            'kind' => $line->kind,
+            'title' => $line->title,
+            'description' => $line->description,
+            'unit' => $line->unit,
+            'currency' => $currency,
+            'sort' => $next,
+        ];
+
+        if (! $line->carriesMoney()) {
+            return Models::query(InvoiceLine::class)->create([
+                ...$common,
+                'quantity' => 0,
+                'unit_minor' => null,
+                'amount_minor' => 0,
+                'tax_rate' => 0,
+                'tax_minor' => 0,
+                'tax_label' => null,
+            ]);
+        }
+
+        $unitNet = $this->netUnitPrice($invoice, $line);
+        $amount = $this->lineTotal($unitNet, $line->quantity, $line->discountPercent);
+        $tax = $this->lines->resolveTax($invoice, $amount);
+
+        return Models::query(InvoiceLine::class)->create([
+            ...$common,
+            'quantity' => $line->quantity,
+            // In the currency's own minor unit, whatever scale the price was
+            // stated at. A unit price may carry more decimals than the currency
+            // does; the line total is computed from the unrounded figure above
+            // and only this stored display value is brought back to cents.
+            'unit_minor' => Money::of($unitNet->getAmount(), $currency, roundingMode: RoundingMode::HALF_UP)->getMinorAmount()->toInt(),
+            'amount_minor' => $amount->getMinorAmount()->toInt(),
+            'tax_rate' => $tax->rate,
+            'tax_minor' => $tax->amount->getMinorAmount()->toInt(),
+            'tax_label' => $tax->label,
+            'metadata' => $line->discountPercent > 0.0 ? ['discount_percent' => $line->discountPercent] : [],
+        ]);
+    }
+
+    /**
+     * The net price of one unit.
+     *
+     * A gross price is divided by one plus the resolved rate. The rate comes
+     * from resolving the gross figure itself, which is safe because a rate does
+     * not depend on the amount: what is resolved is the treatment of this
+     * invoice's account, and a zero-rated document divides by one.
+     */
+    private function netUnitPrice(Invoice $invoice, ManualLine $line): Money
+    {
+        $price = $line->unitPrice;
+
+        if (! $line->priceIsGross) {
+            return $price;
+        }
+
+        $rate = $this->lines->resolveTax($invoice, $price)->rate;
+
+        if ($rate <= 0.0) {
+            return $price;
+        }
+
+        return $price->dividedBy(BigDecimal::of(1)->plus(BigDecimal::of((string) $rate)), RoundingMode::HALF_UP);
+    }
+
+    /**
+     * Quantity times unit price, less the discount, rounded once.
+     */
+    private function lineTotal(Money $unitNet, float $quantity, float $discountPercent): Money
+    {
+        $gross = BigDecimal::of($unitNet->getAmount())->multipliedBy(BigDecimal::of((string) $quantity));
+
+        if ($discountPercent > 0.0) {
+            $keep = BigDecimal::of(100)->minus(BigDecimal::of((string) $discountPercent))->dividedBy(100, 10, RoundingMode::HALF_UP);
+            $gross = $gross->multipliedBy($keep);
+        }
+
+        return Money::of($gross, $unitNet->getCurrency(), roundingMode: RoundingMode::HALF_UP);
     }
 
     /** Recompute a draft's totals from its current lines (manual edits). */

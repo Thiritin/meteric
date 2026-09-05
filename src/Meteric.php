@@ -13,6 +13,7 @@ use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\UpgradePolicy;
 use Meteric\Invoicing\InvoiceManager;
+use Meteric\Invoicing\ManualLine;
 use Meteric\Models\Addon;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
@@ -184,6 +185,15 @@ final class Meteric
     public function addLine(Invoice $invoice, string $title, Money $amount, ?string $description = null, ?string $group = null, LineKind $kind = LineKind::OneOff): InvoiceLine
     {
         return $this->invoices->addLine($invoice, $title, $amount, $description, $group, $kind);
+    }
+
+    /**
+     * Add a line somebody typed: quantity, unit price and discount priced here
+     * rather than by the caller. See ManualLine.
+     */
+    public function addManualLine(Invoice $invoice, ManualLine $line): InvoiceLine
+    {
+        return $this->invoices->addManualLine($invoice, $line);
     }
 
     /** Add a manual sub-line nested under an existing Draft invoice line. */

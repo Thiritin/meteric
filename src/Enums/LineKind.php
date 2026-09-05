@@ -18,6 +18,12 @@ enum LineKind: string
     case Credit = 'credit';
 
     /**
+     * Words between priced lines: a heading, a remark, a note about what
+     * follows. It carries no amount and enters no total.
+     */
+    case Text = 'text';
+
+    /**
      * Whether this kind is a product's base line (the parent), as opposed to a
      * configurable option, addon, setup, usage, discount, or credit sub-item.
      * A custom driver uses this to pick the parent charge within a line_group
