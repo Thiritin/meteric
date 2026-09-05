@@ -753,8 +753,13 @@ final class InvoiceManager
             ]);
         }
 
-        $unitNet = $this->netUnitPrice($invoice, $line);
-        $amount = $this->lineTotal($unitNet, $line->quantity, $line->discountPercent);
+        // The rate first, because a gross entry is read through it. Resolving
+        // on the stated price is safe: a rate is a property of the account's
+        // treatment, not of the amount.
+        $rate = $this->lines->resolveTax($invoice, $line->unitPrice)->rate;
+
+        $unitNet = $line->netUnitPrice($rate);
+        $amount = $line->netTotal($rate);
         $tax = $this->lines->resolveTax($invoice, $amount);
 
         return Models::query(InvoiceLine::class)->create([
@@ -771,46 +776,6 @@ final class InvoiceManager
             'tax_label' => $tax->label,
             'metadata' => $line->discountPercent > 0.0 ? ['discount_percent' => $line->discountPercent] : [],
         ]);
-    }
-
-    /**
-     * The net price of one unit.
-     *
-     * A gross price is divided by one plus the resolved rate. The rate comes
-     * from resolving the gross figure itself, which is safe because a rate does
-     * not depend on the amount: what is resolved is the treatment of this
-     * invoice's account, and a zero-rated document divides by one.
-     */
-    private function netUnitPrice(Invoice $invoice, ManualLine $line): Money
-    {
-        $price = $line->unitPrice;
-
-        if (! $line->priceIsGross) {
-            return $price;
-        }
-
-        $rate = $this->lines->resolveTax($invoice, $price)->rate;
-
-        if ($rate <= 0.0) {
-            return $price;
-        }
-
-        return $price->dividedBy(BigDecimal::of(1)->plus(BigDecimal::of((string) $rate)), RoundingMode::HALF_UP);
-    }
-
-    /**
-     * Quantity times unit price, less the discount, rounded once.
-     */
-    private function lineTotal(Money $unitNet, float $quantity, float $discountPercent): Money
-    {
-        $gross = BigDecimal::of($unitNet->getAmount())->multipliedBy(BigDecimal::of((string) $quantity));
-
-        if ($discountPercent > 0.0) {
-            $keep = BigDecimal::of(100)->minus(BigDecimal::of((string) $discountPercent))->dividedBy(100, 10, RoundingMode::HALF_UP);
-            $gross = $gross->multipliedBy($keep);
-        }
-
-        return Money::of($gross, $unitNet->getCurrency(), roundingMode: RoundingMode::HALF_UP);
     }
 
     /** Recompute a draft's totals from its current lines (manual edits). */

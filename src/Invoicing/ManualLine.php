@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Meteric\Invoicing;
 
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Brick\Money\Money;
 use Meteric\Enums\LineKind;
 
@@ -51,5 +53,46 @@ final readonly class ManualLine
     public function carriesMoney(): bool
     {
         return $this->unitPrice !== null && $this->kind !== LineKind::Text;
+    }
+
+    /**
+     * The net price of one unit at this tax rate.
+     *
+     * A gross price is divided by one plus the rate. A zero rate divides by
+     * one, so a reverse-charge or small-business document reads a gross entry
+     * as the net it already is.
+     */
+    public function netUnitPrice(float $rate): Money
+    {
+        $price = $this->unitPrice ?? throw new \LogicException('A line carrying no money has no unit price.');
+
+        if (! $this->priceIsGross || $rate <= 0.0) {
+            return $price;
+        }
+
+        return $price->dividedBy(BigDecimal::of(1)->plus(BigDecimal::of((string) $rate)), RoundingMode::HALF_UP);
+    }
+
+    /**
+     * Quantity times the net unit price, less the discount, **rounded once**.
+     *
+     * Public because a caller that shows a total before the line exists has to
+     * show the total the line will have. Rounding the unit price first and
+     * multiplying after makes a ten-of-something line disagree with the unit
+     * price printed beside it by a cent, so the multiplication stays in decimal
+     * to the end.
+     */
+    public function netTotal(float $rate): Money
+    {
+        $unit = $this->netUnitPrice($rate);
+
+        $total = BigDecimal::of($unit->getAmount())->multipliedBy(BigDecimal::of((string) $this->quantity));
+
+        if ($this->discountPercent > 0.0) {
+            $keep = BigDecimal::of(100)->minus(BigDecimal::of((string) $this->discountPercent))->dividedBy(100, 10, RoundingMode::HALF_UP);
+            $total = $total->multipliedBy($keep);
+        }
+
+        return Money::of($total, $unit->getCurrency(), roundingMode: RoundingMode::HALF_UP);
     }
 }

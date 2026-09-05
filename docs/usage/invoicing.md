@@ -134,6 +134,11 @@ Meteric::addManualLine($draft, ManualLine::text('Everything below is covered by 
   `LineKind::Text`, a zero amount and no tax. It enters no total; it exists so a
   document reads as it was written.
 
+`ManualLine::netTotal(float $rate)` and `netUnitPrice(float $rate)` are public, so
+a screen that shows a total before the line exists shows the total the line will
+have. A caller that resolves the rate itself and calls these gets the engine's
+arithmetic without persisting a draft; it must not multiply on its own.
+
 Finalize the draft with:
 
 ```php
