@@ -441,8 +441,12 @@ final class SubscriptionManager
         // would and is the answer the customer needs. `now` never reaches here:
         // an immediate cancellation is the provider's, and terminating for
         // non-payment inside a term has to stay possible.
+        //
+        // The day the term ends, not the instant: signup was at some time of
+        // day and a caller cancelling to a date means midnight, so an instant
+        // comparison would refuse the very boundary it had just offered.
         $committed = $this->committedUntil($sub);
-        if ($committed !== null && $target->lessThan($committed)) {
+        if ($committed !== null && $target->lessThan($committed->startOfDay())) {
             $earliest = $this->cancellationOptions($sub, 1)[0] ?? null;
 
             throw new WithinMinimumTerm(
@@ -539,7 +543,7 @@ final class SubscriptionManager
         $limit = $count * 6 + $this->minimumTermPeriods($sub);
         for ($i = 0; count($out) < $count && $i < $limit; $i++) {
             $cutoff = $notice > 0 ? $boundary->subDays($notice) : $boundary;
-            if ($now->lessThanOrEqualTo($cutoff) && ($committed === null || ! $boundary->lessThan($committed))) {
+            if ($now->lessThanOrEqualTo($cutoff) && ($committed === null || ! $boundary->lessThan($committed->startOfDay()))) {
                 $out[] = $boundary;
             }
             $boundary = $rule->period($boundary)->end;

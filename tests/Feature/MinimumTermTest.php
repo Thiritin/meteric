@@ -129,6 +129,15 @@ it('allows a cancellation to the term boundary', function () {
     expect($sub->fresh()->cancel_at->toDateString())->toBe('2027-06-01');
 });
 
+it('allows a cancellation to the day the term ends, whatever time of day it started', function () {
+    test()->travelTo(CarbonImmutable::parse('2026-06-01T14:32:00Z'));
+    $sub = minTermSub(minTermAccount(), minTermPrice(minTermProduct(12)));
+
+    Meteric::cancel($sub, CarbonImmutable::parse('2027-06-01T00:00:00Z'));
+
+    expect($sub->fresh()->cancel_at->toDateString())->toBe('2027-06-01');
+});
+
 it('still terminates immediately inside the term', function () {
     $sub = minTermSub(minTermAccount(), minTermPrice(minTermProduct(12)));
 

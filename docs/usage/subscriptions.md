@@ -279,7 +279,9 @@ Meteric::committedUntil($subscription);   // ?CarbonImmutable, the latest across
 
 `cancellationOptions()` offers no boundary before that moment, and the notice
 window is then measured against the boundaries that are on offer, so notice
-attaches to the end of the term rather than to its start. `cancel()` to a
+attaches to the end of the term rather than to its start. Both read the **day**
+the term ends rather than the instant: signup happened at some time of day, and
+a caller cancelling to a date means midnight on it. `cancel()` to a
 boundary inside the term throws `Meteric\Exceptions\WithinMinimumTerm`, whose
 `earliest()` is the date that would have been allowed.
 
