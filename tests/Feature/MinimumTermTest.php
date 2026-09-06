@@ -146,6 +146,35 @@ it('still terminates immediately inside the term', function () {
     expect($sub->fresh()->state)->toBe(SubscriptionState::Canceled);
 });
 
+it('compares a plan change only between prices on the same cycle', function () {
+    // `amountFor()` is one period's amount and normalises nothing, so a yearly
+    // price is a bigger number than a monthly one whatever it costs to run for
+    // a year. Reading that as a direction would refuse a cycle switch.
+    $product = minTermProduct(12);
+    $yearly = minTermPrice($product, 20000, interval: 'year');
+    $sub = minTermSub(minTermAccount(), $yearly);
+    $item = $sub->items()->first();
+
+    $monthly = minTermPrice(minTermProduct(), 2000);
+
+    Meteric::changePlan($item, $monthly);
+
+    expect($item->fresh()->pending_change['price_id'] ?? $item->fresh()->price_id)->toBe($monthly->id)
+        ->and($item->fresh()->committed_until->toDateString())->toBe('2038-06-01');
+});
+
+it('lets a cycle switch upwards through the guard as well', function () {
+    $product = minTermProduct(12);
+    $sub = minTermSub(minTermAccount(), minTermPrice($product, 2000));
+    $item = $sub->items()->first();
+
+    $yearly = minTermPrice(minTermProduct(), 20000, interval: 'year');
+
+    Meteric::changePlan($item, $yearly);
+
+    expect($item->fresh()->committed_until->toDateString())->toBe('2027-06-01');
+});
+
 it('refuses a cheaper plan inside the term and allows a dearer one', function () {
     $product = minTermProduct(12);
     $sub = minTermSub(minTermAccount(), minTermPrice($product, 2000));

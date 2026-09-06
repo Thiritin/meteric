@@ -246,7 +246,15 @@ final class SubscriptionManager
         // A cheaper plan inside the term settles part of the commitment away,
         // which is the cancellation the term forbids. A more expensive one and
         // an equal one both stand, and neither restarts the term.
-        if ($newFull->isLessThan($oldFull) && $item->committed_until !== null && $at->lessThan($item->committed_until)) {
+        //
+        // Only between prices on the same cycle, because `amountFor()` is one
+        // period's amount and normalises nothing: 200 a year against 20 a month
+        // is 200 against 20, and reading that as a downgrade would refuse a
+        // cycle switch. A cycle switch settles nothing away in any case, since
+        // the commitment is a date and no switch moves it.
+        $comparable = $item->price->recurrence()->equals($newPrice->recurrence());
+
+        if ($comparable && $newFull->isLessThan($oldFull) && $item->committed_until !== null && $at->lessThan($item->committed_until)) {
             throw new WithinMinimumTerm(
                 "Item {$item->id} is committed to {$item->committed_until->toDateString()}; a cheaper plan cannot be taken before then.",
                 $item->committed_until,

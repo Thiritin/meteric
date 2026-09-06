@@ -300,3 +300,14 @@ A plan change inside the term never restarts, extends or clears it:
 `switchTerm()`. A change to a **cheaper** plan is refused with
 `WithinMinimumTerm`, because settling part of the commitment away is the
 cancellation the term forbids; a dearer or an equal one stands.
+
+**Only between prices on the same cycle.** `amountFor()` is one period's amount
+and normalises nothing, so 200 a year is a bigger number than 20 a month
+whatever the two cost to run for a year. A change to a different `interval` or
+`interval_count` is a cycle switch rather than a cheaper plan and passes the
+guard untouched, which is right in any case: the commitment is a date and no
+cycle switch moves it.
+
+The comparison is the recurring amount alone. A price's `setup_fee_minor` is not
+in it, and does not need to be: no plan-change settlement raises a setup charge,
+so a one-off never enters the transaction the guard is protecting.

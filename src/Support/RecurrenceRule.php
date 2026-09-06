@@ -43,6 +43,13 @@ final class RecurrenceRule
         return new Period($start, $this->nextEnd($start));
     }
 
+    /** Whether two rules bill on the same cycle, so an amount from one is comparable with an amount from the other. */
+    public function equals(self $other): bool
+    {
+        return $this->interval === $other->interval
+            && ($this->count ?? 1) === ($other->count ?? 1);
+    }
+
     /** Start of the cycle that ends at $end — used as the proration denominator. */
     public function previousStart(CarbonImmutable $end): CarbonImmutable
     {
