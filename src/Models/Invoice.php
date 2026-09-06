@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Meteric\Enums\InvoiceState;
 use Meteric\Support\Models;
+use Meteric\Tax\TaxContext;
 
 /**
  * @property string $id
@@ -54,7 +55,48 @@ class Invoice extends MetericModel
             'paid_at' => 'immutable_datetime',
             'version' => 'integer',
             'metadata' => 'array',
+            'tax_profile' => 'array',
         ];
+    }
+
+    /**
+     * The tax profile this invoice was priced under, or the account's current
+     * one for an invoice issued before the snapshot existed.
+     *
+     * **Read this, not `$invoice->account->tax_profile`.** The account moves
+     * with the customer; the invoice is a document that was already sent. An
+     * empty array means neither was ever recorded.
+     *
+     * @return array<string,mixed>
+     */
+    public function taxProfile(): array
+    {
+        return $this->tax_profile ?? $this->account?->tax_profile ?? [];
+    }
+
+    /** The tax context this invoice was priced under. */
+    public function taxContext(bool $inclusive = false): TaxContext
+    {
+        return TaxContext::fromProfile($this->taxProfile(), $inclusive);
+    }
+
+    /**
+     * Record the profile the lines are being priced under. A no-op once the
+     * invoice has left draft, where the database refuses the write anyway: the
+     * seal is the trigger, this only keeps a caller from meeting it.
+     *
+     * @param  array<string,mixed>  $profile
+     */
+    public function recordTaxProfile(array $profile): void
+    {
+        // Loose comparison on purpose: jsonb hands the keys back in its own
+        // order, so an identical profile would otherwise be rewritten on every
+        // line.
+        if ($this->state !== InvoiceState::Draft || $this->tax_profile == $profile) {
+            return;
+        }
+
+        $this->forceFill(['tax_profile' => $profile])->save();
     }
 
     /** @return BelongsTo<BillingAccount, $this> */

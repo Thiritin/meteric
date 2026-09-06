@@ -72,6 +72,13 @@ open invoice is immutable, frozen by database triggers, so corrections go throug
 [void](#void-or-credit-note) or a [credit note](#credit-notes-and-refunds), not an
 in-place edit.
 
+## What the invoice records about the buyer
+
+An issued invoice carries `tax_profile`, the account's tax profile as it stood
+when its lines were priced. Read it with `$invoice->taxProfile()` or
+`$invoice->taxContext()` rather than reaching through to the account, which
+moves with the customer. See [Tax](/usage/tax).
+
 ## Editing a draft
 
 Add and remove lines on a draft directly. All three methods require a draft and

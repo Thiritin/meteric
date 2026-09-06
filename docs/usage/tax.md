@@ -155,3 +155,36 @@ $context = new \Meteric\Tax\TaxContext(
 
 Pass it to [`Meteric::quote()->tax(...)`](/usage/quotes-and-checkout) to render
 tax-correct totals on a checkout page.
+
+## The profile an invoice was priced under
+
+An account's `tax_profile` is current. It follows the customer as they move
+country, register for VAT or stop being a business, and it has to: the next
+quote and the next invoice must be priced on where they are now.
+
+An issued invoice is the opposite. It is a document that was already sent, and
+anything derived from the account afterwards restates it. So the profile is
+snapshotted onto the invoice as `meteric_invoices.tax_profile` and read back
+with `$invoice->taxProfile()` or `$invoice->taxContext()`:
+
+```php
+$invoice->taxContext()->countryCode;   // where the buyer was when it was priced
+$account->taxContext()->countryCode;   // where the buyer is now
+```
+
+The snapshot is written every time meteric prices a line onto the draft, and
+stamped at `finalizeInvoice()` for a draft that never had one priced. The
+trigger that freezes an issued invoice's totals freezes it too, so it cannot
+move afterwards even by a direct update. `copyInvoice()` carries it onto the
+copy, whose lines are clones and therefore carry the source's rates.
+
+It is null on an invoice issued before the column existed, and stays null:
+assembling one today would state a country nobody recorded. `taxProfile()` falls
+back to the account for those, so nothing breaks; a caller that must not
+attribute history to a current address has to test `tax_profile` for null itself
+and say what it does with the answer.
+
+**A host key survives the round trip.** The profile is stored as it was given,
+so keys meteric does not read (a legal status, a customer classification) come
+back out of the snapshot. That is what makes it usable as the one record of what
+the buyer was at issue rather than only of what the rate was resolved from.

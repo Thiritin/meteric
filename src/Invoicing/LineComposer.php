@@ -40,6 +40,11 @@ final class LineComposer
             throw new \LogicException('Cannot rebuild lines of a non-draft invoice.');
         }
 
+        // The profile the lines below are priced under, recorded on the
+        // invoice before any of them is written. Reprised on every rebuild
+        // while the invoice is a draft; the trigger freezes it at issue.
+        $invoice->recordTaxProfile($invoice->account->tax_profile ?? []);
+
         $taxContext = $invoice->account->taxContext();
         $currency = $invoice->currency;
 
@@ -80,6 +85,8 @@ final class LineComposer
     /** Resolve tax on a net amount in the invoice account's tax context. */
     public function resolveTax(Invoice $invoice, Money $net, ?string $category = null): TaxResult
     {
+        $invoice->recordTaxProfile($invoice->account->tax_profile ?? []);
+
         $context = $invoice->account->taxContext();
 
         return $this->tax->resolve($net, $category === null ? $context : $context->withCategory($category));

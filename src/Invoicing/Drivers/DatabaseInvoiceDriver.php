@@ -79,6 +79,13 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
      */
     public function finalize(Invoice $invoice): IssuedInvoice
     {
+        // A draft nobody priced a line on carries no profile yet, and the
+        // trigger will not let one be written after this call. Only when it is
+        // still absent: a draft that was priced keeps what it was priced under.
+        if ($invoice->tax_profile === null) {
+            $invoice->recordTaxProfile($invoice->account?->tax_profile ?? []);
+        }
+
         $invoice->forceFill([
             'number' => $invoice->number ?? $this->nextNumber(),
             'state' => InvoiceState::Open,

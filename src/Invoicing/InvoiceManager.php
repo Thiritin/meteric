@@ -520,6 +520,11 @@ final class InvoiceManager
                 'state' => InvoiceState::Draft,
                 'currency' => $source->currency,
                 'metadata' => $source->metadata,
+                // The clone's lines carry the source's rates, so it carries the
+                // source's tax profile too. Repricing them against today's
+                // account would leave a document whose stated rates and stated
+                // inputs disagree.
+                'tax_profile' => $source->tax_profile,
             ], fn ($v): bool => $v !== null));
 
             // Two-pass clone so a child never references a not-yet-cloned parent:
