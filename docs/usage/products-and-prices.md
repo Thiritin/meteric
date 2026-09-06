@@ -28,17 +28,18 @@ owning item's base price and is used by addons; see
 
 ### Product config
 
-The `config` array holds product-level settings. Two keys are read by the
+The `config` array holds product-level settings. Three keys are read by the
 package:
 
 - `config['downgrade']` sets the default [downgrade policy](/usage/plan-changes); it falls back to `defer`. Read it with `downgradePolicy()`.
 - `config['cancel_notice_days']` is the notice required before a contract ends, in days; it falls back to `0`. Read it with `cancelNoticeDays()`. See [cancellation](/usage/subscriptions#notice-window).
+- `config['minimum_term_periods']` is how many periods a sale is committed for before it may be cancelled; it falls back to `0`. Read it with `minimumTerm()`, and override it on one price with the `minimum_term_periods` column. See [Minimum term](/usage/subscriptions#minimum-term).
 
-Both keys are validated on write. `config['downgrade']` must be a valid
-`DowngradePolicy` value (`defer`, `discard`, `credit`, `refund`) and
-`config['cancel_notice_days']` a non-negative integer, or the assignment throws
-`InvalidArgumentException`. Any other key, a provisioner name or another host
-setting of your own, passes through untouched.
+All three keys are validated on write. `config['downgrade']` must be a valid
+`DowngradePolicy` value (`defer`, `discard`, `credit`, `refund`), and
+`config['cancel_notice_days']` and `config['minimum_term_periods']` non-negative
+integers, or the assignment throws `InvalidArgumentException`. Any other key, a
+provisioner name or another host setting of your own, passes through untouched.
 
 ```php
 $product->config = ['downgrade' => 'nope'];  // throws InvalidArgumentException

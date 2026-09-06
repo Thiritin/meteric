@@ -191,4 +191,10 @@ class Product extends MetericModel
     {
         return max(0, (int) ($this->config['cancel_notice_days'] ?? 0));
     }
+
+    /** Periods a new sale is committed for before it may be cancelled (config 'minimum_term_periods'); 0 = none. A price may override it. */
+    public function minimumTerm(): int
+    {
+        return max(0, (int) ($this->config['minimum_term_periods'] ?? 0));
+    }
 }

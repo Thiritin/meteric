@@ -12,7 +12,7 @@ helper methods you actually call.
 
 - **Columns:** `type`, `slug`, `name`, `pricing_model`, `is_proratable`, `config` (array).
 - **Relationships:** `prices()`, `meterDimensions()`, `options()`, `addons()` (`ProductAddon` rows), `billable()` (morph).
-- **Config:** the keys the package reads are validated on write. `config['downgrade']` must be a valid `DowngradePolicy` value and `config['cancel_notice_days']` a non-negative integer, or the assignment throws `InvalidArgumentException`. Other keys (your own host settings) pass through untouched.
+- **Config:** the keys the package reads are validated on write. `config['downgrade']` must be a valid `DowngradePolicy` value, and `config['cancel_notice_days']` and `config['minimum_term_periods']` non-negative integers, or the assignment throws `InvalidArgumentException`. Other keys (your own host settings) pass through untouched.
 - **Helpers:**
   - `priceFor(string $currency, PricePurpose $purpose = Recurring, ?Interval $interval = null, ?int $intervalCount = null): ?Price`: latest open price for a currency and purpose, narrowed to one term when an interval is given.
   - `terms(string $currency, PricePurpose $purpose = Recurring): Collection<Price>`: the current recurring prices, one per term, shortest first.
@@ -22,12 +22,13 @@ helper methods you actually call.
   - `isMetered(): bool`: true for `metered` / `hourly`.
   - `downgradePolicy(): DowngradePolicy`: from `config['downgrade']`, defaults to `Defer`.
   - `cancelNoticeDays(): int`: notice required before a contract ends, from `config['cancel_notice_days']`, defaults to `0`.
+  - `minimumTerm(): int`: periods a new sale is committed for, from `config['minimum_term_periods']`, defaults to `0`. A price may override it.
 
 ## Price
 
 `meteric_prices`: versioned pricing for a product.
 
-- **Columns:** `currency`, `amount_minor`, `unit_rate` (string), `purpose`, `pricing_model`, `interval`, `interval_count`, `billing_mode`, `setup_fee_minor`, `cap_minor`, `min_charge_minor`, `included_qty`, `block_size`, `percent`, `tiers` (array), `tax_inclusive`, `valid_from`, `valid_to`.
+- **Columns:** `currency`, `amount_minor`, `unit_rate` (string), `purpose`, `pricing_model`, `interval`, `interval_count`, `billing_mode`, `setup_fee_minor`, `cap_minor`, `min_charge_minor`, `included_qty`, `block_size`, `percent`, `tiers` (array), `tax_inclusive`, `minimum_term_periods` (null = take the product's), `valid_from`, `valid_to`.
 - **Casts:** `amount` is a `Money` over `amount_minor` + `currency`.
 - **Relationships:** `product()`.
 - **Helpers:**

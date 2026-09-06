@@ -6,6 +6,7 @@ namespace Meteric\Models;
 
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Casts\MoneyCast;
@@ -40,6 +41,7 @@ use Meteric\Support\RecurrenceRule;
  * @property ?float $percent
  * @property array $tiers
  * @property bool $tax_inclusive
+ * @property ?int $minimum_term_periods null = take the product's
  */
 class Price extends MetericModel
 {
@@ -65,6 +67,7 @@ class Price extends MetericModel
             'included_qty' => 'float',
             'block_size' => 'float',
             'percent' => 'float',
+            'minimum_term_periods' => 'integer',
             'tiers' => 'array',
             'tax_inclusive' => 'boolean',
             'valid_from' => 'immutable_datetime',
@@ -104,7 +107,7 @@ class Price extends MetericModel
                 'product_id', 'currency', 'unit_rate', 'purpose', 'pricing_model',
                 'interval', 'interval_count', 'billing_mode', 'setup_fee_minor',
                 'cap_minor', 'min_charge_minor', 'included_qty', 'block_size',
-                'percent', 'tiers', 'tax_inclusive',
+                'percent', 'tiers', 'tax_inclusive', 'minimum_term_periods',
             ]),
             'amount_minor' => $amountMinor,
             'scope' => PriceScope::Override->value,
@@ -131,6 +134,33 @@ class Price extends MetericModel
     public function isRecurring(): bool
     {
         return $this->recurrence()->isRecurring();
+    }
+
+    /**
+     * Periods a sale on this price is committed for before it may be
+     * cancelled. The product's value unless this row sets its own, so a
+     * product sold monthly and yearly can commit each term differently.
+     */
+    public function minimumTerm(): int
+    {
+        return max(0, $this->minimum_term_periods ?? $this->product?->minimumTerm() ?? 0);
+    }
+
+    /**
+     * The moment a term starting at $from expires, or null where there is no
+     * term to expire. The recurrence applied `minimumTerm()` times, so twelve
+     * periods of a quarterly price is three years, not twelve.
+     */
+    public function minimumTermEnd(CarbonImmutable $from): ?CarbonImmutable
+    {
+        $periods = $this->minimumTerm();
+        $rule = $this->recurrence();
+
+        if ($periods < 1 || ! $rule->isRecurring()) {
+            return null;
+        }
+
+        return $rule->interval->add($from, $rule->count * $periods);
     }
 
     public function hasSetupFee(): bool

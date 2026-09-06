@@ -440,10 +440,16 @@ final class Meteric
         return app(SubscriptionManager::class)->cancel($sub, $at, $when, $meta);
     }
 
-    /** The next cancellable term boundaries that satisfy the notice window. */
+    /** The next cancellable term boundaries that satisfy the minimum term and the notice window. */
     public function cancellationOptions(Subscription $sub, int $count = 3): array
     {
         return app(SubscriptionManager::class)->cancellationOptions($sub, $count);
+    }
+
+    /** The moment the subscription stops being committed, or null where it was sold on no minimum term. */
+    public function committedUntil(Subscription $sub): ?CarbonImmutable
+    {
+        return app(SubscriptionManager::class)->committedUntil($sub);
     }
 
     /** Enact scheduled cancellations whose boundary has passed. Run via meteric:run. */

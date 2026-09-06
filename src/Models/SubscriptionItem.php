@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Meteric\Models;
 
 use Brick\Money\Money;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -27,6 +28,8 @@ use Meteric\Support\Period;
  * @property ItemState $state
  * @property ?Period $current_period
  * @property ?array $pending_change
+ * @property ?int $minimum_term_periods the term agreed at signup, in periods
+ * @property ?CarbonImmutable $committed_until the moment that term expires; null = no term
  */
 class SubscriptionItem extends MetericModel
 {
@@ -43,6 +46,8 @@ class SubscriptionItem extends MetericModel
             'current_period' => PeriodCast::class,
             'activated_at' => 'immutable_datetime',
             'ends_at' => 'immutable_datetime',
+            'minimum_term_periods' => 'integer',
+            'committed_until' => 'immutable_datetime',
             'pending_change' => 'array',
             'version' => 'integer',
             'metadata' => 'array',

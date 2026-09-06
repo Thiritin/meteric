@@ -64,8 +64,15 @@ the subscription metadata under `cancellation`. See
 
 #### `cancellationOptions(Subscription $sub, int $count = 3): array`
 
-The next `$count` term boundaries that still satisfy the product's notice window,
-as a `list<CarbonImmutable>`. Render these as a "cancel at end of period N" choice.
+The next `$count` term boundaries that fall at or after the minimum term and
+still satisfy the product's notice window, as a `list<CarbonImmutable>`. Render
+these as a "cancel at end of period N" choice.
+
+#### `committedUntil(Subscription $sub): ?CarbonImmutable`
+
+The moment the subscription stops being committed: the latest minimum term end
+across its active items, or `null` where none was sold on a term. See
+[Minimum term](/usage/subscriptions#minimum-term).
 
 #### `processDueCancellations(?CarbonImmutable $at = null): int`
 

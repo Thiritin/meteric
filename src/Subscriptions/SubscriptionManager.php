@@ -29,6 +29,7 @@ use Meteric\Events\SubscriptionRenewed;
 use Meteric\Events\SubscriptionResumed;
 use Meteric\Exceptions\PeriodNotRebasable;
 use Meteric\Exceptions\TermNotSwitchable;
+use Meteric\Exceptions\WithinMinimumTerm;
 use Meteric\Meteric;
 use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
@@ -242,6 +243,16 @@ final class SubscriptionManager
         $oldFull = $item->price->amountFor($qty);
         $newFull = $newPrice->amountFor($qty);
 
+        // A cheaper plan inside the term settles part of the commitment away,
+        // which is the cancellation the term forbids. A more expensive one and
+        // an equal one both stand, and neither restarts the term.
+        if ($newFull->isLessThan($oldFull) && $item->committed_until !== null && $at->lessThan($item->committed_until)) {
+            throw new WithinMinimumTerm(
+                "Item {$item->id} is committed to {$item->committed_until->toDateString()}; a cheaper plan cannot be taken before then.",
+                $item->committed_until,
+            );
+        }
+
         if ($newFull->isGreaterThan($oldFull)) {
             return match ($upgrade ?? UpgradePolicy::Prorate) {
                 UpgradePolicy::Defer => $this->deferChange($item, $newPrice),
@@ -396,10 +407,12 @@ final class SubscriptionManager
     /**
      * Cancel a subscription. $at is `now` (immediate), `period_end` (the current
      * cycle's end), or a specific CarbonImmutable boundary date (e.g. a later term
-     * end). Scheduled cancellations honour the product's notice window: cancelling
-     * to a boundary that is within `cancel_notice_days` of now throws. Scheduled
-     * cancellations are enacted by processDueCancellations() (run via meteric:run);
-     * billing stops at the boundary. No automatic refund.
+     * end). Scheduled cancellations honour the minimum term the items were sold
+     * on and the product's notice window: a boundary before `committedUntil()`
+     * throws WithinMinimumTerm, one within `cancel_notice_days` of now throws
+     * InvalidArgumentException. `now` honours neither. Scheduled cancellations
+     * are enacted by processDueCancellations() (run via meteric:run); billing
+     * stops at the boundary. No automatic refund.
      */
     /**
      * @param  array<string,mixed>  $meta  optional cancellation data (e.g. a reason), stored on the subscription metadata
@@ -423,6 +436,21 @@ final class SubscriptionManager
         }
 
         $target = $at instanceof CarbonImmutable ? $at : ($sub->current_period?->end ?? $when);
+
+        // The term first, because it names a later date than the notice window
+        // would and is the answer the customer needs. `now` never reaches here:
+        // an immediate cancellation is the provider's, and terminating for
+        // non-payment inside a term has to stay possible.
+        $committed = $this->committedUntil($sub);
+        if ($committed !== null && $target->lessThan($committed)) {
+            $earliest = $this->cancellationOptions($sub, 1)[0] ?? null;
+
+            throw new WithinMinimumTerm(
+                "Cancelling at {$target->toDateString()} is inside the minimum term, which runs to {$committed->toDateString()}."
+                .($earliest !== null ? " The earliest date allowed is {$earliest->toDateString()}." : ''),
+                $earliest,
+            );
+        }
 
         $notice = $this->noticeDays($sub);
         if ($notice > 0 && $when->greaterThan($target->subDays($notice))) {
@@ -461,6 +489,28 @@ final class SubscriptionManager
     }
 
     /**
+     * The moment the subscription stops being committed: the latest term end
+     * across its active items, or null where none of them was sold on a term.
+     * Read off the items rather than the catalog, so editing a product does not
+     * move a contract already agreed.
+     */
+    public function committedUntil(Subscription $sub): ?CarbonImmutable
+    {
+        return $sub->items()->where('state', ItemState::Active->value)->get()
+            ->map(fn (SubscriptionItem $i) => $i->committed_until)
+            ->filter()
+            ->max();
+    }
+
+    /** The longest term any active item was sold on, in periods. */
+    public function minimumTermPeriods(Subscription $sub): int
+    {
+        return (int) $sub->items()->where('state', ItemState::Active->value)->get()
+            ->map(fn (SubscriptionItem $i) => $i->minimum_term_periods ?? 0)
+            ->max();
+    }
+
+    /**
      * The next cancellable term boundaries (for a "cancel at end of period N"
      * dropdown). Returns up to $count future period ends that still satisfy the
      * notice window. UI renders them; the system enforces them.
@@ -478,13 +528,18 @@ final class SubscriptionManager
 
         $rule = $item->price->recurrence();
         $notice = $this->noticeDays($sub);
+        $committed = $this->committedUntil($sub);
         $now = $this->clock->now();
 
+        // A boundary inside the term is not on offer at all, so the notice
+        // window is measured against the first boundary that is: notice
+        // attaches to the end of the term, never to its start.
         $out = [];
         $boundary = $period->end;
-        for ($i = 0; count($out) < $count && $i < $count * 6; $i++) {
+        $limit = $count * 6 + $this->minimumTermPeriods($sub);
+        for ($i = 0; count($out) < $count && $i < $limit; $i++) {
             $cutoff = $notice > 0 ? $boundary->subDays($notice) : $boundary;
-            if ($now->lessThanOrEqualTo($cutoff)) {
+            if ($now->lessThanOrEqualTo($cutoff) && ($committed === null || ! $boundary->lessThan($committed))) {
                 $out[] = $boundary;
             }
             $boundary = $rule->period($boundary)->end;

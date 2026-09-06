@@ -175,6 +175,8 @@ final class SubscriptionBuilder
             'quantity' => $row['qty'],
             'state' => ItemState::Active,
             'activated_at' => $signup,
+            'minimum_term_periods' => $price->minimumTerm() ?: null,
+            'committed_until' => $price->minimumTermEnd($signup),
         ]);
         $item->setRelation('subscription', $sub);
         $item->setRelation('price', $price);

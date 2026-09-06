@@ -252,3 +252,49 @@ $boundaries = Meteric::cancellationOptions($subscription, count: 3);
 
 The package enforces the notice rule; rendering the choices is your UI's job. A
 product with `cancel_notice_days` of 0 can cancel to any boundary.
+
+### Minimum term
+
+A minimum term commits a subscription for a number of periods before it may be
+cancelled at all. `config['minimum_term_periods']` on the product sets it, and
+the `minimum_term_periods` column on a price overrides it, so a product sold
+monthly and yearly can commit each term differently. It is counted in periods,
+not months: twelve periods of a quarterly price is three years.
+
+```php
+$product->config = ['minimum_term_periods' => 12];   // twelve periods, whichever price is taken
+$yearly->minimum_term_periods = 1;                    // except this one
+```
+
+**The term is frozen onto the item at signup.** `subscribe()` and
+`materializeLine()` write `minimum_term_periods` and `committed_until` onto the
+`SubscriptionItem` from the price it was sold on, and nothing reads the catalog
+again afterwards. Editing the product therefore changes what the next sale
+commits to and never what an existing contract does, and an item created before
+the columns existed carries `null` and is committed to nothing.
+
+```php
+Meteric::committedUntil($subscription);   // ?CarbonImmutable, the latest across active items
+```
+
+`cancellationOptions()` offers no boundary before that moment, and the notice
+window is then measured against the boundaries that are on offer, so notice
+attaches to the end of the term rather than to its start. `cancel()` to a
+boundary inside the term throws `Meteric\Exceptions\WithinMinimumTerm`, whose
+`earliest()` is the date that would have been allowed.
+
+```php
+Meteric::cancel($subscription, 'period_end');
+// WithinMinimumTerm: ... The earliest date allowed is 2027-06-01.
+```
+
+**`cancel($sub, 'now')` is not subject to the term.** An immediate cancellation
+is the provider ending the contract rather than the customer leaving it, which
+is how a host terminates for non-payment, and that has to stay possible inside a
+term.
+
+A plan change inside the term never restarts, extends or clears it:
+`committed_until` is left exactly as it was by `changePlan()` and by
+`switchTerm()`. A change to a **cheaper** plan is refused with
+`WithinMinimumTerm`, because settling part of the commitment away is the
+cancellation the term forbids; a dearer or an equal one stands.

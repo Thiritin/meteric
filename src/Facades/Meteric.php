@@ -39,6 +39,7 @@ use Meteric\Models\Payment;
  * @method static \Meteric\Subscriptions\TermSwitchPreview previewTermSwitch(\Meteric\Models\SubscriptionItem $item, \Meteric\Models\Price $newPrice, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\Subscription cancel(\Meteric\Models\Subscription $sub, string|\Carbon\CarbonImmutable $at = 'period_end', ?\Carbon\CarbonImmutable $when = null, array $meta = [])
  * @method static array cancellationOptions(\Meteric\Models\Subscription $sub, int $count = 3)
+ * @method static ?\Carbon\CarbonImmutable committedUntil(\Meteric\Models\Subscription $sub)
  * @method static int processDueCancellations(?\Carbon\CarbonImmutable $at = null)
  * @method static \Meteric\Models\Subscription pause(\Meteric\Models\Subscription $sub)
  * @method static \Meteric\Models\Subscription resume(\Meteric\Models\Subscription $sub, ?\Carbon\CarbonImmutable $at = null)

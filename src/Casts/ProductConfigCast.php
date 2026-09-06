@@ -51,6 +51,13 @@ final class ProductConfigCast implements CastsAttributes
             }
         }
 
+        if (array_key_exists('minimum_term_periods', $config)) {
+            $periods = $config['minimum_term_periods'];
+            if (! is_numeric($periods) || (int) $periods < 0) {
+                throw new \InvalidArgumentException("Invalid product config 'minimum_term_periods': must be a non-negative integer.");
+            }
+        }
+
         return [$key => (string) json_encode($config)];
     }
 }
