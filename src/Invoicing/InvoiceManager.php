@@ -19,6 +19,7 @@ use Meteric\Enums\BillingMode;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\CreditState;
 use Meteric\Enums\InvoiceSchedule;
+use Meteric\Enums\InvoiceSplit;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\LineKind;
 use Meteric\Events\CreditNoteIssued;
@@ -132,8 +133,18 @@ final class InvoiceManager
             ->distinct()
             ->pluck('currency');
 
+        $split = $account->invoice_split ?? InvoiceSplit::Pooled;
+
         $invoices = [];
         foreach ($currencies as $currency) {
+            if ($split === InvoiceSplit::PerSubscription) {
+                foreach ($this->invoicePerSubscription($account, $currency) as $invoice) {
+                    $invoices[] = $invoice;
+                }
+
+                continue;
+            }
+
             $invoice = $this->invoicePending($account, $currency, $force);
             if ($invoice !== null) {
                 $invoices[] = $invoice;
@@ -186,6 +197,21 @@ final class InvoiceManager
                 ? $account->collectionBoundary($at)
                 : null,
         ])->save();
+
+        return $account->refresh();
+    }
+
+    /**
+     * How many documents the billable pool becomes.
+     *
+     * Orthogonal to the schedule, which says *when* it becomes one: an account
+     * can be billed monthly and still want one invoice per subscription. It is
+     * honoured by `invoiceAllPending`, and therefore by the collective run;
+     * `invoicePending` issues one document by definition and is unaffected.
+     */
+    public function setInvoiceSplit(BillingAccount $account, InvoiceSplit $split): BillingAccount
+    {
+        $account->forceFill(['invoice_split' => $split])->save();
 
         return $account->refresh();
     }
@@ -894,6 +920,37 @@ final class InvoiceManager
             ->orderBy('created_at')
             ->lockForUpdate()
             ->get();
+    }
+
+    /**
+     * One invoice per subscription, for an account on `InvoiceSplit::PerSubscription`.
+     *
+     * The pool is read and locked once, so two concurrent runs cannot bill the
+     * same charge onto two documents - the same guarantee `invoicePending`
+     * gives, taken over the whole set rather than per group. Charges with no
+     * subscription are one group of their own: they belong to no subscription
+     * to be split by, and dropping them would strand them pending forever.
+     *
+     * @return list<Invoice>
+     */
+    private function invoicePerSubscription(BillingAccount $account, string $currency): array
+    {
+        return DB::transaction(function () use ($account, $currency): array {
+            $groups = $this->pendingCharges([$account->id], $currency)
+                ->groupBy(fn (Charge $charge): string => (string) $charge->subscription_id);
+
+            $invoices = [];
+
+            foreach ($groups as $charges) {
+                $invoice = $this->issue($account, $currency, $charges);
+
+                if ($invoice !== null) {
+                    $invoices[] = $invoice;
+                }
+            }
+
+            return $invoices;
+        });
     }
 
     /** Deterministic batch key so a retried run reuses the same invoice. */

@@ -92,6 +92,7 @@ CREATE TABLE meteric_billing_accounts (
   balance_minor bigint NOT NULL DEFAULT 0,     -- account credit (can be negative)
   invoice_schedule  text NOT NULL DEFAULT 'immediate',  -- 'immediate' | 'collective'
   invoice_day       smallint CHECK (invoice_day BETWEEN 1 AND 31), -- collective: day of month, null = config
+  invoice_split     text NOT NULL DEFAULT 'pooled',      -- 'pooled' | 'per_subscription'
   collected_through date,                      -- collective: the boundary already billed
   metadata      jsonb NOT NULL DEFAULT '{}',
   created_at    timestamptz NOT NULL DEFAULT now(),

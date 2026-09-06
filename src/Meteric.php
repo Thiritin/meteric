@@ -13,6 +13,7 @@ use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\DiscountState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceSchedule;
+use Meteric\Enums\InvoiceSplit;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\UpgradePolicy;
 use Meteric\Exceptions\AccountNotTransferable;
@@ -146,6 +147,11 @@ final class Meteric
     public function setInvoiceSchedule(BillingAccount $account, InvoiceSchedule $schedule, ?int $day = null, ?CarbonImmutable $at = null): BillingAccount
     {
         return $this->invoices->setInvoiceSchedule($account, $schedule, $day, $at);
+    }
+
+    public function setInvoiceSplit(BillingAccount $account, InvoiceSplit $split): BillingAccount
+    {
+        return $this->invoices->setInvoiceSplit($account, $split);
     }
 
     /**

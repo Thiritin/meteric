@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\DB;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\InvoiceSchedule;
+use Meteric\Enums\InvoiceSplit;
 use Meteric\Invoicing\CollectionCycle;
 use Meteric\Support\Models;
 use Meteric\Tax\TaxContext;
@@ -24,6 +25,7 @@ use Meteric\Tax\TaxContext;
  * @property string $currency
  * @property array $tax_profile
  * @property InvoiceSchedule $invoice_schedule
+ * @property InvoiceSplit $invoice_split
  * @property ?int $invoice_day
  * @property ?CarbonImmutable $collected_through
  */
@@ -34,7 +36,7 @@ class BillingAccount extends MetericModel
     protected $guarded = [];
 
     /** So a freshly made account answers about its schedule before it is reloaded. */
-    protected $attributes = ['invoice_schedule' => 'immediate'];
+    protected $attributes = ['invoice_schedule' => 'immediate', 'invoice_split' => 'pooled'];
 
     protected function casts(): array
     {
@@ -42,6 +44,7 @@ class BillingAccount extends MetericModel
             'tax_profile' => 'array',
             'metadata' => 'array',
             'invoice_schedule' => InvoiceSchedule::class,
+            'invoice_split' => InvoiceSplit::class,
             'collected_through' => 'immutable_date',
         ];
     }

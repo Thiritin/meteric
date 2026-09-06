@@ -17,6 +17,7 @@ use Meteric\Models\Payment;
  * @method static list<Invoice> invoiceAllPending(BillingAccount $account, bool $force = false)
  * @method static ?Invoice invoiceConsolidated(BillingAccount $payer, ?string $currency = null, bool $force = false)
  * @method static BillingAccount setInvoiceSchedule(BillingAccount $account, \Meteric\Enums\InvoiceSchedule $schedule, ?int $day = null, ?\Carbon\CarbonImmutable $at = null)
+ * @method static BillingAccount setInvoiceSplit(BillingAccount $account, \Meteric\Enums\InvoiceSplit $split)
  * @method static list<Invoice> invoiceCollective(BillingAccount $account, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Illuminate\Database\Eloquent\Builder<BillingAccount> dueForCollection(?\Carbon\CarbonImmutable $at = null)
  * @method static Payment recordPayment(Invoice $invoice, Money $amount, ?string $reference = null)

@@ -510,6 +510,42 @@ leaves every charge `pending`. A payer on a collective schedule defers this the
 same way (`force` overrides it), so the two compose: a reseller can bill its
 whole subtree once a month.
 
+## One invoice per subscription
+
+A schedule says *when* the pool becomes a document. **`InvoiceSplit` says how many
+documents it becomes.** The two are orthogonal: an account can be billed monthly
+and still want one invoice per subscription.
+
+```php
+use Meteric\Enums\InvoiceSplit;
+use Meteric\Facades\Meteric;
+
+Meteric::setInvoiceSplit($account, InvoiceSplit::PerSubscription);
+Meteric::setInvoiceSplit($account, InvoiceSplit::Pooled);       // the default
+```
+
+`setInvoiceSplit(BillingAccount $account, InvoiceSplit $split): BillingAccount`.
+
+**`invoiceAllPending` honours it, and therefore so does the collective run.** A
+customer on `PerSubscription` billed monthly gets one invoice per subscription on
+their collection day instead of one for everything. Charges that belong to no
+subscription - an account-level one-off, a manual charge, a restore fee - are one
+document of their own: they have no subscription to be split by, and dropping
+them would strand them pending for ever.
+
+**`invoicePending` is unaffected**, and that is deliberate: it issues *the* pending
+pool as one document by definition and returns that one invoice. A caller that
+asks for one invoice gets one. The split is a property of billing everything that
+is pending, which is what `invoiceAllPending` does.
+
+The pool is read and locked once for the whole split, so two concurrent runs
+cannot bill the same charge onto two documents - the same guarantee
+`invoicePending` gives, taken over the set rather than per group.
+
+It exists for a customer whose accounts payable department needs one invoice per
+contract, which is a common request from a business running several services on
+one account and cannot be answered by the schedule.
+
 Consolidation and collective invoicing answer different questions and are not
 alternatives. Consolidation is *whose* charges go on one document; a collective
 schedule is *when* the document is written.
