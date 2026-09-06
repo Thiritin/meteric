@@ -152,6 +152,11 @@ Meteric::addManualLine($draft, ManualLine::text('Everything below is covered by 
   rather than to no tax, so a typo overcharges rather than undercharges. Null is
   `standard`, which is what every line meant before this existed.
 
+  **`database` and `ibericode` honour it; `flat` and `null` do not**, because
+  neither has more than one rate to choose between. A suite pinned to the flat
+  driver will therefore see one rate whatever category it sets, which is worth
+  knowing before writing a test that appears to disprove this.
+
 `ManualLine::netTotal(float $rate)` and `netUnitPrice(float $rate)` are public, so
 a screen that shows a total before the line exists shows the total the line will
 have. A caller that resolves the rate itself and calls these gets the engine's

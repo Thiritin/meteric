@@ -60,3 +60,28 @@ it('charges VAT for non-EU destinations', function () {
     expect($result->exempt)->toBeTrue()
         ->and($result->amount->getMinorAmount()->toInt())->toBe(0);
 });
+
+it('resolves a reduced-rate line at the reduced rate', function () {
+    $result = resolver()->resolve(Money::of('100.00', 'EUR'), new TaxContext(countryCode: 'DE', category: 'reduced'));
+
+    expect($result->rate)->toBe(0.07)
+        ->and($result->amount->getMinorAmount()->toInt())->toBe(700);
+});
+
+it('falls back to standard where the destination has no such level', function () {
+    // AT carries a standard rate and nothing else in the fixture. The level
+    // throws rather than answering zero, and a zero would bill a taxable supply
+    // tax-free, so an undefined level is read as standard.
+    $result = resolver()->resolve(Money::of('100.00', 'EUR'), new TaxContext(countryCode: 'AT', category: 'reduced'));
+
+    expect($result->rate)->toBe(0.2);
+});
+
+it('keeps reverse charge whatever category the line names', function () {
+    $result = resolver(verify: false)->resolve(Money::of('100.00', 'EUR'), new TaxContext(
+        countryCode: 'AT', isBusiness: true, vatId: 'ATU12345678', category: 'reduced',
+    ));
+
+    expect($result->exempt)->toBeTrue()
+        ->and($result->amount->getMinorAmount()->toInt())->toBe(0);
+});

@@ -57,7 +57,9 @@ there. The `category` matches the product's tax class, set it on the
 `TaxContext` to bill a reduced rate. `TaxContext::withCategory()` returns the same
 context under a different class, which is how a single invoice carries lines at
 two rates; `ManualLine::$taxCategory` is the caller-facing way in
-(`invoicing.md`).
+(`invoicing.md`). The `ibericode` driver reads the same category as its rate
+level and falls back to standard where a destination defines no such level, so
+the two live drivers answer a category the same way.
 
 `rate` is a `numeric(8,6)` fraction stored as a string. Rates are date-versioned:
 superseding a rate means closing the old row with `effective_to` and inserting a
