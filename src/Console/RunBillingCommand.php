@@ -75,11 +75,30 @@ final class RunBillingCommand extends Command
             }
         }
 
+        // Collective accounts: one document a cycle for everything that accrued,
+        // instead of the per-event invoice the loop above just declined to
+        // write for them. Isolated per account for the same reason, and
+        // idempotent per account, so an hourly tick bills each cycle once.
+        $collected = 0;
+        $meteric->dueForCollection($at)->cursor()->each(
+            function (BillingAccount $account) use ($meteric, $at, &$collected, &$failed): void {
+                try {
+                    $collected += count($meteric->invoiceCollective($account, $at));
+                } catch (\Throwable $e) {
+                    $failed++;
+                    Log::error('meteric:run collective invoicing failed', [
+                        'account_id' => $account->id,
+                        'exception' => $e->getMessage(),
+                    ]);
+                }
+            }
+        );
+
         $canceled = $meteric->processDueCancellations($at);
         $overdue = $meteric->markOverdue();
         $expired = app(OrderManager::class)->expireDue($at);
 
-        $this->info("meteric:run done: {$rolled} usage + {$renewed} renewal charge(s), {$invoiced} invoice(s), {$canceled} canceled, {$overdue} newly overdue, {$expired} order(s) expired.");
+        $this->info("meteric:run done: {$rolled} usage + {$renewed} renewal charge(s), {$invoiced} invoice(s), {$collected} collective invoice(s), {$canceled} canceled, {$overdue} newly overdue, {$expired} order(s) expired.");
 
         if ($failed > 0) {
             $this->warn("meteric:run: {$failed} subscription/account(s) failed and were skipped (see logs).");

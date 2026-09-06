@@ -6,11 +6,13 @@ namespace Meteric;
 
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Meteric\Accounts\AccountTransfer;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\DiscountState;
 use Meteric\Enums\DowngradePolicy;
+use Meteric\Enums\InvoiceSchedule;
 use Meteric\Enums\LineKind;
 use Meteric\Enums\UpgradePolicy;
 use Meteric\Exceptions\AccountNotTransferable;
@@ -114,10 +116,14 @@ final class Meteric
         return $this->invoices->charge($account, $amount, $title, $group, $description, $kind);
     }
 
-    /** Bill an account's pending charges (one currency) into an invoice. */
-    public function invoicePending(BillingAccount $account, ?string $currency = null): ?Invoice
+    /**
+     * Bill an account's pending charges (one currency) into an invoice. Null on
+     * a collective account, whose charges wait for its collection date; `force`
+     * bills it anyway.
+     */
+    public function invoicePending(BillingAccount $account, ?string $currency = null, bool $force = false): ?Invoice
     {
-        return $this->invoices->invoicePending($account, $currency);
+        return $this->invoices->invoicePending($account, $currency, $force);
     }
 
     /**
@@ -125,15 +131,42 @@ final class Meteric
      *
      * @return list<Invoice>
      */
-    public function invoiceAllPending(BillingAccount $account): array
+    public function invoiceAllPending(BillingAccount $account, bool $force = false): array
     {
-        return $this->invoices->invoiceAllPending($account);
+        return $this->invoices->invoiceAllPending($account, $force);
     }
 
     /** Bill the payer's own + child accounts' pending charges onto one invoice. */
-    public function invoiceConsolidated(BillingAccount $payer, ?string $currency = null): ?Invoice
+    public function invoiceConsolidated(BillingAccount $payer, ?string $currency = null, bool $force = false): ?Invoice
     {
-        return $this->invoices->invoiceConsolidated($payer, $currency);
+        return $this->invoices->invoiceConsolidated($payer, $currency, $force);
+    }
+
+    /** Put an account on an invoice schedule: per event, or one document a cycle. */
+    public function setInvoiceSchedule(BillingAccount $account, InvoiceSchedule $schedule, ?int $day = null, ?CarbonImmutable $at = null): BillingAccount
+    {
+        return $this->invoices->setInvoiceSchedule($account, $schedule, $day, $at);
+    }
+
+    /**
+     * Bill one collective account for the cycle that has closed. Idempotent:
+     * nothing is issued while the account's stamp already covers the boundary.
+     *
+     * @return list<Invoice>
+     */
+    public function invoiceCollective(BillingAccount $account, ?CarbonImmutable $at = null): array
+    {
+        return $this->invoices->invoiceCollective($account, $at);
+    }
+
+    /**
+     * The collective accounts a run should look at.
+     *
+     * @return Builder<BillingAccount>
+     */
+    public function dueForCollection(?CarbonImmutable $at = null): Builder
+    {
+        return $this->invoices->dueForCollection($at);
     }
 
     /** Issue a credit note against an invoice (the accounting reversal). */

@@ -387,6 +387,91 @@ first so the charges keep a live line, then void the original. See
 Voiding routes through the driver, so the Lexware Office driver voids a draft that
 never reached the API and refuses a finalized one (use a credit note).
 
+## Collective invoicing
+
+By default every path that raises a charge invoices the account's pending pool
+straight after, so a renewal, an upgrade and a one-off each produce their own
+document on their own date. An account can defer that instead: charges accrue
+exactly as they did, nothing invoices them as they happen, and one invoice a
+cycle bills everything that accrued.
+
+```php
+use Meteric\Enums\InvoiceSchedule;
+use Meteric\Facades\Meteric;
+
+Meteric::setInvoiceSchedule($account, InvoiceSchedule::Collective);          // the configured day
+Meteric::setInvoiceSchedule($account, InvoiceSchedule::Collective, day: 15); // its own day
+Meteric::setInvoiceSchedule($account, InvoiceSchedule::Immediate);           // back to per event
+```
+
+`setInvoiceSchedule(BillingAccount $account, InvoiceSchedule $schedule, ?int $day = null, ?CarbonImmutable $at = null): BillingAccount`.
+The day is 1-31 and defaults to `meteric.invoice.collection_day` (1); short
+months clamp to their last day, so a cycle on the 31st issues on 28 February.
+
+**Nothing about the charges changes, only when the document is written.** They
+sit `pending` the whole cycle, so they are visible, they are the same billable
+pool, and everything already true of a pending charge stays true: a service
+canceled mid-cycle still bills what it accrued, because cancelling stops future
+charges and does not touch the ones already raised.
+
+**`invoicePending` and `invoiceAllPending` return nothing for a collective
+account.** That is the whole mechanism: the deferral lives on the one method
+every caller already goes through, rather than in each caller. A caller that
+means to bill regardless passes `force`:
+
+```php
+Meteric::invoicePending($account);               // null while the account defers
+Meteric::invoicePending($account, force: true);  // bills anyway
+```
+
+`draftInvoice`, `createInvoice` and `finalizeInvoice` are **not** affected. They
+build a document the caller is composing rather than billing what an account
+owes, so an invoice for money already taken is still issued at the moment it is
+taken, which is where it belongs.
+
+### The run
+
+`meteric:run` bills the accounts whose collection date has come round, after the
+renewal pass that accrued their charges. Nothing else to schedule.
+
+```php
+Meteric::invoiceCollective($account);        // bill this account's closed cycle
+Meteric::dueForCollection($at);              // the accounts a run should look at
+$account->isDueForCollection($at);           // has its date come round again
+$account->nextCollectionAt($at);             // when it bills next
+```
+
+`invoiceCollective` is idempotent per cycle and that is the double-billing
+guard. The account carries `collected_through`, the boundary date already
+billed, written after the driver returned:
+
+- A run repeated inside the cycle finds the stamp already covering the boundary
+  and issues nothing.
+- A cycle nobody ran for is billed by the next run that happens, once, and
+  stamped with the boundary it billed rather than the day it ran. The document
+  states the day it was issued.
+- A driver failure leaves the charges pending and the stamp unmoved, so the next
+  run bills the same cycle again.
+
+Switching to `Collective` stamps the cycle already running, so opting in on the
+15th does not bill on the 15th: the account joins the run at its next whole
+boundary. Switching back clears the stamp and issues nothing by itself; the pool
+that accrued is billable again the moment the account is `Immediate`, and what
+to do with it is the caller's decision.
+
+An account put on the schedule by hand with no stamp (a factory row, a seed) is
+anchored by the first run, which bills whatever it happens to be holding.
+
+**Payment terms run from the issue date.** `finalizeInvoice` sets `due_at` from
+`meteric.invoice.net_days` when the document is written, so a charge that
+accrued on the 3rd is due `net_days` after the collection date and not after the
+3rd. `markOverdue` reads `due_at` and needs nothing else.
+
+Each accrued charge keeps its own line on the collective invoice, with its own
+title, its own `line_group` (the subscription item it came from) and its own
+`covers` period, so one document states what each service was billed for and
+when. See [Sub-lines](#sub-lines).
+
 ## Consolidated billing
 
 A payer account can bill its own pending charges plus all its child accounts' charges
@@ -398,7 +483,13 @@ $invoice = Meteric::invoiceConsolidated($payer);
 
 This collects pending charges across the payer's scope (itself and its children, via
 `payerScopeIds()`) and issues one invoice, itemized per account. A driver failure
-leaves every charge `pending`.
+leaves every charge `pending`. A payer on a collective schedule defers this the
+same way (`force` overrides it), so the two compose: a reseller can bill its
+whole subtree once a month.
+
+Consolidation and collective invoicing answer different questions and are not
+alternatives. Consolidation is *whose* charges go on one document; a collective
+schedule is *when* the document is written.
 
 Set the relationship by giving a child account a `parent_id`:
 

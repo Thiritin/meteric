@@ -13,9 +13,12 @@ use Meteric\Models\Payment;
 
 /**
  * @method static \Meteric\Models\Charge charge(BillingAccount $account, Money $amount, string $title, ?string $group = null, ?string $description = null, \Meteric\Enums\LineKind $kind = \Meteric\Enums\LineKind::OneOff)
- * @method static ?Invoice invoicePending(BillingAccount $account, ?string $currency = null)
- * @method static list<Invoice> invoiceAllPending(BillingAccount $account)
- * @method static ?Invoice invoiceConsolidated(BillingAccount $payer, ?string $currency = null)
+ * @method static ?Invoice invoicePending(BillingAccount $account, ?string $currency = null, bool $force = false)
+ * @method static list<Invoice> invoiceAllPending(BillingAccount $account, bool $force = false)
+ * @method static ?Invoice invoiceConsolidated(BillingAccount $payer, ?string $currency = null, bool $force = false)
+ * @method static BillingAccount setInvoiceSchedule(BillingAccount $account, \Meteric\Enums\InvoiceSchedule $schedule, ?int $day = null, ?\Carbon\CarbonImmutable $at = null)
+ * @method static list<Invoice> invoiceCollective(BillingAccount $account, ?\Carbon\CarbonImmutable $at = null)
+ * @method static \Illuminate\Database\Eloquent\Builder<BillingAccount> dueForCollection(?\Carbon\CarbonImmutable $at = null)
  * @method static Payment recordPayment(Invoice $invoice, Money $amount, ?string $reference = null)
  * @method static \Meteric\Quoting\QuoteBuilder quote()
  * @method static \Meteric\Tax\Vies\ViesResult viesCheck(string $countryCode, string $vatNumber, array $trader = [], array $requester = [])

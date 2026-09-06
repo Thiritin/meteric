@@ -7,14 +7,18 @@ namespace Meteric\Invoicing;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use Brick\Money\Money;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\CreditState;
+use Meteric\Enums\InvoiceSchedule;
 use Meteric\Enums\InvoiceState;
 use Meteric\Enums\LineKind;
 use Meteric\Events\CreditNoteIssued;
@@ -82,10 +86,19 @@ final class InvoiceManager
      * Collect an account's pending charges (one currency) and issue them via the
      * bound driver. Returns the issued Invoice, or null when nothing is pending.
      *
+     * An account on a `collective` schedule returns null and keeps its charges
+     * pending: its document is written on its collection date and not by
+     * whatever raised the charge. Pass `force` for the caller that *is* that
+     * date, and for a deliberate bill-now that overrides the schedule.
+     *
      * @throws Throwable Re-thrown from the driver; charges remain `pending`.
      */
-    public function invoicePending(BillingAccount $account, ?string $currency = null): ?Invoice
+    public function invoicePending(BillingAccount $account, ?string $currency = null, bool $force = false): ?Invoice
     {
+        if (! $force && $account->defersInvoicing()) {
+            return null;
+        }
+
         $currency ??= $account->currency;
 
         // Read the pending charges and issue them in one transaction with the
@@ -107,8 +120,12 @@ final class InvoiceManager
      *
      * @return list<Invoice>
      */
-    public function invoiceAllPending(BillingAccount $account): array
+    public function invoiceAllPending(BillingAccount $account, bool $force = false): array
     {
+        if (! $force && $account->defersInvoicing()) {
+            return [];
+        }
+
         $currencies = Models::query(Charge::class)
             ->pending()
             ->where('account_id', $account->id)
@@ -117,7 +134,7 @@ final class InvoiceManager
 
         $invoices = [];
         foreach ($currencies as $currency) {
-            $invoice = $this->invoicePending($account, $currency);
+            $invoice = $this->invoicePending($account, $currency, $force);
             if ($invoice !== null) {
                 $invoices[] = $invoice;
             }
@@ -130,8 +147,12 @@ final class InvoiceManager
      * Consolidated invoice: bill the payer's own + all child accounts' pending
      * charges onto a single invoice (AWS org / reseller). Itemized per account.
      */
-    public function invoiceConsolidated(BillingAccount $payer, ?string $currency = null): ?Invoice
+    public function invoiceConsolidated(BillingAccount $payer, ?string $currency = null, bool $force = false): ?Invoice
     {
+        if (! $force && $payer->defersInvoicing()) {
+            return null;
+        }
+
         $currency ??= $payer->currency;
 
         return DB::transaction(function () use ($payer, $currency): ?Invoice {
@@ -139,6 +160,74 @@ final class InvoiceManager
 
             return $this->issue($payer, $currency, $charges);
         });
+    }
+
+    /**
+     * Put an account on a schedule. Switching to `collective` stamps the cycle
+     * already running as collected, so opting in on the 15th does not bill on
+     * the 15th: the account joins the run at its next whole boundary. Switching
+     * back clears the stamp and invoices nothing by itself - the caller decides
+     * what to do with a pool that accrued while the account was deferring, and
+     * `invoiceAllPending` is no longer guarded for it.
+     */
+    public function setInvoiceSchedule(BillingAccount $account, InvoiceSchedule $schedule, ?int $day = null, ?CarbonImmutable $at = null): BillingAccount
+    {
+        if ($day !== null && ($day < 1 || $day > 31)) {
+            throw new \InvalidArgumentException("A collection day must be between 1 and 31, got {$day}.");
+        }
+
+        $account->forceFill([
+            'invoice_schedule' => $schedule,
+            'invoice_day' => $schedule === InvoiceSchedule::Collective ? $day : null,
+        ]);
+
+        $account->forceFill([
+            'collected_through' => $schedule === InvoiceSchedule::Collective
+                ? $account->collectionBoundary($at)
+                : null,
+        ])->save();
+
+        return $account->refresh();
+    }
+
+    /**
+     * Bill one collective account for the cycle that has closed: every pending
+     * charge in every currency onto one invoice each, then the stamp that says
+     * the cycle is done.
+     *
+     * Idempotent, and that is the whole double-billing guard: an account whose
+     * stamp already covers the boundary is not due and nothing is issued, so a
+     * run repeated within the cycle bills nothing twice. The stamp is written
+     * after the driver returned, so a driver failure leaves both the charges
+     * and the stamp untouched and the next run bills the same cycle again.
+     *
+     * @return list<Invoice>
+     */
+    public function invoiceCollective(BillingAccount $account, ?CarbonImmutable $at = null): array
+    {
+        if (! $account->isDueForCollection($at)) {
+            return [];
+        }
+
+        $invoices = $this->invoiceAllPending($account, force: true);
+
+        $account->forceFill(['collected_through' => $account->collectionBoundary($at)])->save();
+
+        return $invoices;
+    }
+
+    /**
+     * The collective accounts a run should look at, oldest stamp first.
+     * Returned as a query so a caller can cursor it and isolate a failing
+     * account from the rest of the run; `invoiceCollective` decides per account
+     * whether the boundary has actually passed.
+     *
+     * @return Builder<BillingAccount>
+     */
+    public function dueForCollection(?CarbonImmutable $at = null): Builder
+    {
+        return Models::query(BillingAccount::class)
+            ->dueForCollection($at ?? app(Clock::class)->now());
     }
 
     /**

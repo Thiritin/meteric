@@ -94,6 +94,10 @@ return [
         // Days after issue an invoice is due. meteric:mark-overdue uses this.
         'net_days' => (int) env('METERIC_INVOICE_NET_DAYS', 14),
 
+        // Day of the month a collective account is invoiced on, for an account
+        // that names no day of its own. Short months clamp to their last day.
+        'collection_day' => (int) env('METERIC_INVOICE_COLLECTION_DAY', 1),
+
         // Lexware Office (lexoffice) driver settings.
         'lexoffice' => [
             'api_token' => env('METERIC_LEXOFFICE_TOKEN'),

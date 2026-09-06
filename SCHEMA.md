@@ -90,6 +90,9 @@ CREATE TABLE meteric_billing_accounts (
   currency      char(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   tax_profile   jsonb NOT NULL DEFAULT '{}',   -- country, vat_id, b2b flag, exempt
   balance_minor bigint NOT NULL DEFAULT 0,     -- account credit (can be negative)
+  invoice_schedule  text NOT NULL DEFAULT 'immediate',  -- 'immediate' | 'collective'
+  invoice_day       smallint CHECK (invoice_day BETWEEN 1 AND 31), -- collective: day of month, null = config
+  collected_through date,                      -- collective: the boundary already billed
   metadata      jsonb NOT NULL DEFAULT '{}',
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
