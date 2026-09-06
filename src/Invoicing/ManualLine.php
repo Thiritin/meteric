@@ -42,6 +42,18 @@ final readonly class ManualLine
          * the same document rather than two that differ by a rounding.
          */
         public bool $priceIsGross = false,
+        /**
+         * The product tax class this line is sold under, as
+         * `meteric_tax_rates.category` names it: `standard` unless stated, and
+         * an unknown one falls back to standard rather than to no tax.
+         *
+         * A document may carry several. The rate is a property of the thing
+         * sold, so a reduced-rate line beside a standard one is one invoice and
+         * not two, and the category cannot move the document's treatment: a
+         * resolver settles reverse charge and out-of-scope before it looks a
+         * rate up.
+         */
+        public ?string $taxCategory = null,
     ) {}
 
     /** A line that carries words and no money. */

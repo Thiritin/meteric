@@ -78,9 +78,11 @@ final class LineComposer
     }
 
     /** Resolve tax on a net amount in the invoice account's tax context. */
-    public function resolveTax(Invoice $invoice, Money $net): TaxResult
+    public function resolveTax(Invoice $invoice, Money $net, ?string $category = null): TaxResult
     {
-        return $this->tax->resolve($net, $invoice->account->taxContext());
+        $context = $invoice->account->taxContext();
+
+        return $this->tax->resolve($net, $category === null ? $context : $context->withCategory($category));
     }
 
     /**

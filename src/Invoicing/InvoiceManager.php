@@ -844,12 +844,13 @@ final class InvoiceManager
 
         // The rate first, because a gross entry is read through it. Resolving
         // on the stated price is safe: a rate is a property of the account's
-        // treatment, not of the amount.
-        $rate = $this->lines->resolveTax($invoice, $line->unitPrice)->rate;
+        // treatment, not of the amount. The line's own tax class picks which of
+        // the destination's rates applies within that treatment.
+        $rate = $this->lines->resolveTax($invoice, $line->unitPrice, $line->taxCategory)->rate;
 
         $unitNet = $line->netUnitPrice($rate);
         $amount = $line->netTotal($rate);
-        $tax = $this->lines->resolveTax($invoice, $amount);
+        $tax = $this->lines->resolveTax($invoice, $amount, $line->taxCategory);
 
         return Models::query(InvoiceLine::class)->create([
             ...$common,

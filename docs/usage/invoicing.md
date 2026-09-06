@@ -133,6 +133,24 @@ Meteric::addManualLine($draft, ManualLine::text('Everything below is covered by 
 - **`ManualLine::text()` writes a line carrying words and no money**, stored with
   `LineKind::Text`, a zero amount and no tax. It enters no total; it exists so a
   document reads as it was written.
+- **`taxCategory` sells the line under a product tax class**, as
+  `meteric_tax_rates.category` names it, so one invoice can carry a reduced-rate
+  line beside a standard one:
+
+  ```php
+  Meteric::addManualLine($draft, new ManualLine(
+      title: 'Handbuch',
+      unitPrice: Money::of('20.00', 'EUR'),
+      taxCategory: 'reduced',
+  ));
+  ```
+
+  It selects which of the destination's rate rows applies and **cannot change the
+  document's treatment**: a resolver settles reverse charge and out-of-scope
+  before it looks a rate up, so a reverse-charged invoice stays reverse-charged
+  whatever category its lines name. An unknown category falls back to `standard`
+  rather than to no tax, so a typo overcharges rather than undercharges. Null is
+  `standard`, which is what every line meant before this existed.
 
 `ManualLine::netTotal(float $rate)` and `netUnitPrice(float $rate)` are public, so
 a screen that shows a total before the line exists shows the total the line will

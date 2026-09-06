@@ -19,6 +19,29 @@ final class TaxContext
         public readonly string $category = 'standard',    // product tax class (reduced, lodging, …)
     ) {}
 
+    /**
+     * The same context, priced under a different product tax class.
+     *
+     * The category selects which of the destination's rate rows applies; it
+     * cannot change the treatment, because a resolver settles reverse charge
+     * and out-of-scope before it looks a rate up at all. So this is safe to
+     * hand to a caller that lets a person choose per line: the worst a wrong
+     * category can do is bill the standard rate, which is what an unknown one
+     * falls back to.
+     */
+    public function withCategory(string $category): self
+    {
+        return new self(
+            countryCode: $this->countryCode,
+            isBusiness: $this->isBusiness,
+            vatId: $this->vatId,
+            taxInclusive: $this->taxInclusive,
+            merchantCountry: $this->merchantCountry,
+            date: $this->date,
+            category: $category,
+        );
+    }
+
     /** @param array<string,mixed> $profile A BillingAccount tax_profile. */
     public static function fromProfile(array $profile, bool $taxInclusive = false): self
     {

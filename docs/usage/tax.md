@@ -54,7 +54,10 @@ TaxRate::create([
 Swiss customers are charged 8.1% (3.8% for `lodging` products), EU customers
 go through OSS, and customers elsewhere are untaxed until you register
 there. The `category` matches the product's tax class, set it on the
-`TaxContext` to bill a reduced rate.
+`TaxContext` to bill a reduced rate. `TaxContext::withCategory()` returns the same
+context under a different class, which is how a single invoice carries lines at
+two rates; `ManualLine::$taxCategory` is the caller-facing way in
+(`invoicing.md`).
 
 `rate` is a `numeric(8,6)` fraction stored as a string. Rates are date-versioned:
 superseding a rate means closing the old row with `effective_to` and inserting a
