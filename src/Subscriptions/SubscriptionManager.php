@@ -506,11 +506,26 @@ final class SubscriptionManager
      */
     public function noticeDays(Subscription $sub, ?CarbonImmutable $boundary = null): int
     {
-        $days = (int) $sub->items()->where('state', ItemState::Active->value)->with('product')->get()
+        return $this->capNotice($sub, $this->productNoticeDays($sub), $boundary ?? $sub->current_period?->end);
+    }
+
+    /** The strictest notice the active items' products ask for, uncapped. */
+    private function productNoticeDays(Subscription $sub): int
+    {
+        return (int) $sub->items()->where('state', ItemState::Active->value)->with('product')->get()
             ->map(fn (SubscriptionItem $i) => $i->product?->cancelNoticeDays() ?? 0)
             ->max();
+    }
 
-        $cap = $this->noticeCapDays($sub, $boundary ?? $sub->current_period?->end);
+    /**
+     * The product's notice, under the buyer's own ceiling. Split from the read
+     * above so a caller walking a list of boundaries reads the products once
+     * and applies the ceiling per boundary, which is the only half of the
+     * answer that moves with the date.
+     */
+    private function capNotice(Subscription $sub, int $days, ?CarbonImmutable $boundary): int
+    {
+        $cap = $this->noticeCapDays($sub, $boundary);
 
         return $cap === null ? $days : min($days, $cap);
     }
@@ -583,6 +598,7 @@ final class SubscriptionManager
         }
 
         $rule = $item->price->recurrence();
+        $productNotice = $this->productNoticeDays($sub);
         $committed = $this->committedUntil($sub);
         $now = $this->clock->now();
 
@@ -595,7 +611,7 @@ final class SubscriptionManager
         for ($i = 0; count($out) < $count && $i < $limit; $i++) {
             // Per boundary, because the cap is a calendar interval and the
             // number of days in it moves with the month it is measured from.
-            $notice = $this->noticeDays($sub, $boundary);
+            $notice = $this->capNotice($sub, $productNotice, $boundary);
             $cutoff = $notice > 0 ? $boundary->subDays($notice) : $boundary;
             if ($now->lessThanOrEqualTo($cutoff) && ($committed === null || ! $boundary->lessThan($committed->startOfDay()))) {
                 $out[] = $boundary;
