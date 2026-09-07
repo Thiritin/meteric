@@ -129,6 +129,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Catalog defaults
+    |--------------------------------------------------------------------------
+    | What a price falls back to where neither it nor its product states a
+    | figure. Unset means no default, which is not zero: zero is a figure a
+    | price may state and means no notice and no term at all.
+    |
+    | A deployment whose defaults are edited by a person rather than deployed
+    | binds its own Meteric\Contracts\CatalogDefaults instead of setting these.
+    */
+    'catalog' => [
+        'default_cancel_notice_days' => env('METERIC_DEFAULT_CANCEL_NOTICE_DAYS'),
+        'default_minimum_term_periods' => env('METERIC_DEFAULT_MINIMUM_TERM_PERIODS'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Orders (persisted, immutable)
     |--------------------------------------------------------------------------
     | Default minutes a pending order stays open before the meteric:run sweep

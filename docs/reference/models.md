@@ -21,14 +21,14 @@ helper methods you actually call.
   - `optionCatalog(float $qty = 1): array`: the configurable-option catalog as JSON-ready rows, values priced at `$qty`. See [Displaying options in a form](/usage/addons-and-options#displaying-options-in-a-form).
   - `isMetered(): bool`: true for `metered` / `hourly`.
   - `downgradePolicy(): DowngradePolicy`: from `config['downgrade']`, defaults to `Defer`.
-  - `cancelNoticeDays(): int`: notice required before a contract ends, from `config['cancel_notice_days']`, defaults to `0`.
-  - `minimumTerm(): int`: periods a new sale is committed for, from `config['minimum_term_periods']`, defaults to `0`. A price may override it.
+  - `cancelNoticeDays(): int`: notice required before a contract ends, from `config['cancel_notice_days']`, then the catalog default, then `0`. A price may override it.
+  - `minimumTerm(): int`: periods a new sale is committed for, from `config['minimum_term_periods']`, then the catalog default, then `0`. A price may override it.
 
 ## Price
 
 `meteric_prices`: versioned pricing for a product.
 
-- **Columns:** `currency`, `amount_minor`, `unit_rate` (string), `purpose`, `pricing_model`, `interval`, `interval_count`, `billing_mode`, `setup_fee_minor`, `cap_minor`, `min_charge_minor`, `included_qty`, `block_size`, `percent`, `tiers` (array), `tax_inclusive`, `minimum_term_periods` (null = take the product's), `valid_from`, `valid_to`.
+- **Columns:** `currency`, `amount_minor`, `unit_rate` (string), `purpose`, `pricing_model`, `interval`, `interval_count`, `billing_mode`, `setup_fee_minor`, `cap_minor`, `min_charge_minor`, `included_qty`, `block_size`, `percent`, `tiers` (array), `tax_inclusive`, `minimum_term_periods` (null = take the product's), `cancel_notice_days` (null = take the product's), `valid_from`, `valid_to`.
 - **Casts:** `amount` is a `Money` over `amount_minor` + `currency`.
 - **Relationships:** `product()`.
 - **Helpers:**
@@ -41,6 +41,8 @@ helper methods you actually call.
   - `percentLabel(): string`: `percent` without trailing zeros, e.g. `"20"` or `"12.5"`.
   - `recurrence(): RecurrenceRule`, `isRecurring(): bool`.
   - `hasSetupFee(): bool`, `setupFee(): Money`, `cap(): ?Money`.
+  - `minimumTerm(): int`, `minimumTermEnd(CarbonImmutable $from): ?CarbonImmutable`: the periods a sale on this price is committed for, and when a term starting at `$from` expires. The column, then the product, then the catalog default, then `0`.
+  - `cancelNoticeDays(): int`: notice a cancellation of a sale on this price needs. The column, then the product, then the catalog default, then `0`.
   - `toDisplay(float $qty = 1): array`: JSON-ready row with the price at `$qty` and the raw pricing knobs.
 
 ## BillingAccount

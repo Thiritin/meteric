@@ -215,3 +215,65 @@ it('refuses a notice cap nobody can parse rather than dropping it', function () 
     expect(fn () => app(SubscriptionManager::class)->noticeDays($sub))
         ->toThrow(InvalidArgumentException::class);
 });
+
+it('reads the notice from the price the item was sold on', function () {
+    // The product asks 30 days; this term asks 90, and the term is what the
+    // customer agreed to.
+    $price = cncPlan(noticeDays: 30);
+    $price->forceFill(['cancel_notice_days' => 90])->save();
+    $sub = cncSub(cncAccount(), $price);
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(90);
+
+    Meteric::cancel($sub, 'period_end');
+})->throws(InvalidArgumentException::class);
+
+it('takes the product notice where the price states none', function () {
+    $sub = cncSub(cncAccount(), cncPlan(noticeDays: 14));
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(14);
+});
+
+it('lets a price sell one term with no notice at all', function () {
+    $price = cncPlan(noticeDays: 30);
+    $price->forceFill(['cancel_notice_days' => 0])->save();
+    $sub = cncSub(cncAccount(), $price);
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(0);
+
+    Meteric::cancel($sub, 'period_end');
+    expect($sub->fresh()->cancel_at->toDateString())->toBe('2026-07-01');
+});
+
+it('takes the catalog default where neither the price nor the product states a notice', function () {
+    config()->set('meteric.catalog.default_cancel_notice_days', 21);
+
+    $product = Product::create([
+        'type' => 'vps', 'slug' => 'cnc-'.uniqid(), 'name' => 'VPS', 'pricing_model' => 'fixed',
+    ]);
+    $price = Price::create([
+        'product_id' => $product->id, 'currency' => 'EUR', 'amount_minor' => 1000,
+        'pricing_model' => 'fixed', 'interval' => 'month', 'interval_count' => 1,
+    ]);
+
+    expect(app(SubscriptionManager::class)->noticeDays(cncSub(cncAccount(), $price)))->toBe(21);
+});
+
+it('lets a stored zero stop the catalog default', function () {
+    config()->set('meteric.catalog.default_cancel_notice_days', 21);
+
+    $sub = cncSub(cncAccount(), cncPlan(noticeDays: 0));
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(0);
+});
+
+it('caps a consumer notice stated on a price the same way it caps one stated on a product', function () {
+    $price = cncPlan(noticeDays: 0);
+    $price->forceFill(['cancel_notice_days' => 90])->save();
+
+    $account = cncAccount();
+    $account->forceFill(['buyer_type' => BuyerType::Consumer])->save();
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    expect(app(SubscriptionManager::class)->noticeDays(cncSub($account, $price)))->toBe(30);
+});

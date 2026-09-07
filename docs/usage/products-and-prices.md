@@ -32,8 +32,8 @@ The `config` array holds product-level settings. Three keys are read by the
 package:
 
 - `config['downgrade']` sets the default [downgrade policy](/usage/plan-changes); it falls back to `defer`. Read it with `downgradePolicy()`.
-- `config['cancel_notice_days']` is the notice required before a contract ends, in days; it falls back to `0`. Read it with `cancelNoticeDays()`. See [cancellation](/usage/subscriptions#notice-window).
-- `config['minimum_term_periods']` is how many periods a sale is committed for before it may be cancelled; it falls back to `0`. Read it with `minimumTerm()`, and override it on one price with the `minimum_term_periods` column. See [Minimum term](/usage/subscriptions#minimum-term).
+- `config['cancel_notice_days']` is the notice required before a contract ends, in days; it falls back to the [catalog default](#catalog-defaults) and then to `0`. Read it with `cancelNoticeDays()`, and override it on one price with the `cancel_notice_days` column. See [cancellation](/usage/subscriptions#notice-window).
+- `config['minimum_term_periods']` is how many periods a sale is committed for before it may be cancelled; it falls back to the [catalog default](#catalog-defaults) and then to `0`. Read it with `minimumTerm()`, and override it on one price with the `minimum_term_periods` column. See [Minimum term](/usage/subscriptions#minimum-term).
 
 All three keys are validated on write. `config['downgrade']` must be a valid
 `DowngradePolicy` value (`defer`, `discard`, `credit`, `refund`), and
@@ -44,6 +44,32 @@ provisioner name or another host setting of your own, passes through untouched.
 ```php
 $product->config = ['downgrade' => 'nope'];  // throws InvalidArgumentException
 $product->config = ['provisioner' => 'virtfusion', 'cancel_notice_days' => 30]; // fine
+```
+
+### Catalog defaults
+
+Where neither a price nor its product states a notice period or a minimum term,
+the deployment's own default answers:
+
+```php
+// config/meteric.php
+'catalog' => [
+    'default_cancel_notice_days' => 30,
+    'default_minimum_term_periods' => null,   // null is no default, the default
+],
+```
+
+Null is no default, which is not zero: zero is a figure a price may state and
+means no notice, or no term, at all. So the resolution is price, then product,
+then this, then zero, and a stored zero anywhere in the chain stops it.
+
+A deployment whose defaults are edited by a person rather than deployed binds
+its own `Meteric\Contracts\CatalogDefaults` in place of the config-reading one.
+It is resolved on every read, so a default that moves with the request (per
+tenant, per brand) answers for the request it is in:
+
+```php
+$this->app->singleton(CatalogDefaults::class, MyHouseDefaults::class);
 ```
 
 ## Prices

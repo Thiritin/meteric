@@ -417,7 +417,7 @@ final class SubscriptionManager
      * Cancel a subscription. $at is `now` (immediate), `period_end` (the current
      * cycle's end), or a specific CarbonImmutable boundary date (e.g. a later term
      * end). Scheduled cancellations honour the minimum term the items were sold
-     * on and the product's notice window: a boundary before `committedUntil()`
+     * on and the notice window their prices ask: a boundary before `committedUntil()`
      * throws WithinMinimumTerm, one within `cancel_notice_days` of now throws
      * InvalidArgumentException. The notice is the capped one where the account
      * is a consumer and `consumer_notice_cap` is configured, measured against
@@ -498,7 +498,7 @@ final class SubscriptionManager
 
     /**
      * Days of notice required to cancel to $boundary: the strictest across the
-     * active items' products, capped where the buyer's own law caps it.
+     * active items' prices, capped where the buyer's own law caps it.
      *
      * The boundary is what the cap is measured back from, so pass the date the
      * caller means. Omitting it measures from the current period's end, which
@@ -506,20 +506,28 @@ final class SubscriptionManager
      */
     public function noticeDays(Subscription $sub, ?CarbonImmutable $boundary = null): int
     {
-        return $this->capNotice($sub, $this->productNoticeDays($sub), $boundary ?? $sub->current_period?->end);
+        return $this->capNotice($sub, $this->catalogNoticeDays($sub), $boundary ?? $sub->current_period?->end);
     }
 
-    /** The strictest notice the active items' products ask for, uncapped. */
-    private function productNoticeDays(Subscription $sub): int
+    /**
+     * The strictest notice the active items ask for, uncapped.
+     *
+     * The item's price answers, and the product only where the item has no
+     * price row to read. The price is where a term-specific notice can be
+     * stated at all, and it is the row the sale was made on: superseding a
+     * price leaves everyone already on the old row asking the notice they
+     * agreed to.
+     */
+    private function catalogNoticeDays(Subscription $sub): int
     {
-        return (int) $sub->items()->where('state', ItemState::Active->value)->with('product')->get()
-            ->map(fn (SubscriptionItem $i) => $i->product?->cancelNoticeDays() ?? 0)
+        return (int) $sub->items()->where('state', ItemState::Active->value)->with(['price.product', 'product'])->get()
+            ->map(fn (SubscriptionItem $i) => $i->price?->cancelNoticeDays() ?? $i->product?->cancelNoticeDays() ?? 0)
             ->max();
     }
 
     /**
-     * The product's notice, under the buyer's own ceiling. Split from the read
-     * above so a caller walking a list of boundaries reads the products once
+     * The catalog's notice, under the buyer's own ceiling. Split from the read
+     * above so a caller walking a list of boundaries reads the catalog once
      * and applies the ceiling per boundary, which is the only half of the
      * answer that moves with the date.
      */
@@ -610,7 +618,7 @@ final class SubscriptionManager
         }
 
         $rule = $item->price->recurrence();
-        $productNotice = $this->productNoticeDays($sub);
+        $catalogNotice = $this->catalogNoticeDays($sub);
         $committed = $this->committedUntil($sub);
         $now = $this->clock->now();
 
@@ -623,7 +631,7 @@ final class SubscriptionManager
         for ($i = 0; count($out) < $count && $i < $limit; $i++) {
             // Per boundary, because the cap is a calendar interval and the
             // number of days in it moves with the month it is measured from.
-            $notice = $this->capNotice($sub, $productNotice, $boundary);
+            $notice = $this->capNotice($sub, $catalogNotice, $boundary);
             $cutoff = $notice > 0 ? $boundary->subDays($notice) : $boundary;
             if ($now->lessThanOrEqualTo($cutoff) && ($committed === null || ! $boundary->lessThan($committed->startOfDay()))) {
                 $out[] = $boundary;

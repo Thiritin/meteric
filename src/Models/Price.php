@@ -10,6 +10,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Meteric\Casts\MoneyCast;
+use Meteric\Contracts\CatalogDefaults;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
@@ -42,6 +43,7 @@ use Meteric\Support\RecurrenceRule;
  * @property array $tiers
  * @property bool $tax_inclusive
  * @property ?int $minimum_term_periods null = take the product's
+ * @property ?int $cancel_notice_days null = take the product's
  */
 class Price extends MetericModel
 {
@@ -68,6 +70,7 @@ class Price extends MetericModel
             'block_size' => 'float',
             'percent' => 'float',
             'minimum_term_periods' => 'integer',
+            'cancel_notice_days' => 'integer',
             'tiers' => 'array',
             'tax_inclusive' => 'boolean',
             'valid_from' => 'immutable_datetime',
@@ -108,6 +111,7 @@ class Price extends MetericModel
                 'interval', 'interval_count', 'billing_mode', 'setup_fee_minor',
                 'cap_minor', 'min_charge_minor', 'included_qty', 'block_size',
                 'percent', 'tiers', 'tax_inclusive', 'minimum_term_periods',
+                'cancel_notice_days',
             ]),
             'amount_minor' => $amountMinor,
             'scope' => PriceScope::Override->value,
@@ -139,11 +143,26 @@ class Price extends MetericModel
     /**
      * Periods a sale on this price is committed for before it may be
      * cancelled. The product's value unless this row sets its own, so a
-     * product sold monthly and yearly can commit each term differently.
+     * product sold monthly and yearly can commit each term differently, and
+     * the deployment's default where neither states a figure.
      */
     public function minimumTerm(): int
     {
-        return max(0, $this->minimum_term_periods ?? $this->product?->minimumTerm() ?? 0);
+        return max(0, $this->minimum_term_periods ?? $this->product?->minimumTerm() ?? app(CatalogDefaults::class)->minimumTermPeriods() ?? 0);
+    }
+
+    /**
+     * Days of notice a cancellation of a sale on this price needs. The
+     * product's value unless this row sets its own, so a product sold monthly
+     * and yearly can ask a different notice for each term.
+     *
+     * A subscription item points at the row it was sold on and price rows are
+     * superseded rather than edited, so this is the notice the customer agreed
+     * to rather than whatever the catalog says today.
+     */
+    public function cancelNoticeDays(): int
+    {
+        return max(0, $this->cancel_notice_days ?? $this->product?->cancelNoticeDays() ?? app(CatalogDefaults::class)->cancelNoticeDays() ?? 0);
     }
 
     /**

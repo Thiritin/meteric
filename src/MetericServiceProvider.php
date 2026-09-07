@@ -11,7 +11,9 @@ use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Console\MarkOverdueCommand;
 use Meteric\Console\RunBillingCommand;
+use Meteric\Catalog\ConfigCatalogDefaults;
 use Meteric\Console\VatSyncCommand;
+use Meteric\Contracts\CatalogDefaults;
 use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\TaxResolver;
@@ -38,6 +40,7 @@ final class MetericServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/meteric.php', 'meteric');
 
         $this->app->singleton(Clock::class, SystemClock::class);
+        $this->app->singleton(CatalogDefaults::class, ConfigCatalogDefaults::class);
 
         $this->app->singleton(Vies::class, fn ($app) => new Vies(
             baseUrl: $app['config']['meteric.tax.vies_base_url'] ?? 'https://ec.europa.eu/taxation_customs/vies/rest-api',

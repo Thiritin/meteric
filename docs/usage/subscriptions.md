@@ -232,10 +232,13 @@ $subscription->metadata['cancellation']; // ['reason' => 'moving away']
 
 ### Notice window
 
-A product can require notice before a contract ends with the `cancel_notice_days`
-key in its `config`. The notice window is the strictest value across the
-subscription's active items. Scheduling a cancel to a boundary inside that window
-throws `InvalidArgumentException`:
+A contract can require notice before it ends. The `cancel_notice_days` column on
+a price sets it, and `config['cancel_notice_days']` on the product answers for
+every price that states none, so a product sold monthly and yearly can ask a
+different notice for each term. The notice window is the strictest value across
+the subscription's active items, read from the price each was sold on.
+Scheduling a cancel to a boundary inside that window throws
+`InvalidArgumentException`:
 
 ```php
 // Throws if today is within cancel_notice_days of the period end.
@@ -251,7 +254,19 @@ $boundaries = Meteric::cancellationOptions($subscription, count: 3);
 ```
 
 The package enforces the notice rule; rendering the choices is your UI's job. A
-product with `cancel_notice_days` of 0 can cancel to any boundary.
+price whose notice resolves to 0 can cancel to any boundary.
+
+```php
+$monthly->cancel_notice_days = 0;    // cancel to any boundary
+$yearly->cancel_notice_days = 90;    // three months' notice on the yearly term
+```
+
+**A price row is where the notice a sale was made under lives.** The item points
+at the row it was sold on, so superseding a price rather than editing it leaves
+everyone already on the old row asking the notice they agreed to. Unlike the
+minimum term below, the notice is not frozen onto the item: it is read from that
+row at cancellation time, so editing a row in place does move it for the
+subscribers on it.
 
 ### The consumer notice cap
 
@@ -310,8 +325,10 @@ offering the uncapped boundaries and then refuse the date the customer picked.
 A minimum term commits a subscription for a number of periods before it may be
 cancelled at all. `config['minimum_term_periods']` on the product sets it, and
 the `minimum_term_periods` column on a price overrides it, so a product sold
-monthly and yearly can commit each term differently. It is counted in periods,
-not months: twelve periods of a quarterly price is three years.
+monthly and yearly can commit each term differently. Where neither states one,
+the [catalog default](/usage/products-and-prices#catalog-defaults) answers. It is
+counted in periods, not months: twelve periods of a quarterly price is three
+years.
 
 ```php
 $product->config = ['minimum_term_periods' => 12];   // twelve periods, whichever price is taken

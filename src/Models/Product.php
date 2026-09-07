@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Meteric\Casts\ProductConfigCast;
+use Meteric\Contracts\CatalogDefaults;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
@@ -186,15 +187,32 @@ class Product extends MetericModel
             ?? DowngradePolicy::Defer;
     }
 
-    /** Notice required to cancel a contract: days before the term boundary (config 'cancel_notice_days'); 0 = cancel any time. */
+    /**
+     * Notice required to cancel a contract: days before the term boundary
+     * (config 'cancel_notice_days'), the deployment's default where the product
+     * states none, and 0 where neither does. A price may override it.
+     */
     public function cancelNoticeDays(): int
     {
-        return max(0, (int) ($this->config['cancel_notice_days'] ?? 0));
+        return max(0, (int) ($this->config['cancel_notice_days'] ?? static::catalogDefaults()->cancelNoticeDays() ?? 0));
     }
 
-    /** Periods a new sale is committed for before it may be cancelled (config 'minimum_term_periods'); 0 = none. A price may override it. */
+    /**
+     * Periods a new sale is committed for before it may be cancelled (config
+     * 'minimum_term_periods'), the deployment's default where the product
+     * states none, and 0 where neither does. A price may override it.
+     */
     public function minimumTerm(): int
     {
-        return max(0, (int) ($this->config['minimum_term_periods'] ?? 0));
+        return max(0, (int) ($this->config['minimum_term_periods'] ?? static::catalogDefaults()->minimumTermPeriods() ?? 0));
+    }
+
+    /**
+     * Resolved on every read rather than held, so a host whose defaults move
+     * with the request answers for the request the read is in.
+     */
+    protected static function catalogDefaults(): CatalogDefaults
+    {
+        return app(CatalogDefaults::class);
     }
 }
