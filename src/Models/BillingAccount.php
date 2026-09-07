@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\DB;
 use Meteric\Contracts\Clock;
+use Meteric\Enums\BuyerType;
 use Meteric\Enums\InvoiceSchedule;
 use Meteric\Enums\InvoiceSplit;
 use Meteric\Invoicing\CollectionCycle;
@@ -24,6 +25,7 @@ use Meteric\Tax\TaxContext;
  * @property string $owner_id
  * @property string $currency
  * @property array $tax_profile
+ * @property ?BuyerType $buyer_type
  * @property InvoiceSchedule $invoice_schedule
  * @property InvoiceSplit $invoice_split
  * @property ?int $invoice_day
@@ -43,6 +45,7 @@ class BillingAccount extends MetericModel
         return [
             'tax_profile' => 'array',
             'metadata' => 'array',
+            'buyer_type' => BuyerType::class,
             'invoice_schedule' => InvoiceSchedule::class,
             'invoice_split' => InvoiceSplit::class,
             'collected_through' => 'immutable_date',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Meteric\Enums\BuyerType;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\SubscriptionState;
 use Meteric\Events\SubscriptionCanceled;
@@ -14,6 +15,7 @@ use Meteric\Models\BillingAccount;
 use Meteric\Models\Price;
 use Meteric\Models\Product;
 use Meteric\Models\Subscription;
+use Meteric\Subscriptions\SubscriptionManager;
 
 uses(RefreshDatabase::class);
 
@@ -123,4 +125,84 @@ it('enforces a contract notice window', function () {
     test()->travelTo(CarbonImmutable::parse('2026-06-20Z'));
     $options = Meteric::cancellationOptions($sub, 2);
     expect($options[0]->toDateString())->toBe('2026-08-01');  // 07-01 dropped (notice passed)
+});
+
+function cncBuyer(?BuyerType $type): BillingAccount
+{
+    return BillingAccount::create([
+        'owner_type' => 'user', 'owner_id' => (string) random_int(1000, 999999),
+        'currency' => 'EUR', 'buyer_type' => $type,
+    ]);
+}
+
+it('holds a consumer to the capped notice and a business to the product\'s own', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    $consumer = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 90));
+    $business = cncSub(cncBuyer(BuyerType::Business), cncPlan(1000, noticeDays: 90));
+
+    // June has 30 days, so one month back from 2026-07-01 is 30 of them.
+    expect(app(SubscriptionManager::class)->noticeDays($consumer))->toBe(30)
+        ->and(app(SubscriptionManager::class)->noticeDays($business))->toBe(90);
+});
+
+it('caps nothing where no cap is configured', function () {
+    $sub = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 90));
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(90);
+});
+
+it('caps nothing for an account whose buyer type nobody has stated', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    $sub = cncSub(cncBuyer(null), cncPlan(1000, noticeDays: 90));
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(90);
+});
+
+it('never leaves a product notice longer than the cap', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    $sub = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 7));
+
+    expect(app(SubscriptionManager::class)->noticeDays($sub))->toBe(7);
+});
+
+it('offers a consumer the boundary a 90-day notice would have taken away, and accepts it', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    $consumer = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 90));
+    $business = cncSub(cncBuyer(BuyerType::Business), cncPlan(1000, noticeDays: 90));
+
+    // Today is 2026-06-01, exactly one month before the boundary: notice given
+    // on the day still counts, and 90 days would have swallowed the next two
+    // boundaries as well.
+    expect(Meteric::cancellationOptions($consumer, 1)[0]->toDateString())->toBe('2026-07-01')
+        ->and(Meteric::cancellationOptions($business, 1)[0]->toDateString())->toBe('2026-09-01');
+
+    Meteric::cancel($consumer, CarbonImmutable::parse('2026-07-01Z'));
+
+    expect($consumer->fresh()->cancel_at->toDateString())->toBe('2026-07-01')
+        ->and(fn () => Meteric::cancel($business, CarbonImmutable::parse('2026-07-01Z')))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+it('measures the cap against the boundary rather than a fixed count of days', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    $sub = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 90));
+
+    // One month before 2026-03-01 is 28 days, not 30: a day count would refuse
+    // a cancellation the consumer's own law allows.
+    expect(app(SubscriptionManager::class)->noticeDays($sub, CarbonImmutable::parse('2026-03-01Z')))->toBe(28)
+        ->and(app(SubscriptionManager::class)->noticeDays($sub, CarbonImmutable::parse('2026-09-01Z')))->toBe(31);
+});
+
+it('refuses a consumer a boundary inside the capped notice', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', '1 month');
+
+    $sub = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 90));
+
+    expect(fn () => Meteric::cancel($sub, 'period_end', CarbonImmutable::parse('2026-06-20Z')))
+        ->toThrow(InvalidArgumentException::class);
 });

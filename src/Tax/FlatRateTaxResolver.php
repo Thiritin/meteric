@@ -14,6 +14,10 @@ final class FlatRateTaxResolver implements TaxResolver
 
     public function resolve(Money $net, TaxContext $context): TaxResult
     {
+        if ($context->taxExempt) {
+            return $context->exemption($net->multipliedBy(0));
+        }
+
         $base = $context->taxInclusive
             ? $net->dividedBy((string) (1 + $this->rate), RoundingMode::HALF_UP)
             : $net;

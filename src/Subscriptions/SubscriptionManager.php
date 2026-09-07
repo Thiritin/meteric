@@ -6,6 +6,7 @@ namespace Meteric\Subscriptions;
 
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterval;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Anchoring\BillingPlan;
@@ -418,7 +419,10 @@ final class SubscriptionManager
      * end). Scheduled cancellations honour the minimum term the items were sold
      * on and the product's notice window: a boundary before `committedUntil()`
      * throws WithinMinimumTerm, one within `cancel_notice_days` of now throws
-     * InvalidArgumentException. `now` honours neither. Scheduled cancellations
+     * InvalidArgumentException. The notice is the capped one where the account
+     * is a consumer and `consumer_notice_cap` is configured, measured against
+     * the boundary being cancelled to, so `cancel()` accepts exactly the dates
+     * `cancellationOptions()` offered. `now` honours neither. Scheduled cancellations
      * are enacted by processDueCancellations() (run via meteric:run); billing
      * stops at the boundary. No automatic refund.
      */
@@ -464,7 +468,7 @@ final class SubscriptionManager
             );
         }
 
-        $notice = $this->noticeDays($sub);
+        $notice = $this->noticeDays($sub, $target);
         if ($notice > 0 && $when->greaterThan($target->subDays($notice))) {
             throw new \InvalidArgumentException(
                 "Cancelling at {$target->toDateString()} needs {$notice} days notice; the cutoff was {$target->subDays($notice)->toDateString()}."
@@ -492,12 +496,52 @@ final class SubscriptionManager
         return $metadata;
     }
 
-    /** Days of notice required to cancel: the strictest across the active items' products. */
-    public function noticeDays(Subscription $sub): int
+    /**
+     * Days of notice required to cancel to $boundary: the strictest across the
+     * active items' products, capped where the buyer's own law caps it.
+     *
+     * The boundary is what the cap is measured back from, so pass the date the
+     * caller means. Omitting it measures from the current period's end, which
+     * is the boundary a plain "cancel at period end" asks about.
+     */
+    public function noticeDays(Subscription $sub, ?CarbonImmutable $boundary = null): int
     {
-        return (int) $sub->items()->where('state', ItemState::Active->value)->with('product')->get()
+        $days = (int) $sub->items()->where('state', ItemState::Active->value)->with('product')->get()
             ->map(fn (SubscriptionItem $i) => $i->product?->cancelNoticeDays() ?? 0)
             ->max();
+
+        $cap = $this->noticeCapDays($sub, $boundary ?? $sub->current_period?->end);
+
+        return $cap === null ? $days : min($days, $cap);
+    }
+
+    /**
+     * The ceiling `consumer_notice_cap` puts on the notice for this
+     * subscription, or null where none applies.
+     *
+     * Applied here rather than left to the caller so the boundaries offered by
+     * `cancellationOptions()` and the boundary `cancel()` accepts are computed
+     * from the same number. A cap enforced one level up would offer a date the
+     * engine then refused, or accept one it had never offered.
+     *
+     * Expressed as an interval and converted against the boundary it is
+     * measured back from: a month before a boundary is 28, 29, 30 or 31 days
+     * depending on which month it is, and a fixed day count would hold a
+     * consumer to more notice than their law allows in the short ones.
+     */
+    private function noticeCapDays(Subscription $sub, ?CarbonImmutable $boundary): ?int
+    {
+        $cap = config('meteric.subscriptions.consumer_notice_cap');
+
+        if ($cap === null || $cap === '' || $boundary === null) {
+            return null;
+        }
+
+        if (! ($sub->account?->buyer_type?->isConsumer() ?? false)) {
+            return null;
+        }
+
+        return (int) round($boundary->diffInDays($boundary->sub(CarbonInterval::make($cap)), true));
     }
 
     /**
@@ -539,7 +583,6 @@ final class SubscriptionManager
         }
 
         $rule = $item->price->recurrence();
-        $notice = $this->noticeDays($sub);
         $committed = $this->committedUntil($sub);
         $now = $this->clock->now();
 
@@ -550,6 +593,9 @@ final class SubscriptionManager
         $boundary = $period->end;
         $limit = $count * 6 + $this->minimumTermPeriods($sub);
         for ($i = 0; count($out) < $count && $i < $limit; $i++) {
+            // Per boundary, because the cap is a calendar interval and the
+            // number of days in it moves with the month it is measured from.
+            $notice = $this->noticeDays($sub, $boundary);
             $cutoff = $notice > 0 ? $boundary->subDays($notice) : $boundary;
             if ($now->lessThanOrEqualTo($cutoff) && ($committed === null || ! $boundary->lessThan($committed->startOfDay()))) {
                 $out[] = $boundary;

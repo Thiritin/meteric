@@ -109,6 +109,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Subscriptions
+    |--------------------------------------------------------------------------
+    | consumer_notice_cap is the longest notice a buyer whose billing account is
+    | marked BuyerType::Consumer can be held to, whatever `cancel_notice_days`
+    | the product carries. Null, the default, caps nothing. Several consumer
+    | protection regimes write such a ceiling (German BGB 309 Nr. 9 and the AGB
+    | drawn from it put it at one month), so it is a calendar interval rather
+    | than a day count: "one month" before the 1st of March is not the same
+    | number of days as before the 1st of April, and a day count would hold a
+    | consumer to a longer notice in the short months.
+    |
+    | Any relative expression CarbonInterval::make() understands: '1 month',
+    | 'P1M', '30 days'. An account with no buyer type is capped by nothing.
+    */
+    'subscriptions' => [
+        'consumer_notice_cap' => env('METERIC_CONSUMER_NOTICE_CAP'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Orders (persisted, immutable)
     |--------------------------------------------------------------------------
     | Default minutes a pending order stays open before the meteric:run sweep

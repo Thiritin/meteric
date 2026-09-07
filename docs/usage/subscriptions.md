@@ -253,6 +253,56 @@ $boundaries = Meteric::cancellationOptions($subscription, count: 3);
 The package enforces the notice rule; rendering the choices is your UI's job. A
 product with `cancel_notice_days` of 0 can cancel to any boundary.
 
+### The consumer notice cap
+
+Several consumer protection regimes put a ceiling on the notice a consumer can
+be held to whatever the contract says. `consumer_notice_cap` is that ceiling:
+
+```php
+// config/meteric.php
+'subscriptions' => [
+    'consumer_notice_cap' => '1 month',   // null caps nothing, the default
+],
+```
+
+It applies to a subscription whose billing account is marked
+`BuyerType::Consumer`, and to no other:
+
+```php
+use Meteric\Enums\BuyerType;
+
+$account->buyer_type = BuyerType::Consumer;   // or Business, or null
+```
+
+`buyer_type` is which body of contract law protects the buyer, not the VAT
+question `tax_profile.b2b` answers. **Nothing derives it**: a sole trader acting
+in trade is not a consumer and may hold no VAT id at all, and a private person
+who typed a company name is still a consumer, so only the host knows. An account
+carrying null - which is every account that existed before the column - is capped
+by nothing, because guessing either way holds one kind of buyer to the other
+kind's terms.
+
+**The cap is a calendar interval, not a day count.** One month before the 1st of
+March is 28 days and before the 1st of September it is 31, and a fixed count
+would hold a consumer to more notice than their law allows in the short months.
+Any relative expression `CarbonInterval::make()` understands works: `'1 month'`,
+`'P1M'`, `'30 days'`.
+
+**It is applied where the boundaries are computed**, so `cancellationOptions()`
+offers the dates the cap opens up and `cancel()` accepts exactly those. Reading
+the notice back gives the capped figure too, measured against the boundary you
+name:
+
+```php
+$manager = app(\Meteric\Subscriptions\SubscriptionManager::class);
+
+$manager->noticeDays($sub);                         // against the current period's end
+$manager->noticeDays($sub, $someLaterBoundary);     // against a boundary you name
+```
+
+Capping a level up, in the caller, is the thing to avoid: the engine would go on
+offering the uncapped boundaries and then refuse the date the customer picked.
+
 ### Minimum term
 
 A minimum term commits a subscription for a number of periods before it may be

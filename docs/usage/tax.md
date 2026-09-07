@@ -10,9 +10,10 @@ or for tests.
 Tax is charged only where the merchant is **registered**. The logic runs in this
 order for a given amount and customer context:
 
-1. EU cross-border B2B with a verified VAT id → reverse charge, no tax.
-2. No registration covering the customer's country → out of scope, no tax.
-3. Otherwise → the rate from the rate table for that country, date, and product
+1. The buyer's own exemption → no tax, labelled with the ground for it.
+2. EU cross-border B2B with a verified VAT id → reverse charge, no tax.
+3. No registration covering the customer's country → out of scope, no tax.
+4. Otherwise → the rate from the rate table for that country, date, and product
    category.
 
 Two tables drive it:
@@ -64,6 +65,35 @@ the two live drivers answer a category the same way.
 `rate` is a `numeric(8,6)` fraction stored as a string. Rates are date-versioned:
 superseding a rate means closing the old row with `effective_to` and inserting a
 new one, which the rate table's `activeOn` scope reads back correctly.
+
+## An exempt buyer
+
+A buyer can hold an exemption their tax authority granted them: a diplomatic
+mission, a public body, a charity with a ruling. None of it follows from where
+they are, what they bought or whether they hold a VAT id, so it is its own input
+and every resolver settles it before anything else.
+
+```php
+$context = new \Meteric\Tax\TaxContext(
+    countryCode: 'DE',
+    taxExempt: true,
+    exemptReason: 'Diplomatic mission',   // becomes the result's label
+);
+```
+
+`TaxContext::fromProfile()` reads the same two off a `BillingAccount`'s
+`tax_profile`, as `tax_exempt` and `tax_exempt_reason`, so an account marked
+exempt resolves that way everywhere without the caller building a context by
+hand. The result is zero tax with `exempt` true and the reason as its label,
+falling back to `Tax exempt` where the host recorded none.
+
+**It is never labelled reverse charge**, and it is settled ahead of the
+reverse-charge branch precisely so a cross-border business with a VAT id cannot
+come back wearing Art. 196 wording. The two are different in law: reverse charge
+moves the liability to the buyer, an exemption means nobody owes it, and a
+document stating the wrong one states a legal basis that does not apply. The
+host decides what its documents print; what the engine guarantees is that the
+label it writes beside the zero says which of the two happened.
 
 ## EU rates and VIES
 

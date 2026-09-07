@@ -43,6 +43,13 @@ final class IbericodeVatResolver implements TaxResolver
         $country = strtoupper($context->countryCode ?? $this->merchantCountry);
         $merchant = strtoupper($context->merchantCountry ?? $this->merchantCountry);
 
+        // The buyer's own exemption, before anything about the destination:
+        // an exempt buyer is not charged in a country the merchant is
+        // registered in either, and this is not reverse charge.
+        if ($context->taxExempt) {
+            return $context->exemption($zero);
+        }
+
         // Cross-border B2B inside the EU with a verified VAT id → reverse charge.
         if ($context->isBusiness
             && $context->vatId
