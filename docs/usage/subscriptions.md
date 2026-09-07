@@ -286,7 +286,9 @@ kind's terms.
 March is 28 days and before the 1st of September it is 31, and a fixed count
 would hold a consumer to more notice than their law allows in the short months.
 Any relative expression `CarbonInterval::make()` understands works: `'1 month'`,
-`'P1M'`, `'30 days'`.
+`'P1M'`, `'30 days'`. One it cannot parse throws rather than answering "no cap": the ceiling
+exists because a buyer cannot lawfully be held to more, so a typo in it must stop the caller
+rather than quietly withdraw the protection.
 
 **It is applied where the boundaries are computed**, so `cancellationOptions()`
 offers the dates the cap opens up and `cancel()` accepts exactly those. Reading

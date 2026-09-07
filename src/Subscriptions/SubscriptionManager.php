@@ -556,7 +556,19 @@ final class SubscriptionManager
             return null;
         }
 
-        return (int) round($boundary->diffInDays($boundary->sub(CarbonInterval::make($cap)), true));
+        // A value nobody can parse throws rather than answering "no cap". The
+        // cap exists because a buyer cannot lawfully be held to more, so a typo
+        // in it has to stop the caller instead of quietly withdrawing the
+        // protection it was configured to give.
+        $interval = CarbonInterval::make($cap);
+
+        if ($interval === null) {
+            throw new \InvalidArgumentException(
+                "Invalid meteric.subscriptions.consumer_notice_cap: '{$cap}' is not an interval."
+            );
+        }
+
+        return (int) round($boundary->diffInDays($boundary->sub($interval), true));
     }
 
     /**

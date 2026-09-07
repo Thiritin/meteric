@@ -206,3 +206,12 @@ it('refuses a consumer a boundary inside the capped notice', function () {
     expect(fn () => Meteric::cancel($sub, 'period_end', CarbonImmutable::parse('2026-06-20Z')))
         ->toThrow(InvalidArgumentException::class);
 });
+
+it('refuses a notice cap nobody can parse rather than dropping it', function () {
+    config()->set('meteric.subscriptions.consumer_notice_cap', 'one moon');
+
+    $sub = cncSub(cncBuyer(BuyerType::Consumer), cncPlan(1000, noticeDays: 90));
+
+    expect(fn () => app(SubscriptionManager::class)->noticeDays($sub))
+        ->toThrow(InvalidArgumentException::class);
+});
