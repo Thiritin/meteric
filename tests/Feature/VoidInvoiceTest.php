@@ -88,6 +88,22 @@ function vinRefused(Closure $write): Closure
     return fn () => DB::transaction($write);
 }
 
+it('refuses to void a paid invoice handed in as a model from before the payment', function () {
+    [, $invoice] = vinInvoice();
+
+    // The caller's copy, taken before the payment was collected, still says
+    // nothing is paid. The rule is about the invoice, not about the copy.
+    $stale = clone $invoice;
+    Meteric::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'EUR'));
+
+    expect($stale->paid_minor)->toBe(0);
+
+    expect(fn () => Meteric::voidInvoice($stale))
+        ->toThrow(LogicException::class, 'Cannot void an invoice with payments');
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Paid);
+});
+
 it('refuses to void an invoice with payments in the database as well', function () {
     [, $invoice] = vinInvoice();
     Meteric::recordPayment($invoice, Money::ofMinor(1000, 'EUR'));

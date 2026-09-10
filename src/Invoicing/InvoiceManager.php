@@ -433,7 +433,13 @@ final class InvoiceManager
      */
     public function voidInvoice(Invoice $invoice, bool $voidCharges = false): Invoice
     {
-        if ($invoice->paid_minor > 0) {
+        // Read against the row rather than the caller's copy. A model handed in
+        // from before a payment was collected still says nothing is paid, and
+        // voiding on that reads a settled document out of the books; the seal
+        // refuses it, which is a database error where this is the rule.
+        $paid = (int) Models::query(Invoice::class)->whereKey($invoice->id)->value('paid_minor');
+
+        if ($paid > 0) {
             throw new \LogicException('Cannot void an invoice with payments. Issue a credit note instead.');
         }
 

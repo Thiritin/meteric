@@ -403,9 +403,11 @@ and stores its `external_id`.
 `Meteric::voidInvoice($invoice, bool $voidCharges = false)` cancels an invoice
 issued in error, before any money moves. It works only on an unpaid invoice and
 refuses once any payment exists; correct a paid or finalized invoice with a credit
-note instead. **The database refuses it too**, so a migration, a seeder or a console
-session that moves a settled invoice to `void` in one statement is rejected rather
-than leaving a payment allocated to a document that officially never existed.
+note instead, and the check reads the invoice row rather than the model handed in, so
+a copy taken before a payment was collected does not get past it. **The database
+refuses it too**, so a migration, a seeder or a console session that moves a settled
+invoice to `void` in one statement is rejected rather than leaving a payment
+allocated to a document that officially never existed.
 
 ```php
 Meteric::voidInvoice($invoice);                     // charges return to pending, the next run re-bills them
