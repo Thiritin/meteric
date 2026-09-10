@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use Brick\Money\Money;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\InvoiceState;
@@ -12,6 +14,7 @@ use Meteric\Events\InvoiceVoided;
 use Meteric\Facades\Meteric;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
+use Meteric\Models\Invoice;
 use Meteric\Models\InvoiceLine;
 use Meteric\Models\Price;
 use Meteric\Models\Product;
@@ -73,6 +76,42 @@ it('refuses to void a paid invoice and points to a credit note', function () {
     Meteric::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'EUR'));
 
     expect(fn () => Meteric::voidInvoice($invoice->fresh()))->toThrow(LogicException::class);
+});
+
+/**
+ * A savepoint around a statement Postgres rejects: without one the rejection
+ * aborts the test's own transaction and every assertion after it fails on that
+ * rather than on the rule.
+ */
+function vinRefused(Closure $write): Closure
+{
+    return fn () => DB::transaction($write);
+}
+
+it('refuses to void an invoice with payments in the database as well', function () {
+    [, $invoice] = vinInvoice();
+    Meteric::recordPayment($invoice, Money::ofMinor(1000, 'EUR'));
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::PartiallyPaid);
+
+    // The manager's rule reached by a statement that never sees the manager. A
+    // settled document cancelled in place leaves a payment allocated to an
+    // invoice that officially never existed; a credit note states the reversal.
+    expect(vinRefused(fn () => DB::table((new Invoice)->getTable())
+        ->where('id', $invoice->id)
+        ->update(['state' => InvoiceState::Void->value])))
+        ->toThrow(QueryException::class, 'corrected by a credit note');
+
+    Meteric::recordPayment($invoice->fresh(), Money::ofMinor(1380, 'EUR'));
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Paid);
+
+    expect(vinRefused(fn () => DB::table((new Invoice)->getTable())
+        ->where('id', $invoice->id)
+        ->update(['state' => InvoiceState::Void->value])))
+        ->toThrow(QueryException::class, 'corrected by a credit note');
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Paid);
 });
 
 it('does not revert a settled charge when its invoice is later voided', function () {

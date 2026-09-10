@@ -72,6 +72,12 @@ open invoice is immutable, frozen by database triggers, so corrections go throug
 [void](#void-or-credit-note) or a [credit note](#credit-notes-and-refunds), not an
 in-place edit.
 
+The trigger freezes the currency, the totals, the tax amount and the tax profile of
+any invoice that has left `draft`, refuses to delete one, and refuses to move one
+that has payments against it to `void`. The lifecycle itself is the caller's: the
+trigger does not police `open` -> `partially_paid` -> `paid` or a write-off to
+`uncollectible`.
+
 ## What the invoice records about the buyer
 
 An issued invoice carries `tax_profile`, the account's tax profile as it stood
@@ -397,7 +403,9 @@ and stores its `external_id`.
 `Meteric::voidInvoice($invoice, bool $voidCharges = false)` cancels an invoice
 issued in error, before any money moves. It works only on an unpaid invoice and
 refuses once any payment exists; correct a paid or finalized invoice with a credit
-note instead.
+note instead. **The database refuses it too**, so a migration, a seeder or a console
+session that moves a settled invoice to `void` in one statement is rejected rather
+than leaving a payment allocated to a document that officially never existed.
 
 ```php
 Meteric::voidInvoice($invoice);                     // charges return to pending, the next run re-bills them
