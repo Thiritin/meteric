@@ -93,8 +93,10 @@ or charged back, or a write-off to `uncollectible`.
 `TRUNCATE` is refused on `invoices` and `invoice_lines` at statement level, because
 a `FOR EACH ROW` trigger does not fire on one: Postgres empties the table without
 visiting the rows, so one statement removed every issued document and the branch
-refusing a delete never ran. `REVOKE TRUNCATE` from the role the application
-connects as is the other half of that, and it is the deployment's to run.
+refusing a delete never ran. A statement with nothing to remove is allowed, so a
+fresh install and a reference-data seeder whose `CASCADE` reaches these tables
+still work. `REVOKE TRUNCATE` from the role the application connects as is the
+other half of that, and it is the deployment's to run.
 
 ## What the invoice records about the buyer
 

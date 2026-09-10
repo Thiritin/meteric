@@ -210,3 +210,20 @@ it('refuses to truncate the tables holding issued documents', function () {
     expect(Invoice::whereKey($invoice->id)->exists())->toBeTrue()
         ->and(InvoiceLine::where('invoice_id', $invoice->id)->exists())->toBeTrue();
 });
+
+it('allows a truncate that removes nothing', function () {
+    // Truncating an empty table destroys no document, and refusing it would
+    // cost a fresh install its fixtures and any seeder whose CASCADE reaches
+    // these tables. The row guard beside this one refuses the delete, so a row
+    // cannot be taken out of the way first.
+    $invoices = (new Invoice)->getTable();
+
+    expect(Invoice::count())->toBe(0);
+
+    DB::transaction(fn () => DB::statement("TRUNCATE TABLE {$invoices} CASCADE"));
+
+    vinInvoice();
+
+    expect(vinRefused(fn () => DB::statement("TRUNCATE TABLE {$invoices} CASCADE")))
+        ->toThrow(QueryException::class, 'is never truncated');
+});
