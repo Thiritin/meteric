@@ -74,9 +74,27 @@ in-place edit.
 
 The trigger freezes the currency, the totals, the tax amount and the tax profile of
 any invoice that has left `draft`, refuses to delete one, and refuses to move one
-that has payments against it to `void`. The lifecycle itself is the caller's: the
-trigger does not police `open` -> `partially_paid` -> `paid` or a write-off to
-`uncollectible`.
+that has payments against it to `void`. Two more facts about an issued document are
+frozen with them:
+
+- **it does not become a draft again.** A draft is what has not been issued yet, so
+  putting an issued invoice back into that state takes it out of every figure
+  computed over issued documents while its number and its issue date stay on the
+  row. Nothing un-issues a document; a wrong one is voided or credited.
+- **`issued_at` does not move.** It is the tax point, so what it says decides which
+  period the document belongs to. Moving it reassigns the supply to another period
+  and leaves every total over the year unchanged, which is the one alteration to an
+  issued document that is invisible in aggregate.
+
+The collection lifecycle itself stays the caller's: the trigger does not police
+`open` -> `partially_paid` -> `paid`, a return to `open` when a payment is reversed
+or charged back, or a write-off to `uncollectible`.
+
+`TRUNCATE` is refused on `invoices` and `invoice_lines` at statement level, because
+a `FOR EACH ROW` trigger does not fire on one: Postgres empties the table without
+visiting the rows, so one statement removed every issued document and the branch
+refusing a delete never ran. `REVOKE TRUNCATE` from the role the application
+connects as is the other half of that, and it is the deployment's to run.
 
 ## What the invoice records about the buyer
 

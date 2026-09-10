@@ -145,3 +145,68 @@ it('does not revert a settled charge when its invoice is later voided', function
     $charge->revertToPending();
     expect($charge->fresh()->state)->toBe(ChargeState::Settled);   // no-op on settled
 });
+
+it('refuses to put an issued invoice back into draft', function () {
+    [, $invoice] = vinInvoice();
+
+    expect($invoice->state)->toBe(InvoiceState::Open);
+
+    // Every figure computed over issued documents excludes a draft, so this is
+    // an issued document being unwritten rather than a lifecycle transition.
+    expect(vinRefused(fn () => DB::table((new Invoice)->getTable())
+        ->where('id', $invoice->id)
+        ->update(['state' => InvoiceState::Draft->value])))
+        ->toThrow(QueryException::class, 'does not become a draft again');
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Open);
+});
+
+it('refuses to move the day an issued invoice was issued', function () {
+    [, $invoice] = vinInvoice();
+
+    $issued = $invoice->issued_at;
+
+    // The tax point. Moving it reassigns the supply to another period while
+    // every total over the year stays exactly the same.
+    expect(vinRefused(fn () => DB::table((new Invoice)->getTable())
+        ->where('id', $invoice->id)
+        ->update(['issued_at' => $issued->addDays(90)])))
+        ->toThrow(QueryException::class, 'states the day it was issued');
+
+    expect($invoice->fresh()->issued_at->toDateTimeString())->toBe($issued->toDateTimeString());
+});
+
+it('leaves the collection states moving in both directions', function () {
+    [, $invoice] = vinInvoice();
+
+    Meteric::recordPayment($invoice, Money::ofMinor($invoice->total_minor, 'EUR'));
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Paid);
+
+    // A payment that is reversed or charged back returns the document to open,
+    // which is the caller's lifecycle and not the trigger's.
+    DB::table((new Invoice)->getTable())
+        ->where('id', $invoice->id)
+        ->update(['state' => InvoiceState::Open->value]);
+
+    expect($invoice->fresh()->state)->toBe(InvoiceState::Open);
+});
+
+it('refuses to truncate the tables holding issued documents', function () {
+    [, $invoice] = vinInvoice();
+
+    $invoices = (new Invoice)->getTable();
+    $lines = (new InvoiceLine)->getTable();
+
+    // A row-level trigger does not fire on a TRUNCATE: one statement emptied
+    // every issued document and the branch refusing a delete never ran.
+    // CASCADE, because a plain TRUNCATE on either table is refused by the
+    // foreign keys pointing at it and proves nothing about the trigger.
+    expect(vinRefused(fn () => DB::statement("TRUNCATE TABLE {$lines} CASCADE")))
+        ->toThrow(QueryException::class, 'is never truncated');
+
+    expect(vinRefused(fn () => DB::statement("TRUNCATE TABLE {$invoices} CASCADE")))
+        ->toThrow(QueryException::class, 'is never truncated');
+
+    expect(Invoice::whereKey($invoice->id)->exists())->toBeTrue()
+        ->and(InvoiceLine::where('invoice_id', $invoice->id)->exists())->toBeTrue();
+});
