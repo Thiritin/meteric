@@ -198,3 +198,21 @@ it('refund downgrade with nothing invoiced writes the net as a pending credit', 
     expect($credit->amount_minor)->toBe(-1000)
         ->and(CreditNote::count())->toBe(0);
 });
+
+it('discard upgrade swaps now and charges nothing for the rest of the cycle', function () {
+    $acc = pcmAccount();
+    $small = pcmPlan(1000);
+    $large = pcmPlan(3000);
+    $item = pcmItem($acc, $small);
+    $before = Charge::where('subscription_id', $item->subscription_id)->count();
+
+    Meteric::changePlan($item, $large, upgrade: UpgradePolicy::Discard, at: CarbonImmutable::parse('2026-06-16Z'));
+
+    expect(Charge::where('subscription_id', $item->subscription_id)->count())->toBe($before)
+        ->and($item->fresh()->price_id)->toBe($large->id);
+
+    // Free until the cycle ends, then the better plan bills in full.
+    Meteric::renew($item->subscription->fresh(), CarbonImmutable::parse('2026-07-02Z'));
+
+    expect((int) pcmJuly($item->subscription)->firstWhere('kind', LineKind::Recurring)->amount_minor)->toBe(3000);
+});

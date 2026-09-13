@@ -34,6 +34,7 @@ and how it is billed.
 |------|--------|
 | `Prorate` (default) | Credit the unused portion of the old plan, charge the new plan prorated over the rest of the cycle. The item moves to the new price right away. |
 | `Defer` | Swap at the next renewal. Keep the current plan until then. No money moves mid-cycle. |
+| `Discard` | Swap now and charge nothing for the rest of the cycle. The customer keeps what they paid for the old plan and runs on the better one until the next renewal, which bills the new plan in full. |
 
 The default prorated upgrade settles the difference for the rest of the period
 with two itemized charges:
@@ -51,6 +52,20 @@ use Meteric\Enums\UpgradePolicy;
 
 Meteric::changePlan($item, $biggerPrice, upgrade: UpgradePolicy::Defer);
 ```
+
+`Discard` is the free upgrade: the swap happens now and nothing is charged for
+the rest of the cycle.
+
+```php
+Meteric::changePlan($item, $biggerPrice, upgrade: UpgradePolicy::Discard);
+```
+
+It is the mirror of `DowngradePolicy::Discard` and the same call underneath, so
+the direction only decides who the remainder favours: downwards the customer
+forfeits the unused value of the plan they leave, upwards they get the better
+plan for what they already paid. Neither writes a proration line, so a free
+upgrade produces no zero-amount rows on the next invoice. The renewal after it
+bills the new plan in full.
 
 ## Downgrades
 

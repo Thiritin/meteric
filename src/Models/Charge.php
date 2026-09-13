@@ -26,6 +26,8 @@ use Meteric\Support\Period;
  * @property string $account_id
  * @property ?string $subscription_id
  * @property ?string $dimension_id
+ * @property string $origin_type
+ * @property string $origin_id
  * @property ChargeState $state
  * @property BillingMode $billing_mode
  * @property LineKind $kind

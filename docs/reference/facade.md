@@ -27,6 +27,14 @@ Switch an item's plan. Direction is detected from the price. `$upgrade` picks th
 upgrade policy, `$downgrade` the downgrade policy. See
 [Plan changes](/usage/plan-changes).
 
+#### `repriceAccrual(SubscriptionItem $item): array`
+
+Restate the running period's pending charges at what the item bills today: the
+base line, relative addons, and the discounts already raised against it. Returns
+the charges whose amount changed. Throws `AccrualNotRepriceable` once the period
+holds an invoiced, settled or void charge. See
+[Repricing a period that has already accrued](/usage/products-and-prices#repricing-a-period-that-has-already-accrued).
+
 #### `switchTerm(SubscriptionItem $item, Price $newPrice, ?CarbonImmutable $at = null): SubscriptionItem`
 
 Settle the running period and open a new one from `$at` on the new price's term.

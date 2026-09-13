@@ -394,6 +394,17 @@ final class Meteric
         return app(SubscriptionManager::class)->overridePrice($item, $amountMinor);
     }
 
+    /**
+     * Restate the running period's pending charges at what the item bills today
+     * (a price agreed after the period accrued). Returns the charges that moved.
+     *
+     * @return list<Charge>
+     */
+    public function repriceAccrual(SubscriptionItem $item): array
+    {
+        return app(SubscriptionManager::class)->repriceAccrual($item);
+    }
+
     /** Back to the product's own price; the override row is kept for history. */
     public function clearPriceOverride(SubscriptionItem $item): SubscriptionItem
     {

@@ -276,3 +276,27 @@ audit.
 **Setting an override does not move money.** It changes what the next accrual bills; the
 running period was already charged at whatever it was charged. A caller that wants the
 difference settled mid-period rebases or prorates on top of it, deliberately.
+
+### Repricing a period that has already accrued
+
+A charge freezes its amount when it accrues, so a period that is already accrued and not
+yet invoiced still carries the old figure after an override. `repriceAccrual()` restates it:
+
+```php
+Meteric::overridePrice($item, 600);
+$moved = Meteric::repriceAccrual($item);   // the charges whose amount changed
+```
+
+It restates the base line at `periodAmount()`, re-prorating over the same window when the
+line was prorated; it moves any relative addon, which is a percentage of that base; and it
+recomputes the discounts already raised against the period, in their own order, spending no
+further discount term because the period spent its terms when it accrued.
+
+It writes no new lines. An option, an addon or a discount added since the accrual is not
+billed by it and still takes effect at the next accrual, exactly as it does without this
+call.
+
+It refuses, with `Meteric\Exceptions\AccrualNotRepriceable`, an item with no current period,
+one with nothing accrued for it, and any period holding a charge that is `invoiced`,
+`settled` or `void`. A figure that has reached a document is not restated behind the
+customer's back; the way back from an issued invoice is a credit note.

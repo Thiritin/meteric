@@ -214,6 +214,7 @@ final class SubscriptionManager
      *
      *  Upgrade   prorate: credit the unused old, charge the prorated new (default).
      *            defer: swap at the next renewal, keep the current plan until then.
+     *            discard: swap now and charge nothing for the rest of the cycle.
      *  Downgrade defer: keep the tier until the period ends, then renew lower.
      *            discard: swap now, unused value forfeited. credit: swap now, credit the
      *            unused old as a pending charge on the next invoice. refund: swap now and
@@ -267,6 +268,7 @@ final class SubscriptionManager
             return match ($upgrade ?? UpgradePolicy::Prorate) {
                 UpgradePolicy::Defer => $this->deferChange($item, $newPrice),
                 UpgradePolicy::Prorate => $this->prorateChange($item, $newPrice, $at),
+                UpgradePolicy::Discard => $this->switchNow($item, $newPrice, $at),
             };
         }
 
@@ -380,7 +382,9 @@ final class SubscriptionManager
     /**
      * Swap the plan immediately. With creditOld (downgrade `credit`) the rest of
      * the cycle is settled as one net pending line: the unused old value less the
-     * new plan's prorated remainder. Plain discard writes nothing.
+     * new plan's prorated remainder. Plain discard writes nothing, in either
+     * direction: downwards the unused value is forfeited, upwards the better
+     * plan is free until the next renewal bills it in full.
      */
     private function switchNow(SubscriptionItem $item, Price $newPrice, CarbonImmutable $at, bool $creditOld = false): SubscriptionItem
     {
@@ -708,6 +712,21 @@ final class SubscriptionManager
 
             return $item->refresh();
         });
+    }
+
+    /**
+     * Restate the running period's pending charges at what the item bills
+     * today, for the case where the amount was agreed after the period had
+     * already accrued. Returns the charges whose amount moved.
+     *
+     * Refuses a period that has reached a document: `AccrualNotRepriceable`.
+     * See ChargeAccruer::reprice() for what moves and what deliberately does not.
+     *
+     * @return list<Charge>
+     */
+    public function repriceAccrual(SubscriptionItem $item): array
+    {
+        return $this->accruer->reprice($item);
     }
 
     /**
