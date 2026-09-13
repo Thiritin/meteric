@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
+use Meteric\Contracts\InvoiceDraftAdjuster;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Enums\BillingMode;
 use Meteric\Enums\ChargeState;
@@ -52,6 +53,9 @@ final class InvoiceManager
     public function __construct(
         private InvoiceDriver $driver,
         private LineComposer $lines,
+        // Optional, and null by default: an engine with nothing bound bills
+        // what accrued. See InvoiceDraftAdjuster.
+        private ?InvoiceDraftAdjuster $adjuster = null,
     ) {}
 
     public function driver(): InvoiceDriver
@@ -743,6 +747,12 @@ final class InvoiceManager
             return null;
         }
 
+        // The application's last word on what goes on this document, before the
+        // driver sees it. Above the net-credit guard, because what it adds is
+        // usually a credit and the guard has to weigh the document as it will
+        // actually be issued.
+        $charges = $this->adjusted($account, $currency, $charges);
+
         // An invoice is never negative. If pending credits outweigh the charges,
         // hold everything: the credit lines stay pending and reduce a later
         // invoice once new charges land. A refund (money back) is a credit note,
@@ -779,6 +789,64 @@ final class InvoiceManager
         InvoiceIssued::dispatch($invoice);
 
         return $invoice;
+    }
+
+    /**
+     * Run the application's adjuster over what is about to be billed.
+     *
+     * Nothing bound means nothing happens, which is the default: the engine
+     * bills what accrued. What comes back joins the same document, so it is
+     * composed, taxed and keyed with the rest, and a driver refusal takes it
+     * back with everything else - this runs inside the caller's transaction.
+     *
+     * An invoice is one account's claim in one currency, so a charge that is
+     * not pending, not this account's or not this currency is refused. Billing
+     * it anyway would put one customer's money on another's document, and a
+     * loud failure is the only safe answer to that.
+     *
+     * @param  Collection<int, Charge>  $charges
+     * @return Collection<int, Charge>
+     */
+    private function adjusted(BillingAccount $account, string $currency, Collection $charges): Collection
+    {
+        if ($this->adjuster === null) {
+            return $charges;
+        }
+
+        $ids = Collection::make($this->adjuster->adjust($account, $currency, $charges->values()))
+            ->map(fn (Charge $charge): ?string => $charge->id)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return $charges;
+        }
+
+        if ($ids->contains(null)) {
+            throw new \LogicException('meteric: the invoice draft adjuster returned a charge that was never saved.');
+        }
+
+        // Read back rather than trust the models handed over. An adjuster works
+        // with what it just wrote, and a model in memory is not always the row:
+        // a column with a database default is null on the instance that created
+        // it, and a charge a competing run has already billed still looks
+        // pending on a copy read before it did.
+        $extra = Models::query(Charge::class)->whereIn('id', $ids->all())->get()->keyBy('id');
+
+        foreach ($ids as $id) {
+            $charge = $extra->get($id);
+
+            if ($charge === null
+                || $charge->account_id !== $account->id
+                || $charge->currency !== $currency
+                || $charge->state !== ChargeState::Pending) {
+                throw new \LogicException(
+                    'meteric: the invoice draft adjuster returned charge '.$id
+                    .', which is not a pending charge on account '.$account->id.' in '.$currency.'.'
+                );
+            }
+        }
+
+        return $charges->values()->concat($ids->map(fn (string $id): Charge => $extra->get($id)));
     }
 
     /** Does this charge still have a line on a non-void invoice? */

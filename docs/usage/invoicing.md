@@ -105,6 +105,68 @@ when its lines were priced. Read it with `$invoice->taxProfile()` or
 `$invoice->taxContext()` rather than reaching through to the account, which
 moves with the customer. See [Tax](/usage/tax).
 
+## Adjusting an invoice the engine raises
+
+`Meteric::createInvoice()` and `draftInvoice()` hand you a draft to edit, but the
+invoices that matter most are the ones nobody asked for: `meteric:run` calls
+`invoicePending()` from inside the package, so there is no draft to catch and no
+return value to edit before the document exists. `InvoiceDraftAdjuster` is the
+window on those.
+
+```php
+use Illuminate\Support\Collection;
+use Meteric\Contracts\InvoiceDraftAdjuster;
+use Meteric\Facades\Meteric;
+use Meteric\Models\BillingAccount;
+
+class GoodwillAdjuster implements InvoiceDraftAdjuster
+{
+    public function adjust(BillingAccount $account, string $currency, Collection $charges): iterable
+    {
+        $owed = (int) $charges->sum('amount_minor');
+        $goodwill = min($this->balanceOf($account), $owed);
+
+        return $goodwill > 0
+            ? [Meteric::charge($account, Money::ofMinor(-$goodwill, $currency), 'Goodwill')]
+            : [];
+    }
+}
+```
+
+Bind it over the default, which is nothing at all:
+
+```php
+$this->app->singleton(InvoiceDraftAdjuster::class, GoodwillAdjuster::class);
+```
+
+It runs on every invoice `issue()` raises, which is `invoicePending()`,
+`invoiceAllPending()`, `invoiceConsolidated()` and the per-subscription split,
+and therefore on the scheduled billing run. It does not run on a draft you opened
+yourself: there you already hold the invoice and can add lines directly.
+
+**It returns charges, not lines.** A charge is the unit the engine bills, prices
+and taxes; a line is what a charge became. Returning a charge means the addition
+is composed, taxed and grouped like every other one, it counts toward the
+invoice's totals and its idempotency key, and voiding the invoice puts it back in
+the pending pool like the rest.
+
+**It runs inside the caller's transaction**, so a driver that refuses the
+document takes the adjustment back with it, and so does whatever the adjuster
+wrote about its own state. An adjuster may draw a balance down here without
+having to undo the draw by hand.
+
+**Every charge it returns is read back from the database and checked.** It must
+be saved, pending, on this account and in this currency; anything else raises a
+`LogicException` rather than being billed, because an invoice is one account's
+claim in one currency. The read-back is also why an adjuster may hand over the
+model it just created: a column with a database default is null on the instance
+that wrote it.
+
+**What it adds is weighed by the net-credit guard.** An adjustment larger than
+what is being billed holds the invoice rather than issuing a negative one, and
+the charges all stay pending, exactly as an account whose pending credits
+outweigh its charges does.
+
 ## Editing a draft
 
 Add and remove lines on a draft directly. All three methods require a draft and

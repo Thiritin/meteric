@@ -15,6 +15,7 @@ use Meteric\Console\RunBillingCommand;
 use Meteric\Console\VatSyncCommand;
 use Meteric\Contracts\CatalogDefaults;
 use Meteric\Contracts\Clock;
+use Meteric\Contracts\InvoiceDraftAdjuster;
 use Meteric\Contracts\InvoiceDriver;
 use Meteric\Contracts\LineLabeller;
 use Meteric\Contracts\TaxResolver;
@@ -80,6 +81,10 @@ final class MetericServiceProvider extends ServiceProvider
         $this->app->singleton(InvoiceManager::class, fn ($app) => new InvoiceManager(
             driver: $app->make(InvoiceDriver::class),
             lines: $app->make(LineComposer::class),
+            // Nothing bound is the default, and it means the engine bills what
+            // accrued. Resolved rather than injected so an application can bind
+            // its adjuster in its own provider.
+            adjuster: $app->bound(InvoiceDraftAdjuster::class) ? $app->make(InvoiceDraftAdjuster::class) : null,
         ));
 
         $this->app->singleton(Prorator::class, function ($app) {
