@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Enums\LineKind;
 use Meteric\Models\BillingAccount;
@@ -60,6 +61,23 @@ it('reads lines in sort order whatever order they were written in', function () 
 
     expect($invoice->lines()->pluck('title')->all())->toBe(['first', 'second', 'third']);
     expect($invoice->load('lines')->lines->pluck('title')->all())->toBe(['first', 'second', 'third']);
+});
+
+it('reads them in sort order with no index to read them through', function () {
+    $invoice = iloInvoice(iloAccount());
+
+    iloLine($invoice, 'third', 200);
+    iloLine($invoice, 'first', 0);
+    iloLine($invoice, 'second', 100);
+
+    // `invoice_id, sort` is a btree, so an index scan hands rows back in sort
+    // order and an unordered relation looks correct. A sequential scan hands
+    // back the order they were written, which is what the order is for.
+    DB::statement('set local enable_indexscan = off');
+    DB::statement('set local enable_bitmapscan = off');
+    DB::statement('set local enable_indexonlyscan = off');
+
+    expect($invoice->lines()->pluck('title')->all())->toBe(['first', 'second', 'third']);
 });
 
 it('settles a tied sort on the key, so two reads agree', function () {
