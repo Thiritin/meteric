@@ -142,3 +142,76 @@ returns your subclass. Named helpers exist for the aggregate roots
 (`useAccountModel`, `useSubscriptionModel`, `useChargeModel`, `useInvoiceModel`,
 `usePaymentModel`, `useCreditNoteModel`, `useOrderModel`, `useUsageRecordModel`);
 for any other model use `Meteric::useModel(Base::class, Override::class)`.
+
+## Wording an invoice line
+
+Meteric titles a line after what it sells: the item's `label` if it has one,
+otherwise the product name (`SubscriptionItem::lineTitle()`). A site that sells
+one product as several different events wants the event on the line instead: a
+domain registered, renewed or transferred is one product and three sentences,
+and a metered dimension's key is an internal identifier no customer should read.
+
+Implement `Meteric\Contracts\LineLabeller` and name it in
+`config/meteric.php`:
+
+```php
+'line_labeller' => App\Billing\LineLabels::class,
+```
+
+```php
+use Meteric\Contracts\LineLabeller;
+use Meteric\Enums\ChargeReason;
+use Meteric\Invoicing\LineContext;
+use Meteric\Invoicing\LineLabel;
+
+final class LineLabels implements LineLabeller
+{
+    public function label(LineContext $context): ?LineLabel
+    {
+        if ($context->item->product->type !== 'domain') {
+            return null;    // meteric's own wording stands
+        }
+
+        $event = match ($context->reason) {
+            ChargeReason::Initial => 'Create',
+            ChargeReason::Renewal => 'Renew',
+            default => null,
+        };
+
+        return new LineLabel($context->item->label.($event ? ' - '.$event : ''));
+    }
+}
+```
+
+The labeller is asked once, as each charge is written, and the answer is stored
+on the charge. The invoice line, the document rendered from it and any
+e-invoice built beside that document therefore all read one string and cannot
+disagree about it. Nothing rewrites a line after the fact.
+
+**Returning null keeps meteric's wording**, so a labeller answers for the lines
+it knows and leaves the rest alone. A `LineLabel` replaces the title *and* the
+description: carry `$context->description` into the second argument to keep the
+one meteric wrote, or leave it out to take it away (a line whose period is
+already printed from `covers` does not need it a second time).
+
+`LineContext` carries the item, the reason, the wording meteric would have
+used, and `attributes`, the whole charge row as it is about to be written, with
+`kind()`, `covers()`, `dimensionId()` and `metadata()` over the fields a
+labeller usually wants.
+
+### The reason
+
+`ChargeReason` says what meteric was doing, which no column on the charge
+records: an item's first period and its fourth renewal are both `recurring`.
+
+| Reason | Raised by |
+|---|---|
+| `Initial` | an order materializing, or a subscription's first cycle |
+| `Renewal` | a period accrued because the last one ended, and a resume |
+| `Change` | a plan change, or an item, addon or option booked mid-cycle |
+| `Usage` | a metered dimension rolled up |
+| `Other` | a caller that did not say |
+
+`Charge::pendingForItem()` takes it as a third argument and defaults it to
+`Other`, so a site raising its own charges from an item states the reason or
+says nothing.

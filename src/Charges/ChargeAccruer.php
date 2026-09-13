@@ -8,6 +8,7 @@ use Brick\Money\Money;
 use Illuminate\Support\Facades\DB;
 use Meteric\Anchoring\BillingPlan;
 use Meteric\Anchoring\PlannedPeriod;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\DiscountTarget;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
@@ -31,13 +32,19 @@ final class ChargeAccruer
 {
     public function __construct(private Prorator $prorator) {}
 
-    /** @return list<Charge> the charges created (free periods produce none) */
-    public function accrue(SubscriptionItem $item, BillingPlan $plan): array
+    /**
+     * $reason travels to the charges and on to a configured LineLabeller: the
+     * same plan is accrued for a renewal and for the opening period of a plan
+     * change, and only the caller knows which this is.
+     *
+     * @return list<Charge> the charges created (free periods produce none)
+     */
+    public function accrue(SubscriptionItem $item, BillingPlan $plan, ChargeReason $reason = ChargeReason::Renewal): array
     {
         $price = $item->price;
         $full = $item->periodAmount();
 
-        return DB::transaction(function () use ($item, $plan, $price, $full): array {
+        return DB::transaction(function () use ($item, $plan, $price, $full, $reason): array {
             $created = [];
 
             foreach ($plan->charges as $pp) {
@@ -60,16 +67,16 @@ final class ChargeAccruer
                     'amount_minor' => $amount->getMinorAmount()->toInt(),
                     'covers' => $pp->period,
                     'idempotency_key' => $this->key($item, $pp),
-                ])];
+                ], $reason)];
 
                 // Configurable options and addons recur with the item: bill each
                 // for the same period. Gated by the base reservation above, so a
                 // re-run of an already-billed period skips these too.
-                $period = array_merge($period, $this->billExtras($item, $pp->period));
+                $period = array_merge($period, $this->billExtras($item, $pp->period, $reason));
 
                 // A discount comes off what the period actually billed, so it
                 // is raised last and reads the figures above it.
-                $period = array_merge($period, $this->billDiscounts($item, $pp->period, $period));
+                $period = array_merge($period, $this->billDiscounts($item, $pp->period, $period, $reason));
 
                 $created = array_merge($created, $period);
             }
@@ -86,7 +93,7 @@ final class ChargeAccruer
      *
      * @return list<Charge>
      */
-    private function billExtras(SubscriptionItem $item, Period $period): array
+    private function billExtras(SubscriptionItem $item, Period $period, ChargeReason $reason): array
     {
         $created = [];
 
@@ -108,7 +115,7 @@ final class ChargeAccruer
                 'amount_minor' => $amount->getMinorAmount()->toInt(),
                 'covers' => $period,
                 'idempotency_key' => 'opt_'.substr(hash('sha256', $option->id.$period->toRange()), 0, 36),
-            ]);
+            ], $reason);
         }
 
         foreach ($this->addonAmounts($item, $item->periodAmount()) as ['addon' => $addon, 'amount' => $amount, 'relative' => $relative]) {
@@ -132,7 +139,7 @@ final class ChargeAccruer
                 'amount_minor' => $amountMinor,
                 'covers' => $period,
                 'idempotency_key' => 'addon_'.substr(hash('sha256', $addon->id.$period->toRange()), 0, 34),
-            ]);
+            ], $reason);
         }
 
         return $created;
@@ -150,7 +157,7 @@ final class ChargeAccruer
      * @param  list<Charge>  $billed  the charges this period just raised
      * @return list<Charge>
      */
-    private function billDiscounts(SubscriptionItem $item, Period $period, array $billed): array
+    private function billDiscounts(SubscriptionItem $item, Period $period, array $billed, ChargeReason $reason): array
     {
         $remaining = 0;
         foreach ($billed as $charge) {
@@ -179,7 +186,7 @@ final class ChargeAccruer
                 'amount_minor' => -$off,
                 'covers' => $period,
                 'idempotency_key' => 'disc_'.substr(hash('sha256', $discount->id.$period->toRange()), 0, 35),
-            ]);
+            ], $reason);
         }
 
         return $created;

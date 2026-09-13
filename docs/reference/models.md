@@ -74,7 +74,7 @@ can have a parent for consolidated billing.
 - **Columns:** `subscription_id`, `product_id`, `price_id`, `label` (line title, e.g. a hostname), `quantity`, `billing_mode` (nullable override), `state`, `current_period` (Period), `pending_change` (array), `resource_type` / `resource_id` (morph).
 - **Relationships:** `subscription()`, `product()`, `price()`, `resource()` (morph), `addons()`, `options()`, `usageRecords()`.
 - **Helpers:**
-  - `lineTitle(): string`: the `label` if set, else the product name. Becomes the invoice line title.
+  - `lineTitle(): string`: the `label` if set, else the product name. Becomes the invoice line title. A configured `LineLabeller` overrides it per charge (`../usage/extending.md`).
   - `billingCycle(): ?Period`: the current cycle window (query your usage API for this range).
   - `billingMode(): BillingMode`: item override → price → `InAdvance`.
   - `periodAmount(): Money`: amount for one full period at the item's quantity.

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Contracts\Clock;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\DiscountState;
 use Meteric\Enums\DiscountTarget;
 use Meteric\Enums\ItemState;
@@ -454,6 +455,6 @@ final class OrderManager
             'amount_minor' => $amountMinor,
             'covers' => $covers,
             'idempotency_key' => 'order_'.Str::uuid()->toString(),
-        ]);
+        ], ChargeReason::Initial);
     }
 }

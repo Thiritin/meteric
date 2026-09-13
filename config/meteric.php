@@ -41,6 +41,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Line wording
+    |--------------------------------------------------------------------------
+    | A Meteric\Contracts\LineLabeller class that titles the charges an item
+    | raises, for a site that sells one product as several different events.
+    | Null keeps meteric's wording: the product name, and the item's label.
+    */
+    'line_labeller' => null,
+
+    /*
+    |--------------------------------------------------------------------------
     | Drivers
     |--------------------------------------------------------------------------
     | Invoice emission + tax resolution are swappable. Bind your own class to

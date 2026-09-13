@@ -10,9 +10,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Meteric\Casts\MoneyCast;
 use Meteric\Casts\PeriodCast;
+use Meteric\Contracts\LineLabeller;
 use Meteric\Enums\BillingMode;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\LineKind;
+use Meteric\Invoicing\LineContext;
 use Meteric\Support\Models;
 use Meteric\Support\Period;
 
@@ -55,13 +58,17 @@ class Charge extends MetericModel
      * and an origin when the charge stems from an option or addon rather than
      * the item itself.
      *
+     * $reason says what meteric was doing, which no column records, and reaches
+     * a configured `LineLabeller` so a site can word the line for the event
+     * rather than for the product.
+     *
      * @param  array<string, mixed>  $attributes
      */
-    public static function pendingForItem(SubscriptionItem $item, array $attributes): self
+    public static function pendingForItem(SubscriptionItem $item, array $attributes, ChargeReason $reason = ChargeReason::Other): self
     {
         $sub = $item->subscription;
 
-        return Models::query(self::class)->create([
+        $attributes = [
             'account_id' => $sub->account_id,
             'subscription_id' => $sub->id,
             'origin_type' => 'subscription_item',
@@ -73,7 +80,37 @@ class Charge extends MetericModel
             'line_group' => $item->id,
             'currency' => $sub->currency,
             ...$attributes,
-        ]);
+        ];
+
+        return Models::query(self::class)->create(self::labelled($item, $attributes, $reason));
+    }
+
+    /**
+     * The configured labeller's wording, or meteric's own where it declines.
+     * A label answers for both fields at once, so a labeller can also take a
+     * description away.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private static function labelled(SubscriptionItem $item, array $attributes, ChargeReason $reason): array
+    {
+        $title = (string) ($attributes['title'] ?? '');
+        $description = $attributes['description'] ?? null;
+
+        $label = app(LineLabeller::class)->label(new LineContext(
+            item: $item,
+            reason: $reason,
+            title: $title,
+            description: $description === null ? null : (string) $description,
+            attributes: $attributes,
+        ));
+
+        if ($label === null) {
+            return $attributes;
+        }
+
+        return [...$attributes, 'title' => $label->title, 'description' => $label->description];
     }
 
     protected function casts(): array

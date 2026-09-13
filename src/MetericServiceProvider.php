@@ -8,18 +8,20 @@ use Brick\Math\RoundingMode;
 use Ibericode\Vat\Rates;
 use Illuminate\Support\ServiceProvider;
 use Meteric\Anchoring\PeriodPlanner;
+use Meteric\Catalog\ConfigCatalogDefaults;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Console\MarkOverdueCommand;
 use Meteric\Console\RunBillingCommand;
-use Meteric\Catalog\ConfigCatalogDefaults;
 use Meteric\Console\VatSyncCommand;
 use Meteric\Contracts\CatalogDefaults;
 use Meteric\Contracts\Clock;
 use Meteric\Contracts\InvoiceDriver;
+use Meteric\Contracts\LineLabeller;
 use Meteric\Contracts\TaxResolver;
 use Meteric\Invoicing\InvoiceDriverManager;
 use Meteric\Invoicing\InvoiceManager;
 use Meteric\Invoicing\LineComposer;
+use Meteric\Invoicing\NullLineLabeller;
 use Meteric\Pricing\CheckoutPricer;
 use Meteric\Proration\Prorator;
 use Meteric\Quoting\QuoteBuilder;
@@ -54,6 +56,12 @@ final class MetericServiceProvider extends ServiceProvider
         // your own). The contracts resolve to each manager's configured driver.
         $this->app->singleton(TaxResolverManager::class);
         $this->app->singleton(TaxResolver::class, fn ($app) => $app->make(TaxResolverManager::class)->driver());
+
+        $this->app->singleton(LineLabeller::class, function ($app) {
+            $labeller = $app['config']['meteric.line_labeller'] ?? null;
+
+            return $labeller === null ? new NullLineLabeller : $app->make($labeller);
+        });
 
         $this->app->singleton(InvoiceDriverManager::class);
         $this->app->singleton(InvoiceDriver::class, fn ($app) => $app->make(InvoiceDriverManager::class)->driver());

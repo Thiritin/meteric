@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Enums\Aggregation;
 use Meteric\Enums\BillingMode;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\LineKind;
 use Meteric\Models\BillingPeriod;
 use Meteric\Models\Charge;
@@ -109,7 +110,7 @@ final class UsageRollup
                     // collides on the unique index instead of billing a second
                     // charge, backing up the billing-period guard.
                     'idempotency_key' => 'usage_'.substr(hash('sha256', $item->id.$dimension->id.$period->toRange()), 0, 34),
-                ]);
+                ], ChargeReason::Usage);
 
                 Models::query(UsageRecord::class)->whereIn('id', $records->pluck('id'))->update(['charge_id' => $charge->id]);
                 $created[] = $charge;

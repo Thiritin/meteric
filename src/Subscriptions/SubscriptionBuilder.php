@@ -12,6 +12,7 @@ use Meteric\Anchoring\PeriodPlanner;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\AnchorMode;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
@@ -195,7 +196,7 @@ final class SubscriptionBuilder
             // Trial: reserve nothing, just set the period; first renewal bills it.
             $item->forceFill(['current_period' => $plan->ongoing])->save();
         } else {
-            $this->accruer->accrue($item, $plan);
+            $this->accruer->accrue($item, $plan, ChargeReason::Initial);
         }
 
         return $plan->ongoing->end;
@@ -212,7 +213,7 @@ final class SubscriptionBuilder
             'unit_minor' => $price->amount_minor,
             'amount_minor' => $amount->getMinorAmount()->toInt(),
             'idempotency_key' => 'oneoff_'.Str::uuid()->toString(),
-        ]);
+        ], ChargeReason::Initial);
     }
 
     private function resolveAccount(): BillingAccount

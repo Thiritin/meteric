@@ -14,6 +14,7 @@ use Meteric\Anchoring\PlannedPeriod;
 use Meteric\Charges\ChargeAccruer;
 use Meteric\Contracts\Clock;
 use Meteric\Enums\BillingMode;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\ChargeState;
 use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\InvoiceState;
@@ -791,7 +792,7 @@ final class SubscriptionManager
             $this->accruer->accrue($item, new BillingPlan(
                 [new PlannedPeriod($preview->opening, LineKind::Recurring)],
                 $preview->opening,
-            ));
+            ), ChargeReason::Change);
 
             $sub = $item->subscription;
             $sub->forceFill(['current_period' => $this->earliestPeriod($sub)])->save();

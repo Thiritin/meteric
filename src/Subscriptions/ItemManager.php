@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Meteric\Contracts\Clock;
+use Meteric\Enums\ChargeReason;
 use Meteric\Enums\ItemState;
 use Meteric\Enums\LineKind;
 use Meteric\Exceptions\CatalogRowInactive;
@@ -210,6 +211,6 @@ final class ItemManager
             'amount_minor' => $amount->getMinorAmount()->toInt(),
             'covers' => $covers ? $item->current_period : null,
             'idempotency_key' => 'item_'.Str::uuid()->toString(),
-        ]);
+        ], ChargeReason::Change);
     }
 }
