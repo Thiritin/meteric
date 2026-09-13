@@ -207,6 +207,32 @@ current lines through the driver, sets the due date from
 `recordPayment` and `markOverdue` apply from here. A driver failure leaves the
 draft untouched.
 
+## Line order
+
+`$invoice->lines` comes back ordered by `sort`, then by `id`. So does
+`$line->children`. A reader never adds an `orderBy` of its own, and a document
+rendered twice lists its lines the same way both times.
+
+`sort` is written by whoever writes the line: `LineComposer` numbers the
+positions 100 apart and their sub-lines from the position's own number, and
+`addLine()` takes the next number after the highest. It carries no unique
+constraint, so two writers can reach the same value; `id` decides those, and
+because the key is an ordered UUID that is the order the rows were written.
+
+Ordering a relation has one consequence for a caller that aggregates over it:
+
+```php
+// Postgres rejects an ORDER BY on a column a DISTINCT select list omits.
+$invoice->lines()->reorder()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
+```
+
+`sum()`, `count()` and `max()` need nothing, because an aggregate over an
+ungrouped query drops the order itself.
+
+Sorting is not the same as arranging. Where a document puts its discount lines,
+whether a group prints a heading, and how a sub-line is indented are the
+renderer's decisions and stay with the renderer.
+
 ## Sub-lines
 
 Each charge gets its own `InvoiceLine`. Within a product, the base charge becomes

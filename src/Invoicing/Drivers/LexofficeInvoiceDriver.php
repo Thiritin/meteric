@@ -196,7 +196,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
      */
     private function lineItems(Invoice $invoice): array
     {
-        $all = $invoice->lines->sortBy('sort')->values();
+        $all = $invoice->lines->values();
         $children = $all->filter(fn (InvoiceLine $l): bool => $l->parent_id !== null)->groupBy('parent_id');
         $parents = $all->filter(fn (InvoiceLine $l): bool => $l->parent_id === null)->values();
 
@@ -215,7 +215,7 @@ final class LexofficeInvoiceDriver implements InvoiceDriver
             };
 
             $emit($this->lineItem($parent, $invoice->currency));
-            foreach ($children->get($parent->id, collect())->sortBy('sort') as $child) {
+            foreach ($children->get($parent->id, collect()) as $child) {
                 $emit($this->lineItem($child, $invoice->currency, indent: true));
             }
         }

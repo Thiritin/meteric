@@ -88,7 +88,7 @@ class InvoiceLine extends MetericModel
      */
     public function children(): HasMany
     {
-        return $this->hasMany(Models::for(self::class), 'parent_id')->orderBy('sort');
+        return $this->hasMany(Models::for(self::class), 'parent_id')->orderBy('sort')->orderBy('id');
     }
 
     public function gross(): Money

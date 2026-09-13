@@ -536,7 +536,7 @@ final class InvoiceManager
             // Two-pass clone so a child never references a not-yet-cloned parent:
             // parents first (recording old id -> new id), then children remapped.
             $map = [];
-            $lines = $source->lines()->orderBy('sort')->get();
+            $lines = $source->lines()->get();
 
             foreach ($lines->whereNull('parent_id') as $line) {
                 $map[$line->id] = $this->cloneLine($line, $copy->id, null)->id;

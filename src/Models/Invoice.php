@@ -105,10 +105,27 @@ class Invoice extends MetericModel
         return $this->belongsTo(Models::for(BillingAccount::class), 'account_id');
     }
 
-    /** @return HasMany<InvoiceLine, $this> */
+    /**
+     * The invoice's lines, in the order a document prints them.
+     *
+     * **The order is the relation's, not each reader's.** `sort` is what a
+     * composer, a driver and a typed line all write, so an unordered relation
+     * left every reader to remember an `orderBy` and the ones that forgot
+     * printed one invoice two ways. `id` settles a tie: `sort` carries no
+     * unique constraint and two writers can reach the same value, and the key
+     * is an ordered UUID, so the tiebreak is the order the rows were written.
+     *
+     * A caller that aggregates over the lines with `distinct` has to
+     * `reorder()` first: Postgres rejects an ORDER BY on a column the DISTINCT
+     * select list does not carry.
+     *
+     * @return HasMany<InvoiceLine, $this>
+     */
     public function lines(): HasMany
     {
-        return $this->hasMany(Models::for(InvoiceLine::class), 'invoice_id');
+        return $this->hasMany(Models::for(InvoiceLine::class), 'invoice_id')
+            ->orderBy('sort')
+            ->orderBy('id');
     }
 
     /**
@@ -120,7 +137,7 @@ class Invoice extends MetericModel
      */
     public function billedCharges(): Collection
     {
-        $ids = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
+        $ids = $this->lines()->reorder()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
 
         return Models::query(Charge::class)->whereIn('id', $ids)->get();
     }
@@ -156,7 +173,7 @@ class Invoice extends MetericModel
      */
     public function billedSubscriptions(): Collection
     {
-        $chargeIds = $this->lines()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
+        $chargeIds = $this->lines()->reorder()->whereNotNull('charge_id')->distinct()->pluck('charge_id');
         $ids = Models::query(Charge::class)->whereIn('id', $chargeIds)->whereNotNull('subscription_id')->distinct()->pluck('subscription_id');
 
         return Models::query(Subscription::class)->whereIn('id', $ids)->get();
