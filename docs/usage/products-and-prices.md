@@ -108,6 +108,43 @@ $price->hasSetupFee();     // bool
 arrears regardless. An item can override the price's mode; otherwise the price's
 mode wins, falling back to `in_advance`.
 
+### Currencies
+
+`meteric.currency` is the default currency, `meteric.currencies` the full list an
+installation prices in, and `meteric.country_currencies` maps an ISO 3166-1
+alpha-2 country to one of them.
+
+```php
+Meteric::currencies();               // ['EUR', 'CHF']
+Meteric::currencyForCountry('CH');   // 'CHF'
+Meteric::currencyForCountry('PT');   // 'EUR', unmapped
+Meteric::currencyForCountry(null);   // 'EUR'
+```
+
+**There is no exchange rate in meteric and no amount is ever converted, for
+display or for charging.** A price in a second currency is a second `Price` row
+typed by hand, which is the point: a market that earns less can be sold to more
+cheaply, and a converted amount cannot express that. An unmapped country, and
+one mapped to a currency `currencies` does not list, both resolve to the default
+currency, so withdrawing a currency does not need the map cleaned up first.
+
+A product need not carry every currency. `currencyFor()` says which one it is
+actually sold in to a buyer priced in a given currency:
+
+```php
+$product->currencyFor('CHF');   // 'CHF' where it has a current CHF price
+$product->currencyFor('CHF');   // 'EUR' where it has only the default currency
+$product->currencyFor('CHF');   // null where it has neither, so it cannot be sold
+```
+
+The fallback picks a different hand typed row; it does not convert the first.
+Pass the answer to `priceFor()`, `terms()` or `termCatalog()` rather than
+assuming the buyer's currency is on the product.
+
+A subscription, an invoice, a credit note and a payment each carry their own
+currency, and `invoiceAllPending()` bills one invoice per currency, so an
+account that bought in two currencies is billed twice rather than summed.
+
 ### Price purposes
 
 `purpose` lets one product carry separate prices for different events:

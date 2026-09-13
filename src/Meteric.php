@@ -35,6 +35,7 @@ use Meteric\Models\Refund;
 use Meteric\Models\Subscription;
 use Meteric\Models\SubscriptionItem;
 use Meteric\Models\UsageRecord;
+use Meteric\Pricing\Currencies;
 use Meteric\Pricing\DiscountSpec;
 use Meteric\Quoting\QuoteBuilder;
 use Meteric\Subscriptions\ItemManager;
@@ -109,6 +110,26 @@ final class Meteric
     public static function useUsageRecordModel(string $override): void
     {
         Models::swap(UsageRecord::class, $override);
+    }
+
+    /**
+     * The currency a buyer in this country is priced in, from the hand set
+     * `meteric.country_currencies` map. The default currency where the country
+     * is unknown or unmapped. Nothing is converted; see `Currencies`.
+     */
+    public function currencyForCountry(?string $country): string
+    {
+        return Currencies::forCountry($country);
+    }
+
+    /**
+     * Every currency this installation prices in, the default first.
+     *
+     * @return list<string>
+     */
+    public function currencies(): array
+    {
+        return Currencies::configured();
     }
 
     /** Add a one-off custom charge to an account's pending pool. */

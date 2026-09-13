@@ -12,6 +12,8 @@ use Meteric\Models\Invoice;
 use Meteric\Models\Payment;
 
 /**
+ * @method static string currencyForCountry(?string $country)
+ * @method static list<string> currencies()
  * @method static \Meteric\Models\Charge charge(BillingAccount $account, Money $amount, string $title, ?string $group = null, ?string $description = null, \Meteric\Enums\LineKind $kind = \Meteric\Enums\LineKind::OneOff)
  * @method static ?Invoice invoicePending(BillingAccount $account, ?string $currency = null, bool $force = false)
  * @method static list<Invoice> invoiceAllPending(BillingAccount $account, bool $force = false)

@@ -15,6 +15,7 @@ use Meteric\Enums\DowngradePolicy;
 use Meteric\Enums\Interval;
 use Meteric\Enums\PricePurpose;
 use Meteric\Enums\PricingModel;
+use Meteric\Pricing\Currencies;
 use Meteric\Support\Models;
 
 /**
@@ -121,6 +122,35 @@ class Product extends MetericModel
                 ->where('interval_count', $intervalCount ?? 1))
             ->latest('valid_from')
             ->first();
+    }
+
+    /**
+     * The currency this product is actually sold in to a buyer who is priced in
+     * `$preferred`: that currency where the product carries a current price in
+     * it, the default currency where it does not, and null where it carries
+     * neither and so cannot be sold at all.
+     *
+     * The fallback picks a different price row, hand typed like every other.
+     * Nothing is converted, so the amount is one the catalog holds and never a
+     * rate applied to another currency's amount. A product priced only in the
+     * default currency is therefore still sellable to every market, at the
+     * default currency's price, rather than dropping out of the catalog.
+     */
+    public function currencyFor(string $preferred, PricePurpose $purpose = PricePurpose::Recurring): ?string
+    {
+        $preferred = strtoupper(trim($preferred));
+
+        if ($this->currentPrices($preferred, $purpose)->exists()) {
+            return $preferred;
+        }
+
+        $default = Currencies::default();
+
+        if ($default !== $preferred && $this->currentPrices($default, $purpose)->exists()) {
+            return $default;
+        }
+
+        return null;
     }
 
     /**

@@ -21,6 +21,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Currencies traded in
+    |--------------------------------------------------------------------------
+    | Every currency this installation prices in, default included. A second
+    | currency is a second price row on the product, typed by hand: there is no
+    | exchange rate here and nothing is converted, for display or for charging.
+    | One entry means there is no choice to make anywhere.
+    */
+    'currencies' => array_map('trim', explode(',', (string) env('METERIC_CURRENCIES', env('METERIC_CURRENCY', 'EUR')))),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Country to currency
+    |--------------------------------------------------------------------------
+    | Which currency a buyer in a country is priced in, keyed by ISO 3166-1
+    | alpha-2. A country not named here is priced in the default currency, and
+    | so is one mapped to a currency `currencies` does not list. Empty by
+    | default: an installation trading in one currency needs no map.
+    */
+    'country_currencies' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Proration
     |--------------------------------------------------------------------------
     | Unit used to compute proration ratios. 'second' is the most precise and
