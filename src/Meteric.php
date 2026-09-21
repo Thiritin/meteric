@@ -282,6 +282,12 @@ final class Meteric
         return $this->invoices->recordPayment($invoice, $amount, $reference);
     }
 
+    /** Take a payment back off the invoices it paid, leaving what is owed owed. */
+    public function reversePayment(Payment $payment, string $reason): Payment
+    {
+        return $this->invoices->reversePayment($payment, $reason);
+    }
+
     public function driver(): InvoiceDriver
     {
         return $this->invoices->driver();

@@ -28,6 +28,8 @@ use Meteric\Events\InvoiceIssued;
 use Meteric\Events\InvoicePaid;
 use Meteric\Events\InvoicePartiallyPaid;
 use Meteric\Events\InvoiceVoided;
+use Meteric\Events\PaymentReversed;
+use Meteric\Exceptions\PaymentNotReversible;
 use Meteric\Models\BillingAccount;
 use Meteric\Models\Charge;
 use Meteric\Models\CreditNote;
@@ -738,6 +740,114 @@ final class InvoiceManager
         }
 
         return $payment;
+    }
+
+    /**
+     * Take a payment back off the invoices it paid.
+     *
+     * The money did not stay: a direct debit the bank returned, a card payment
+     * charged back, a transfer recalled. What is owed never changed, so this is
+     * not a refund and not a credit note. Each allocation the payment made is
+     * answered by a negative allocation of its own, the invoice's `paid_minor`
+     * falls by the same amount, and the invoice returns to `partially_paid` or
+     * `open` with the charges it billed unsettled. Moving the money is the
+     * gateway's; recording that it went is this.
+     *
+     * A payment whose allocations have all been taken back already is refused,
+     * so a redelivered gateway event cannot reverse the same money twice, and
+     * no allocation is ever taken back for more than it applied.
+     *
+     * @throws PaymentNotReversible
+     */
+    public function reversePayment(Payment $payment, string $reason): Payment
+    {
+        $reversals = DB::transaction(function () use ($payment, $reason): array {
+            $locked = Models::query(Payment::class)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+
+            $applications = $locked->allocations()->applications()->get();
+
+            if ($applications->isEmpty()) {
+                throw new PaymentNotReversible("Payment {$locked->id} is allocated to no invoice.");
+            }
+
+            $written = [];
+
+            foreach ($applications as $application) {
+                $remaining = (int) $application->amount_minor - $application->reversedMinor();
+
+                if ($remaining <= 0) {
+                    continue;
+                }
+
+                $written[] = $this->reverseAllocation($application, $remaining, $reason);
+            }
+
+            if ($written === []) {
+                throw new PaymentNotReversible("Payment {$locked->id} has already been reversed in full.");
+            }
+
+            return $written;
+        });
+
+        foreach ($reversals as [$invoice, $allocation]) {
+            PaymentReversed::dispatch($payment, $invoice, $reason, $allocation);
+        }
+
+        return $payment->refresh();
+    }
+
+    /**
+     * One invoice's share of a reversal: the counter row, the paid total, the
+     * state and the charges, under the same row lock a payment takes.
+     *
+     * @return array{0:Invoice,1:PaymentAllocation}
+     */
+    private function reverseAllocation(PaymentAllocation $application, int $amount, string $reason): array
+    {
+        $invoice = Models::query(Invoice::class)
+            ->whereKey($application->invoice_id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ($amount > (int) $invoice->paid_minor) {
+            throw new PaymentNotReversible(
+                "Reversal of {$amount} exceeds the {$invoice->paid_minor} recorded as paid on invoice {$invoice->id}."
+            );
+        }
+
+        $allocation = Models::query(PaymentAllocation::class)->create([
+            'payment_id' => $application->payment_id,
+            'invoice_id' => $application->invoice_id,
+            'amount_minor' => -$amount,
+            'reverses_allocation_id' => $application->id,
+            'reason' => $reason,
+        ]);
+
+        $wasPaid = $invoice->state === InvoiceState::Paid;
+        $paid = (int) $invoice->paid_minor - $amount;
+
+        $invoice->forceFill([
+            'paid_minor' => $paid,
+            'state' => match (true) {
+                $paid >= (int) $invoice->total_minor => InvoiceState::Paid,
+                $paid > 0 => InvoiceState::PartiallyPaid,
+                default => InvoiceState::Open,
+            },
+            'paid_at' => $paid >= (int) $invoice->total_minor ? $invoice->paid_at : null,
+        ])->save();
+
+        // Only what a full payment settled comes back. A charge on an invoice
+        // that was never fully paid was never settled, and `unsettle()` leaves
+        // every other state alone.
+        if ($wasPaid && $invoice->state !== InvoiceState::Paid) {
+            $chargeIds = $invoice->lines()->whereNotNull('charge_id')->pluck('charge_id')->unique();
+
+            foreach (Models::query(Charge::class)->whereIn('id', $chargeIds)->get() as $charge) {
+                $charge->unsettle();
+            }
+        }
+
+        return [$invoice, $allocation];
     }
 
     /** @param  Collection<int,Charge>  $charges */

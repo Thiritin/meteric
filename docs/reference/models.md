@@ -126,8 +126,8 @@ can have a parent for consolidated billing.
 maps to invoices.
 
 - **Payment columns:** `account_id`, `amount_minor`, `currency`, `reference`, `received_at`.
-- **Payment relationships:** `account()`, `allocations()`, `refunds()`. Helpers: `amount(): Money`, `refundedMinor(): int`, `refundable(): Money`.
-- **PaymentAllocation:** `payment_id`, `invoice_id`, `amount_minor`; relationships `payment()`, `invoice()`.
+- **Payment relationships:** `account()`, `allocations()`, `refunds()`. Helpers: `amount(): Money`, `refundedMinor(): int`, `refundable(): Money`, `allocatedMinor(): int`, `reversedMinor(): int`, `isReversed(): bool`.
+- **PaymentAllocation:** `payment_id`, `invoice_id`, `amount_minor`, `reverses_allocation_id`, `reason`, `recorded_at`; relationships `payment()`, `invoice()`, `reverses()`, `reversals()`; helpers `isReversal(): bool`, `reversedMinor(): int`, scope `applications()`. An application is positive and a reversal of one is negative, so the column sums to what is allocated now. See [Reversing a payment](/usage/invoicing#reversing-a-payment).
 - **Refund (`meteric_refunds`):** `payment_id`, `credit_note_id`, `amount_minor`, `currency`, `reference`, `refunded_at`, `metadata`; relationships `payment()`, `creditNote()`; helper `amount(): Money`. See [Recording a refund](/usage/invoicing#recording-a-refund).
 
 ## MeterDimension

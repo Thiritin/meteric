@@ -188,6 +188,22 @@ class Charge extends MetericModel
     }
 
     /**
+     * Flip settled -> invoiced when the payment that settled it is reversed.
+     *
+     * The charge is still on the document it was billed on, so it goes back to
+     * `invoiced` rather than to `pending`: returning it to the pool would bill
+     * the same period on a second invoice.
+     */
+    public function unsettle(): void
+    {
+        if ($this->state !== ChargeState::Settled) {
+            return;
+        }
+
+        $this->update(['state' => ChargeState::Invoiced]);
+    }
+
+    /**
      * Return a charge to the billable pool when its last live line is removed
      * (void or draft line deletion). A settled or discarded charge never reverts.
      */

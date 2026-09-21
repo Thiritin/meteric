@@ -23,6 +23,7 @@ use Meteric\Models\Payment;
  * @method static list<Invoice> invoiceCollective(BillingAccount $account, ?\Carbon\CarbonImmutable $at = null)
  * @method static \Illuminate\Database\Eloquent\Builder<BillingAccount> dueForCollection(?\Carbon\CarbonImmutable $at = null)
  * @method static Payment recordPayment(Invoice $invoice, Money $amount, ?string $reference = null)
+ * @method static Payment reversePayment(Payment $payment, string $reason)
  * @method static \Meteric\Quoting\QuoteBuilder quote()
  * @method static \Meteric\Tax\Vies\ViesResult viesCheck(string $countryCode, string $vatNumber, array $trader = [], array $requester = [])
  * @method static \Meteric\Subscriptions\SubscriptionBuilder subscribe(?\Illuminate\Database\Eloquent\Model $customer = null)

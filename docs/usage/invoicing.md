@@ -87,8 +87,9 @@ frozen with them:
   issued document that is invisible in aggregate.
 
 The collection lifecycle itself stays the caller's: the trigger does not police
-`open` -> `partially_paid` -> `paid`, a return to `open` when a payment is reversed
-or charged back, or a write-off to `uncollectible`.
+`open` -> `partially_paid` -> `paid` or a write-off to `uncollectible`. The return
+to `open` when a payment is reversed or charged back is
+[`reversePayment()`](#reversing-a-payment).
 
 `TRUNCATE` is refused on `invoices` and `invoice_lines` at statement level, because
 a `FOR EACH ROW` trigger does not fire on one: Postgres empties the table without
@@ -434,14 +435,49 @@ $invoice->isPaid();       // bool
 $invoice->isOverdue();    // bool, issued, past due, not paid
 ```
 
-To reverse a payment, issue a [credit note](#credit-notes-and-refunds) and refund
-through your gateway.
+### Reversing a payment
+
+Money that arrived and then left again is not a refund. A direct debit the bank
+returns, a card payment charged back, a transfer recalled: nothing was given back
+to the buyer, the invoice was never validly settled and the receivable stands.
+
+```php
+Meteric::reversePayment($payment, 'AC04 account closed');
+```
+
+Each allocation the payment made is answered by a **negative allocation of its
+own**, so the original row is still there with what it applied and when, and
+`sum(amount_minor)` over an invoice is what is allocated to it now. The invoice's
+`paid_minor` falls by the same amount, its state goes back to `partially_paid` or
+`open`, `paid_at` is cleared once paid falls below the total, and the charges a
+full payment settled go back to `invoiced`. A `PaymentReversed` event carries the
+payment, the invoice, the reason and the negative allocation, which is the
+identifier a listener keys on to run once.
+
+`reversePayment(Payment $payment, string $reason): Payment` reverses everything
+the payment still has applied. A payment with nothing applied left, and one
+allocated to no invoice at all, both raise
+`Meteric\Exceptions\PaymentNotReversible`, so a redelivered gateway event cannot
+take the same money back twice. No allocation is ever reversed for more than it
+applied.
+
+The reversal writes no credit note and no refund, because the buyer owes what they
+owed. Moving the money is the gateway's and the bank's; recording that it went is
+this. Use a [credit note](#credit-notes-and-refunds) instead when what is being
+undone is the **claim** rather than the payment, and a
+[refund](#credit-notes-and-refunds) when money is being sent back deliberately.
 
 ## Credit notes and refunds
 
 Meteric does not move money. A credit note is the accounting reversal document. The
 refund itself is your payment gateway's job, the same gateway-agnostic split as
 payments: Meteric records the document, you move the money.
+
+**A refund is not a reversal.** A credit note plus a refund says the claim was
+wrong or is being given up: what the buyer owes goes down, and money is sent back.
+A clawback says the payment never happened: what the buyer owes has not moved and
+nothing is sent anywhere. Reach for [`reversePayment()`](#reversing-a-payment)
+there, or the buyer ends up owing nothing for a service they still have.
 
 ```php
 use Brick\Money\Money;

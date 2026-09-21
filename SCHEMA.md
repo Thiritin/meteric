@@ -487,13 +487,22 @@ CREATE TABLE meteric_payments (
   metadata     jsonb NOT NULL DEFAULT '{}',
   UNIQUE (reference)
 );
+-- A row with no reverses_allocation_id applies money and is positive; a row with
+-- one takes that application back and is negative. sum(amount_minor) over an
+-- invoice is therefore what is allocated to it now, and neither row is edited.
 CREATE TABLE meteric_payment_allocations (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  payment_id   uuid NOT NULL REFERENCES meteric_payments(id) ON DELETE CASCADE,
-  invoice_id   uuid NOT NULL REFERENCES meteric_invoices(id) ON DELETE RESTRICT,
-  amount_minor bigint NOT NULL CHECK (amount_minor > 0),
-  UNIQUE (payment_id, invoice_id)
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  payment_id             uuid NOT NULL REFERENCES meteric_payments(id) ON DELETE CASCADE,
+  invoice_id             uuid NOT NULL REFERENCES meteric_invoices(id) ON DELETE RESTRICT,
+  amount_minor           bigint NOT NULL,
+  reverses_allocation_id uuid REFERENCES meteric_payment_allocations(id) ON DELETE RESTRICT,
+  reason                 text,                 -- why the money went back
+  recorded_at            timestamptz DEFAULT now(),  -- null on rows written before reversals existed
+  CHECK ((reverses_allocation_id IS NULL AND amount_minor > 0)
+      OR (reverses_allocation_id IS NOT NULL AND amount_minor < 0))
 );
+CREATE UNIQUE INDEX meteric_alloc_one_per_invoice
+  ON meteric_payment_allocations (payment_id, invoice_id) WHERE reverses_allocation_id IS NULL;
 ```
 
 ---

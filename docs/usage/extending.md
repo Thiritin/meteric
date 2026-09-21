@@ -14,6 +14,7 @@ All live in `Meteric\Events`. Register listeners the normal Laravel way.
 | `InvoiceIssued` | an invoice is issued | `Invoice` |
 | `InvoicePaid` | an invoice is paid in full | `Invoice`, `Payment` |
 | `InvoicePartiallyPaid` | a part payment lands | `Invoice`, `Payment` |
+| `PaymentReversed` | a payment is taken back off an invoice | `Payment`, `Invoice`, `string $reason`, `PaymentAllocation` |
 | `InvoiceVoided` | an unpaid invoice is voided | `Invoice` |
 | `CreditNoteIssued` | a credit note is issued (the refund hook) | `CreditNote` |
 | `InvoiceOverdue` | `meteric:mark-overdue` finds it past due | `Invoice` |
