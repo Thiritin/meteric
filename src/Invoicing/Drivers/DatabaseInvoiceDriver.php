@@ -20,8 +20,8 @@ use Meteric\Invoicing\LineComposer;
 use Meteric\Models\CreditNote;
 use Meteric\Models\CreditNoteLine;
 use Meteric\Models\Invoice;
+use Meteric\Support\DocumentNumbers;
 use Meteric\Support\Models;
-use Meteric\Support\Pg;
 
 /**
  * Canonical local invoice sink. Always available — the default driver. Builds
@@ -131,7 +131,7 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
             'amount_minor' => $net,
             'tax_minor' => $creditTax,
             'currency' => $draft->amount->getCurrency()->getCurrencyCode(),
-            'number' => $this->nextNumber('CN'),
+            'number' => $this->nextNumber('credit_note', 'CN'),
             'issued_at' => $this->now(),
             'metadata' => $draft->meta,
         ]);
@@ -153,24 +153,15 @@ final class DatabaseInvoiceDriver implements InvoiceDriver
     }
 
     /**
-     * Gapless per-prefix, per-year document number. An atomic upsert on the
-     * counter row (INSERT ... ON CONFLICT DO UPDATE ... RETURNING) takes a row
-     * lock, so concurrent issues serialize instead of colliding on the number.
-     * Runs inside the caller's transaction, so a rolled-back issue does not
-     * consume a number. Counts only assigned numbers, never drafts or voids.
+     * The next number in the document series, taken inside the issuing
+     * transaction so a rollback does not consume it. See
+     * `Meteric\Support\DocumentNumbers`.
      */
-    private function nextNumber(string $prefix = 'INV'): string
+    private function nextNumber(string $kind = 'invoice', string $default = 'INV'): string
     {
-        $year = (int) $this->now()->year;
-        $table = Pg::table('invoice_numbers');
-
-        $row = DB::selectOne(
-            "INSERT INTO {$table} (prefix, year, seq) VALUES (?, ?, 1)
-             ON CONFLICT (prefix, year) DO UPDATE SET seq = {$table}.seq + 1
-             RETURNING seq",
-            [$prefix, $year],
+        return DocumentNumbers::next(
+            DocumentNumbers::prefix($kind, $default),
+            (int) $this->now()->year,
         );
-
-        return sprintf('%s-%d-%06d', $prefix, $year, (int) $row->seq);
     }
 }

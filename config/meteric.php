@@ -116,6 +116,24 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Document numbers
+    |--------------------------------------------------------------------------
+    | The human-facing number on an invoice, a credit note and an order. One
+    | sequence per prefix and year, so every series restarts at 1 in January.
+    | `number_format` is an sprintf template taking the prefix, the year and the
+    | sequence, in that order.
+    */
+    'documents' => [
+        'number_format' => env('METERIC_DOCUMENT_NUMBER_FORMAT', '%s-%d-%06d'),
+        'prefixes' => [
+            'invoice' => env('METERIC_INVOICE_PREFIX', 'INV'),
+            'credit_note' => env('METERIC_CREDIT_NOTE_PREFIX', 'CN'),
+            'order' => env('METERIC_ORDER_PREFIX', 'ORD'),
+        ],
+    ],
+
     'invoice' => [
         'driver' => env('METERIC_INVOICE_DRIVER', 'database'),
         'drivers' => [

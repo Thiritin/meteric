@@ -24,7 +24,7 @@ CHAR(3)`, time = `timestamptz`, periods = `tstzrange [start, end)`. Morphs =
 > **Scope.** Seven tables that ship in the migrations have no DDL here yet:
 > `meteric_orders`, `meteric_product_options`, `meteric_product_option_values`,
 > `meteric_product_addons`, `meteric_tax_rates`, `meteric_tax_registrations`,
-> `meteric_invoice_numbers`. Read `database/migrations/` for those.
+> `meteric_document_numbers`. Read `database/migrations/` for those.
 
 ### Money precision rule
 

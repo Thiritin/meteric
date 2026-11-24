@@ -65,6 +65,22 @@ That is the re-issue flow for a wrong document with right charges (a wrong billi
 address, say). Because the copy's lines reference the same charges, voiding the
 source leaves those charges `invoiced`: they still have a live line on the copy.
 
+## Document numbers
+
+An invoice takes its number when it is issued, a credit note when it is raised:
+`INV-2026-000123`, `CN-2026-000012`. Both come from
+`Meteric\Support\DocumentNumbers`, which also numbers orders - one counter row
+per prefix and year in `meteric_document_numbers`, incremented by an atomic
+upsert that takes a row lock, inside the issuing transaction. So concurrent
+issues serialize, a rolled-back issue consumes nothing, and the series is
+gapless over issued documents: a draft takes no number and a void keeps the one
+it had rather than freeing it.
+
+The prefixes and the shape are configuration under `meteric.documents`; see
+[orders](orders.md#the-order-number) for the whole block. A per-year sequence
+restarting at 1 each January is deliberate, and matches what German bookkeeping
+expects of an invoice series.
+
 ## Lifecycle
 
 An invoice moves `draft` -> `open` -> `paid` or `void`. A draft is editable. An

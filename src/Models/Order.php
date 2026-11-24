@@ -8,9 +8,11 @@ use Brick\Money\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Meteric\Contracts\Clock;
 use Meteric\Enums\AnchorMode;
 use Meteric\Enums\FirstPeriodPolicy;
 use Meteric\Enums\OrderState;
+use Meteric\Support\DocumentNumbers;
 use Meteric\Support\Models;
 
 /**
@@ -20,6 +22,7 @@ use Meteric\Support\Models;
  * so later catalog price changes do not move a pending order's figures.
  *
  * @property string $id
+ * @property string $number
  * @property string $account_id
  * @property string $customer_type
  * @property string $customer_id
@@ -50,6 +53,24 @@ class Order extends MetericModel
     protected string $baseTable = 'orders';
 
     protected $guarded = [];
+
+    /**
+     * The order number is assigned here rather than in the builder, so an order
+     * written by any path - a builder, a factory, a seeder - carries one, and
+     * the column can stay NOT NULL. Taken inside whatever transaction the
+     * caller opened, so a rolled-back order does not consume a number.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $order): void {
+            if (($order->number ?? null) === null) {
+                $order->number = DocumentNumbers::next(
+                    DocumentNumbers::prefix('order', 'ORD'),
+                    (int) app(Clock::class)->now()->year,
+                );
+            }
+        });
+    }
 
     protected function casts(): array
     {

@@ -115,6 +115,7 @@ amounts only. Addon prices do not carry a setup fee through checkout.
 ## The order row
 
 ```php
+$order->number;         // string: 'ORD-2026-000123', the number a person reads
 $order->total();        // Money: gross owed at checkout (subtotal + tax)
 $order->total_minor;    // int: same figure in minor units
 $order->state;          // OrderState
@@ -132,6 +133,52 @@ $order->isConverted();
 - `Canceled`: abandoned.
 
 Only `Pending` is non-terminal. The other three are settled and immutable.
+
+## The order number
+
+Every order carries `number`, assigned when the row is created and unique for
+the life of the installation. It is what a person quotes - on the phone, in a
+mail, in a support thread - and the uuid primary key stays for anything machine
+to machine.
+
+The default shape is `ORD-2026-000123`: prefix, year, and a sequence that starts
+at 1 each January. Both parts are configuration:
+
+```php
+'documents' => [
+    'number_format' => '%s-%d-%06d',     // sprintf: prefix, year, sequence
+    'prefixes' => [
+        'invoice' => 'INV',
+        'credit_note' => 'CN',
+        'order' => 'ORD',
+    ],
+],
+```
+
+Numbers come from `Meteric\Support\DocumentNumbers`, the same counter that
+numbers invoices and credit notes - one row per prefix and year in
+`meteric_document_numbers`, incremented by an atomic upsert that takes a row
+lock, so two callers at the same instant serialize instead of colliding. The
+statement runs in the caller's transaction, so an order whose creation rolls
+back does not consume its number.
+
+What the series guarantees, and what it does not:
+
+- **Unique and never reused.** A canceled or expired order keeps its number; the
+  next order takes the next one. Nothing is renumbered, ever.
+- **Ordered.** A higher sequence in a year was created later.
+- **Not gapless.** An order number is a handle, not a bookkeeping document, so
+  nothing here depends on there being no holes. In practice the only hole a
+  series can take is a number whose transaction committed the counter and then
+  failed afterwards.
+- **One series per installation.** The number does not encode a brand, a
+  tenant or a customer. An application that wants one series per tenant gives
+  each tenant its own prefix through the configuration above.
+
+The number is assigned by the model, not by the builder, so an order written by
+a factory or a seeder carries one too and the column can stay `NOT NULL`. An
+installation that mints its own numbers sets `number` before saving and the
+model leaves it alone.
 
 ## Paying an order
 
